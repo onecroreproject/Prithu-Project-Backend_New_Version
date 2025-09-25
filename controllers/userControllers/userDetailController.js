@@ -1,7 +1,9 @@
 
 const Users = require("../../models/userModels/userModel")
 const ProfileSettings=require("../../models/profileSettingModel")
-const UserLanguage=require('../../models/userModels/userLanguageModel')
+const UserLanguage=require('../../models/userModels/userLanguageModel');
+const { getLanguageCode, getLanguageName } = require("../../middlewares/helper/languageHelper");
+
 
 
 exports.getUserDetailWithId = async (req, res) => {
@@ -53,41 +55,60 @@ exports.getUserDetailWithId = async (req, res) => {
 exports.setAppLanguage = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
-    const { code, native } = req.body;
+    const { appLanguage } = req.body;
 
-    if (!userId || !code) {
-      return res.status(400).json({ message: "userId and appLanguageCode are required" });
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
     }
 
-    const updated = await UserLanguage.findOneAndUpdate(
+    const appCode = appLanguage ? getLanguageCode(appLanguage) : null;
+    if (!appCode) {
+      return res.status(400).json({ message: "Invalid or missing appLanguage" });
+    }
+
+    const userLanguage = await UserLanguage.findOneAndUpdate(
       { userId },
-      { appLanguageCode: code, appNativeCode: native },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      {
+        appLanguageCode: appCode,
+        appNativeCode: getLanguageName(appCode),
+        active: true,
+      },
+      { new: true, upsert: true }
     ).lean();
 
-    return res.status(200).json({ success: true, appLanguage: updated.appLanguageCode });
-  } catch (err) {
-    console.error("Error setting app language:", err);
-    return res.status(500).json({ success: false, message: "Internal Server Error" });
+    return res.status(200).json({
+      message: "App language updated successfully",
+      data: userLanguage,
+    });
+  } catch (error) {
+    console.error("Error in setAppLanguage:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Get App Language
 exports.getAppLanguage = async (req, res) => {
   try {
-    const userId = req.Id || req.query.userId;
-    if (!userId) return res.status(400).json({ message: "User ID is required" });
+    const userId = req.Id || req.body.userId;
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
 
-    const userLang = await UserLanguage.findOne({ userId }).select("appLanguageCode appNativeCode").lean();
+    const userLanguage = await UserLanguage.findOne({ userId, active: true })
+      .select("appLanguageCode appNativeCode")
+      .lean();
+
+    if (!userLanguage) {
+      return res.status(404).json({ message: "No app language set" });
+    }
 
     return res.status(200).json({
-      success: true,
-      appLanguage: userLang ? userLang.appLanguageCode : "en",
-      native: userLang ? userLang.appNativeCode : "English"
+      message: "App language fetched successfully",
+      data: userLanguage,
     });
-  } catch (err) {
-    console.error("Error fetching app language:", err);
-    return res.status(500).json({ success: false, message: "Internal Server Error" });
+  } catch (error) {
+    console.error("Error in getAppLanguage:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -97,41 +118,158 @@ exports.getAppLanguage = async (req, res) => {
 exports.setFeedLanguage = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
-    const { code, native } = req.body;
+    const { feedLanguage } = req.body;
 
-    if (!userId || !code) {
-      return res.status(400).json({ message: "userId and feedLanguageCode are required" });
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
     }
 
-    const updated = await UserLanguage.findOneAndUpdate(
+    const feedCode = feedLanguage ? getLanguageCode(feedLanguage) : null;
+    if (!feedCode) {
+      return res.status(400).json({ message: "Invalid or missing feedLanguage" });
+    }
+
+    const userLanguage = await UserLanguage.findOneAndUpdate(
       { userId },
-      { feedLanguageCode: code, feedNativeCode: native },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      {
+        feedLanguageCode: feedCode,
+        feedNativeCode: getLanguageName(feedCode),
+        active: true,
+      },
+      { new: true, upsert: true }
     ).lean();
 
-    return res.status(200).json({ success: true, feedLanguage: updated.feedLanguageCode });
-  } catch (err) {
-    console.error("Error setting feed language:", err);
-    return res.status(500).json({ success: false, message: "Internal Server Error" });
+    return res.status(200).json({
+      message: "Feed language updated successfully",
+      data: userLanguage,
+    });
+  } catch (error) {
+    console.error("Error in setFeedLanguage:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 // Get Feed Language
 exports.getFeedLanguage = async (req, res) => {
   try {
-    const userId = req.Id || req.query.userId;
-    if (!userId) return res.status(400).json({ message: "User ID is required" });
+    const userId = req.Id || req.body.userId;
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
 
-    const userLang = await UserLanguage.findOne({ userId }).select("feedLanguageCode feedNativeCode").lean();
+    const userLanguage = await UserLanguage.findOne({ userId, active: true })
+      .select("feedLanguageCode feedNativeCode")
+      .lean();
+
+    if (!userLanguage) {
+      return res.status(404).json({ message: "No feed language set" });
+    }
 
     return res.status(200).json({
-      success: true,
-      feedLanguage: userLang ? userLang.feedLanguageCode : "en",
-      native: userLang ? userLang.feedNativeCode : "English"
+      message: "Feed language fetched successfully",
+      data: userLanguage,
     });
-  } catch (err) {
-    console.error("Error fetching feed language:", err);
-    return res.status(500).json({ success: false, message: "Internal Server Error" });
+  } catch (error) {
+    console.error("Error in getFeedLanguage:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+
+exports.checkUsernameAvailability = async (req, res) => {
+  try {
+    const { username } = req.query;
+
+    if (!username || username.trim() === "") {
+      return res.status(400).json({ message: "Username is required" });
+    }
+
+    // Normalize: lowercase and trim
+    const formattedUsername = username.trim().toLowerCase();
+
+    // Case-insensitive search in DB
+    const userExists = await Users.findOne({
+      userName: { $regex: new RegExp(`^${formattedUsername}$`, "i") }
+    }).lean();
+
+    if (userExists) {
+      return res.status(200).json({
+        available: false,
+        message: "Username not available",
+      });
+    }
+
+    return res.status(200).json({
+      available: true,
+      message: "Username available",
+    });
+  } catch (error) {
+    console.error("Error checking username availability:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+exports.checkEmailAvailability = async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    if (!email || email.trim() === "") {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    // Normalize: lowercase and trim
+    const formattedEmail = email.trim().toLowerCase();
+
+    // Case-insensitive search in DB
+    const emailExists = await Users.findOne({
+      email: { $regex: new RegExp(`^${formattedEmail}$`, "i") }
+    }).lean();
+
+    if (emailExists) {
+      return res.status(200).json({
+        available: false,
+        message: "Email not available",
+      });
+    }
+
+    return res.status(200).json({
+      available: true,
+      message: "Email available",
+    });
+  } catch (error) {
+    console.error("Error checking email availability:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+
+exports.getUserReferalCode = async (req, res) => {
+  try {
+    const userId = req.Id || req.body.userId;
+
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+
+    // Fetch user from database
+    const user = await Users.findById(userId).select("referralCode").lean();
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Send referral code in response
+    return res.status(200).json({
+      success: true,
+      referralCode: user.referralCode || null, // if not set, return null
+    });
+  } catch (error) {
+    console.error("Error fetching referral code:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 

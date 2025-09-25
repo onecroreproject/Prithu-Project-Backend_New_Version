@@ -4,15 +4,21 @@ const ProfileSettingsSchema = new mongoose.Schema(
   {
     accountId: { type: mongoose.Schema.Types.ObjectId, ref: "Account" },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    adminId: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" }, // ✅ For Admin
-    childAdminId: { type: mongoose.Schema.Types.ObjectId, ref: "ChildAdmin" }, // ✅ For Child Admin
+    adminId: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
+    childAdminId: { type: mongoose.Schema.Types.ObjectId, ref: "ChildAdmin" },
     displayName: { type: String },
+    gender: { type: String },
     userName: { type: String },
     bio: { type: String },
     dateOfBirth: { type: Date },
+    maritalDate: { type: Date },
     maritalStatus: { type: String },
     phoneNumber: { type: String },
-    profileAvatar: { type: String },
+
+    // ✅ Add these two
+    profileAvatar: { type: String },        // Cloudinary URL
+    profileAvatarId: { type: String },      // Cloudinary public_id
+
     theme: { type: String, default: "light" },
     notifications: {
       email: { type: Boolean, default: true },
@@ -28,5 +34,6 @@ const ProfileSettingsSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
 
 module.exports = mongoose.model("ProfileSettings", ProfileSettingsSchema, "ProfileSettings");

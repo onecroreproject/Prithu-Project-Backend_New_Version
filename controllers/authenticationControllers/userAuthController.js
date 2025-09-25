@@ -3,12 +3,16 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 const bcrypt = require('bcrypt');
+const crypto = require("crypto"); 
 const { generateReferralCode } = require('../../middlewares/generateReferralCode');
 const otpStore=new Map();
-const StoreUserDevice=require('../../models/devicetrackingModel');
-const makeSessionService = require("../../services/sessionService");
-const {placeReferral}=require('../../middlewares/referralCount');
-const {startUpProcessCheck}=require('../../middlewares/services/User Services/userStartUpProcessHelper')
+const {processReferral}=require('../../middlewares/referralMiddleware/referralCount');
+const {startUpProcessCheck}=require('../../middlewares/services/User Services/userStartUpProcessHelper');
+const Device = require("../../models/userModels/userSession-Device/deviceModel");
+const Session = require("../../models/userModels/userSession-Device/sessionModel");
+const UserReferral=require('../../models/userModels/userRefferalModels/userReferralModel');
+const { v4: uuidv4 } = require("uuid");
+const mongoose =require("mongoose")
 
 // const sessionService = makeSessionService(User,StoreUserDevice);
 
@@ -24,94 +28,50 @@ const transporter = nodemailer.createTransport({
 
 
 
-exports.createNewUser = async (req, res) => {
+/**
+ * createNewUser(req, res)
+ * - creates user
+ * - assigns a unique referral code
+ * - atomically increments referrer's usage if referralCode provided (max 2)
+ * - places referral via placeReferral (idempotent)
+ */
+
+exports.createNewUser = async (req,res) => {
   try {
     const { username, email, password, referralCode } = req.body;
+    if (!username || !email || !password) return res.status(400).json({ message: "All fields required" });
 
-    if (!username || !email || !password) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
-
-    // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
+    const base = (username.replace(/\s+/g,"").slice(0,3).toUpperCase() || "XXX");
+    let generatedCode = `${base}${crypto.randomBytes(2).toString("hex")}`;
 
-    // Generate unique referral code
-    let referralCodeGenerated = generateReferralCode(username);
-    while (await User.findOne({ referralCode: referralCodeGenerated })) {
-      referralCodeGenerated = generateReferralCode(username);
-    }
+    const user = new User({ userName: username, email, passwordHash, referralCode: generatedCode, referralCodeIsValid: false });
 
-    let referredByUserId = null;
-    let referringUser = null;
-
-    // 🔹 Validate referral code
     if (referralCode) {
-      referringUser = await User.findOne({
-        referralCode,
-        referralCodeIsValid: true,
-      });
+      const parent = await User.findOne({ referralCode, referralCodeIsValid: true });
+      if (!parent) return res.status(400).json({ message: "Referral code invalid or used up" });
 
-      if (!referringUser) {
-        return res.status(400).json({ message: "Referral code invalid." });
-      }
+      user.referredByUserId = parent._id;
+      await user.save();
 
-      // Atomic increment + validation
-      const updatedReferrer = await User.findOneAndUpdate(
-        { _id: referringUser._id, referralCodeUsageLimit: { $lt: 2 } },
-        {
-          $inc: { referralCodeUsageLimit: 1, referralCount: 1 },
-          $set: { referralCodeIsValid: true }, // stays true until limit reached
-        },
-        { new: true }
-      );
-
-      if (!updatedReferrer) {
-        return res.status(400).json({ message: "Referral code is no longer valid." });
-      }
-
-      // If usage limit hits 2, invalidate code
-      if (updatedReferrer.referralCodeUsageLimit >= 2) {
-        updatedReferrer.referralCodeIsValid = false;
-        await updatedReferrer.save();
-      }
-
-      referredByUserId = referringUser._id;
+      await UserReferral.updateOne({ parentId: parent._id }, { $addToSet: { childIds: user._id } }, { upsert: true });
+    } else {
+      await user.save();
     }
 
-    // 🔹 Create new user
-    const user = new User({
-      userName: username,
-      email,
-      passwordHash,
-      referralCode: referralCodeGenerated,
-      referredByCode: referralCode || null,
-      referredByUserId,
-    });
-    await user.save();
-
-    // 🔹 Place referral in tree
-    if (referringUser) {
-      try {
-        await placeReferral({ parentId: referringUser._id, childId: user._id });
-      } catch (err) {
-        console.error("Error placing referral:", err);
-        return res.status(500).json({ message: "Error updating referral structure" });
-      }
-    }
-
-    return res.status(201).json({
-      message: "User registered successfully",
-      referralCode: referralCodeGenerated,
-    });
-
-  } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({ message: "Username or email already exists" });
-    }
-    console.error(error);
-    return res.status(500).json({ message: "Server error" });
+    res.status(201).json({ message: "User registered", referralCode: generatedCode });
+  } catch(err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
   }
 };
+
+// On subscription payment success
+exports.activateSubscription = async (userId) => {
+  await User.findByIdAndUpdate(userId, { $set: { "subscription.isActive": true, referralCodeIsValid: true } });
+  await processReferral(userId);
+};
+
 
 
 
@@ -120,39 +80,96 @@ exports.createNewUser = async (req, res) => {
 // User Login
 exports.userLogin = async (req, res) => {
   try {
-    const { identifier, password, role, roleRef } = req.body;
+    const { identifier, password, role, roleRef, deviceId, deviceType } = req.body;
 
-    // Find user by username or email
+    // 1️⃣ Find user
     const user = await User.findOne({
       $or: [{ userName: identifier }, { email: identifier }],
     });
     if (!user) {
-      return res.status(400).json({ error: 'Invalid username/email or password' });
+      return res.status(400).json({ error: "Invalid username/email or password" });
     }
 
+    // 2️⃣ Validate password
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
-      return res.status(400).json({ error: 'Invalid username/email or password' });
+      return res.status(400).json({ error: "Invalid username/email or password" });
     }
-      const userStart=await startUpProcessCheck(user._id)
-    // Generate JWT token
-    const userToken = jwt.sign(
-      { userName: user.userName,userId: user._id, role: user.role ,referralCode: user.referralCode },
+
+    // 3️⃣ Run startup checks (custom business logic)
+    const userStart = await startUpProcessCheck(user._id);
+
+    // 4️⃣ Generate tokens
+    const accessToken = jwt.sign(
+      {
+        userName: user.userName,
+        userId: user._id,
+        role: user.role,
+        referralCode: user.referralCode,
+      },
       process.env.JWT_SECRET,
-      { expiresIn: '32d' }
+      { expiresIn: "1h" }
     );
 
-    // Create session and get session id
-    // const deviceId = await sessionService.createSession(user._id,role,roleRef, userToken, req );
-   
-  
+    const refreshToken = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: "30d" }
+    );
 
-    // Send JSON response with token and user info
+    // 5️⃣ Handle device (create or update)
+    const deviceIdentifier = deviceId || uuidv4(); // generate one if not provided
+    let device = await Device.findOne({ deviceId: deviceIdentifier, userId: user._id });
+
+    if (!device) {
+      device = await Device.create({
+        userId: user._id,
+        deviceId: deviceIdentifier,
+        deviceType: deviceType || "web",
+        ipAddress: req.ip,
+        lastActiveAt: new Date(),
+      });
+    } else {
+      device.ipAddress = req.ip;
+      device.lastActiveAt = new Date();
+      await device.save();
+    }
+
+    // 6️⃣ Create or update session
+    let session = await Session.findOne({ userId: user._id, deviceId: device._id });
+
+    if (!session) {
+      session = await Session.create({
+        userId: user._id,
+        deviceId: device._id,
+        refreshToken,
+        isOnline: true,
+        lastSeenAt: null,
+      });
+    } else {
+      session.refreshToken = refreshToken;
+      session.isOnline = true;
+      session.lastSeenAt = null;
+      await session.save();
+    }
+
+    // 7️⃣ Update user global online status
+    user.isOnline = true;
+    user.lastSeenAt = null;
+    await user.save();
+
+    // 8️⃣ Return tokens + session info
     res.json({
-      token: userToken,
-      startUpProcess:userStart,
+      accessToken,
+      refreshToken,
+      sessionId: session._id,
+      deviceId: device.deviceId,
+      appLanguage: userStart.appLanguage,
+      feedLanguage:userStart.feedLanguage,
+      gender:userStart.gender,
     });
   } catch (error) {
+    console.error("Login error:", error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -218,8 +235,14 @@ try {
 exports.newUserVerifyOtp = async (req, res) => {
   const { otp ,email} = req.body;
 
+  const existingUser = await User.findOne({ email: email.toLowerCase() });
+    if (existingUser) {
+      return res.status(400).json({ message: "Email already exists" });
+    }
+
   if (!otp||!email) {
     return res.status(400).json({ error: 'Email and OTP are required' });
+
   }
    const record = otpStore.get(email);
 
@@ -293,11 +316,41 @@ exports.userPasswordReset = async (req, res) => {
 };
 
 
-exports.userlogOut= async (req, res) => {
-  req.user.activeSession = null;
-  req.user.isOnline = false;
-  req.user.lastSeen = new Date();
-  await req.user.save();
-  res.clearCookie("sessionId");
-  res.json({ message: "Logged out" });
+exports.userLogOut = async (req, res) => {
+  try {
+    const { userId, deviceId } = req.body;
+    if (!userId || !deviceId) {
+      return res.status(400).json({ message: "userId and deviceId required" });
+    }
+
+    // 1️⃣ Mark the device as logged out
+    await Device.findOneAndUpdate(
+      { userId, deviceId },
+      { lastActiveAt: new Date() },
+      { new: true }
+    );
+
+    // 2️⃣ Check if user has any active devices
+    const activeDevices = await Device.find({ userId });
+    const hasActive = activeDevices.some((d) => {
+      // Example rule: consider device "active" if lastActiveAt within 5 min
+      return Date.now() - new Date(d.lastActiveAt).getTime() < 5 * 60 * 1000;
+    });
+
+    // 3️⃣ Update user status
+    await User.findByIdAndUpdate(userId, {
+      isOnline: hasActive,
+      lastSeenAt: hasActive ? null : new Date(),
+      ...(hasActive ? {} : { refreshToken: null }), // clear only if no devices left
+    });
+
+    res.json({ message: "Logged out successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };
+
+
+
+
+

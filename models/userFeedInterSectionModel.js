@@ -62,6 +62,7 @@ const UserFeedActionsSchema = new mongoose.Schema(
 UserFeedActionsSchema.index({ userId: 1 }, { unique: true, sparse: true });
 UserFeedActionsSchema.index({ accountId: 1 }, { unique: true, sparse: true });
 
+
 module.exports = mongoose.model(
   "UserFeedActions",
   UserFeedActionsSchema,

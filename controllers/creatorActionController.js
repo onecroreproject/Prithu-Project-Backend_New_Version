@@ -1,9 +1,9 @@
 const path = require("path");
 const UserFeedActions = require("../models/userFeedInterSectionModel");
 const Feed = require("../models/feedModel");
-const UserComment = require("../models/userModels/userCommentModel");
+const UserComment = require("../models/userCommentModel");
 const UserView = require("../models/userModels/userViewFeedsModel");
-const CommentLike = require("../models/userModels/commentsLikeModel");
+const CommentLike = require("../models/commentsLikeModel");
 
 // ---------------------- FEED LIKE ----------------------
 exports.creatorlikeFeed = async (req, res) => {
@@ -198,11 +198,11 @@ exports.getCreatorSavedFeeds = async (req, res) => {
     if (!userActions || !userActions.savedFeeds.length)
       return res.status(404).json({ message: "No saved feeds found" });
 
-    const host = `${req.protocol}://${req.get("host")}`;
+
     const savedFeedUrls = userActions.savedFeeds
       .map(feed => {
         const folder = feed.type === "video" ? "videos" : "images";
-        return feed.downloadUrl || feed.fileUrl || (feed.contentUrl ? `${host}/uploads/${folder}/${path.basename(feed.contentUrl)}` : null);
+        return feed.downloadUrl || null ;
       })
       .filter(Boolean);
 
@@ -227,11 +227,11 @@ exports.getCreatorDownloadedFeeds = async (req, res) => {
     if (!userActions || !userActions.downloadedFeeds.length)
       return res.status(404).json({ message: "No downloaded feeds found" });
 
-    const host = `${req.protocol}://${req.get("host")}`;
+   
     const downloadedFeedUrls = userActions.downloadedFeeds
       .map(feed => {
         const folder = feed.type === "video" ? "videos" : "images";
-        return feed.downloadUrl || feed.fileUrl || (feed.contentUrl ? `${host}/uploads/${folder}/${path.basename(feed.contentUrl)}` : null);
+        return feed.downloadUrl || feed.fileUrl || feed.contentUrl ;
       })
       .filter(Boolean);
 
@@ -256,11 +256,10 @@ exports.getCreatorLikedFeeds = async (req, res) => {
     if (!userActions || !userActions.likedFeeds.length)
       return res.status(404).json({ message: "No liked feeds found" });
 
-    const host = `${req.protocol}://${req.get("host")}`;
     const likedFeedUrls = userActions.likedFeeds
       .map(feed => {
         const folder = feed.type === "video" ? "videos" : "images";
-        return feed.downloadUrl || feed.fileUrl || (feed.contentUrl ? `${host}/uploads/${folder}/${path.basename(feed.contentUrl)}` : null);
+        return feed.downloadUrl || feed.fileUrl || feed.contentUrl
       })
       .filter(Boolean);
 

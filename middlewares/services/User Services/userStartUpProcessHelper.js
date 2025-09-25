@@ -1,20 +1,45 @@
 const UserLanguage = require("../../../models/userModels/userLanguageModel");
+const ProfileSettings = require("../../../models/profileSettingModel");
 
 exports.startUpProcessCheck = async (userId) => {
-  if (!userId) return false;
+  if (!userId) {
+    return {
+      appLanguage: false,
+      feedLanguage: false,
+      gender: false
+    };
+  }
 
   try {
-    // Check if user has both appLanguageCode and feedLanguageCode set and active
-    const exists = await UserLanguage.exists({
-      userId,
-      applanguageCode: { $ne: null },
-      feedlanguageCode: { $ne: null },
-      active: true
-    });
+    // ✅ Step 1: Get UserLanguage entry
+    const lang = await UserLanguage.findOne(
+      { userId, active: true },
+      { appLanguageCode: 1, feedLanguageCode: 1 }
+    ).lean();
 
-    return !!exists; // true if both languages are set
+    const appLanguage = !!lang?.appLanguageCode;
+    const feedLanguage = !!lang?.feedLanguageCode;
+
+    // ✅ Step 2: Get ProfileSettings entry
+    const profile = await ProfileSettings.findOne(
+      { userId },
+      { gender: 1 }
+    ).lean();
+
+    const gender = !!profile?.gender;
+
+    // ✅ Return detailed status
+    return {
+      appLanguage,
+      feedLanguage,
+      gender
+    };
   } catch (error) {
     console.error("Error in startUpProcessCheck:", error);
-    return false;
+    return {
+      appLanguage: false,
+      feedLanguage: false,
+      gender: false
+    };
   }
 };

@@ -4,13 +4,10 @@ const cors = require('cors');
 const app = express();
 const root =require ('./roots/root');
 require('dotenv').config();
-const http=require('http');
-const Server = http.createServer(app);
-const {initSocket}=require('./middlewares/webSocket');
 const cookieParser=require('cookie-parser');
 const path = require ("path")
 const {scheduleFeedPosts}=require('./corn/feedCorn');
-const {startWatcher}=require('./middlewares/referralCodeWatcher')
+const {startWatcher}=require('./middlewares/referralMiddleware/refferalCodeWatcher');
 
 const allowedOrigins = process.env.CLIENT_URL?.split(",") || ["http://localhost:5173"];
 
@@ -41,7 +38,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 scheduleFeedPosts();
 
-// initSocket(Server);
+
 
 
 startWatcher()

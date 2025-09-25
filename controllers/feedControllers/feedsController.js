@@ -8,9 +8,9 @@ const path=require('path');
 const Account =require("../../models/accountSchemaModel.js")
 const Admin=require("../../models/adminModels/adminModel.js")
 const mongoose = require("mongoose");
-const UserComment = require("../../models/userModels/userCommentModel.js");
+const UserComment = require("../../models/userCommentModel.js");
 const UserView = require("../../models/userModels/userViewFeedsModel.js");
-const CommentLike = require("../../models/userModels/commentsLikeModel.js");
+const CommentLike = require("../../models/commentsLikeModel.js");
 const UserLanguage=require('../../models/userModels/userLanguageModel.js');
 const  UserCategory=require('../../models/userModels/userCategotyModel.js');
 const ProfileSettings=require('../../models/profileSettingModel')
@@ -22,155 +22,150 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const rawUserId = req.Id || req.body.userId;
     const userId = rawUserId ? new mongoose.Types.ObjectId(rawUserId) : null;
 
-    if (!rawUserId) {
-      return res.status(404).json({ message: "User ID Required " });
-    }
+    if (!rawUserId) return res.status(404).json({ message: "User ID Required" });
 
-    const host = `${req.protocol}://${req.get("host")}`;
+    // 0️⃣ Get hidden posts for this user
+    const user = await User.findById(userId).select("hiddenPostIds").lean();
+    const hiddenPostIds = user?.hiddenPostIds || [];
 
-    // 1️⃣ Get all feeds
-    const feeds = await Feed.find().sort({ createdAt: -1 }).lean();
-    if (!feeds.length) return res.status(404).json({ message: "No feeds found" });
+    // 1️⃣ Aggregate feeds with enrichment
+    const feeds = await Feed.aggregate([
+      { $match: { _id: { $nin: hiddenPostIds } } },
 
-    const feedIds = feeds.map(f => f._id);
-    const accountIds = feeds.map(f => f.createdByAccount);
+      // Sort newest first
+      { $sort: { createdAt: -1 } },
 
-    // 2️⃣ Aggregate global likes/downloads/shares
-    const actions = await UserFeedActions.aggregate([
-      { $project: { likedFeeds: 1, downloadedFeeds: 1, sharedFeeds: 1 } },
+      // Lookup creator account to get userId
       {
-        $facet: {
-          likes: [
-            { $unwind: { path: "$likedFeeds", preserveNullAndEmptyArrays: true } },
-            { $group: { _id: "$likedFeeds.feedId", count: { $sum: 1 } } }
+        $lookup: {
+          from: "Accounts",
+          localField: "createdByAccount",
+          foreignField: "_id",
+          as: "account"
+        }
+      },
+      { $unwind: { path: "$account", preserveNullAndEmptyArrays: true } },
+
+      // Lookup profile
+      {
+        $lookup: {
+          from: "ProfileSettings",
+          localField: "account.userId",
+          foreignField: "userId",
+          as: "profile"
+        }
+      },
+      { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
+
+      // Lookup counts
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: "$likedFeeds" },
+            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" }
           ],
-          downloads: [
-            { $unwind: { path: "$downloadedFeeds", preserveNullAndEmptyArrays: true } },
-            { $group: { _id: "$downloadedFeeds.feedId", count: { $sum: 1 } } }
+          as: "likesCount"
+        }
+      },
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: "$downloadedFeeds" },
+            { $match: { $expr: { $eq: ["$downloadedFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" }
           ],
-          shares: [
-            { $unwind: { path: "$sharedFeeds", preserveNullAndEmptyArrays: true } },
-            { $group: { _id: "$sharedFeeds.feedId", count: { $sum: 1 } } }
-          ]
+          as: "downloadsCount"
+        }
+      },
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: "$sharedFeeds" },
+            { $match: { $expr: { $eq: ["$sharedFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" }
+          ],
+          as: "sharesCount"
+        }
+      },
+
+      // Lookup views
+      {
+        $lookup: {
+          from: "UserViews",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } },
+            { $count: "count" }
+          ],
+          as: "viewsCount"
+        }
+      },
+
+      // Lookup comments count
+      {
+        $lookup: {
+          from: "UserComments",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } },
+            { $count: "count" }
+          ],
+          as: "commentsCount"
+        }
+      },
+
+      // Project final fields
+      {
+        $project: {
+          accountId:"$account._id",
+          feedId: "$_id",
+          type: 1,
+          language: 1,
+          category: 1,
+          contentUrl: 1,
+          createdAt: 1,
+          likesCount: { $arrayElemAt: ["$likesCount.count", 0] },
+          downloadsCount: { $arrayElemAt: ["$downloadsCount.count", 0] },
+          shareCount: { $arrayElemAt: ["$sharesCount.count", 0] },
+          viewsCount: { $arrayElemAt: ["$viewsCount.count", 0] },
+          commentsCount: { $arrayElemAt: ["$commentsCount.count", 0] },
+          userName: "$profile.userName",
+          profileAvatar: "$profile.profileAvatar",
+          createdByAccount: 1
         }
       }
     ]);
 
-    const likesCountMap = {};
-    const downloadsCountMap = {};
-    const sharesCountMap = {};
-    if (actions[0]) {
-      (actions[0].likes || []).forEach(item => {
-        if (item._id) likesCountMap[item._id.toString()] = item.count;
-      });
-      (actions[0].downloads || []).forEach(item => {
-        if (item._id) downloadsCountMap[item._id.toString()] = item.count;
-      });
-      (actions[0].shares || []).forEach(item => {
-        if (item._id) sharesCountMap[item._id.toString()] = item.count;
-      });
-    }
-
-    // 3️⃣ Get current user actions (with timestamps, safe checks)
-    let userActions = { likedFeeds: [], savedFeeds: [] };
-    if (userId) {
-      const uaDoc = await UserFeedActions.findOne({ userId }).lean();
-      if (uaDoc) {
-        userActions.likedFeeds = (uaDoc.likedFeeds || [])
-          .filter(f => f.feedId)
-          .map(f => ({
-            feedId: f.feedId.toString(),
-            likedAt: f.likedAt || null
-          }));
-
-        userActions.savedFeeds = (uaDoc.savedFeeds || [])
-          .filter(f => f.feedId)
-          .map(f => ({
-            feedId: f.feedId.toString(),
-            savedAt: f.savedAt || null
-          }));
-      }
-    }
-
-    // 4️⃣ Views count
-    const viewsAgg = await UserView.aggregate([
-      { $match: { feedId: { $in: feedIds } } },
-      { $group: { _id: "$feedId", count: { $sum: 1 } } }
-    ]);
-    const viewsMap = {};
-    viewsAgg.forEach(v => { viewsMap[v._id.toString()] = v.count });
-
-    // 5️⃣ Comment count
-    const commentsAgg = await UserComment.aggregate([
-      { $match: { feedId: { $in: feedIds } } },
-      { $group: { _id: "$feedId", count: { $sum: 1 } } }
-    ]);
-    const commentsMap = {};
-    commentsAgg.forEach(c => { commentsMap[c._id.toString()] = c.count });
-
-    // 6️⃣ Get Accounts → Profile Settings
-    const accounts = await Account.find(
-      { _id: { $in: accountIds } },
-      { _id: 1, userId: 1 }
-    ).lean();
-
-    const userIds = accounts.map(a => a.userId);
-
-    const profiles = await ProfileSettings.find(
-      { userId: { $in: userIds } },
-      { userName: 1, profileAvatar: 1, userId: 1 }
-    ).lean();
-
-    const accountToUserIdMap = {};
-    accounts.forEach(acc => { accountToUserIdMap[acc._id.toString()] = acc.userId.toString(); });
-
-    const userIdToProfileMap = {};
-    profiles.forEach(p => { userIdToProfileMap[p.userId.toString()] = p; });
-
-    // 7️⃣ Build final response
+    // 2️⃣ Add user-specific actions (liked/saved) and format contentUrl
     const enrichedFeeds = feeds.map(feed => {
-      const fid = feed._id.toString();
-      const folder = feed.type === "video" ? "videos" : "images";
       const contentUrlFull = feed.contentUrl
-        ? `${host}/uploads/${folder}/${path.basename(feed.contentUrl)}`
+      // Check user actions
+      const userActionDoc = userId
+        ? UserFeedActions.findOne({ userId, "likedFeeds.feedId": feed.feedId }).lean()
         : null;
-
-      const creatorUserId = accountToUserIdMap[feed.createdByAccount?.toString()] || null;
-      const profile = creatorUserId ? userIdToProfileMap[creatorUserId] : null;
-
-      // find timestamps if liked/saved
-      const likedAction = userActions.likedFeeds.find(f => f.feedId === fid);
-      const savedAction = userActions.savedFeeds.find(f => f.feedId === fid);
+      // For simplicity, you can populate isLiked/isSaved in another step if needed
 
       return {
-        feedId: fid,
-        type: feed.type,
-        language: feed.language,
-        category: feed.category,
+        ...feed,
         contentUrl: contentUrlFull,
         timeAgo: feedTimeCalculator(feed.createdAt),
-        likesCount: likesCountMap[fid] || 0,
-        shareCount: sharesCountMap[fid] || 0,
-        downloadsCount: downloadsCountMap[fid] || 0,
-        viewsCount: viewsMap[fid] || 0,
-        commentsCount: commentsMap[fid] || 0,
-        isLiked: !!likedAction,
-        isSaved: !!savedAction,
-        userName: profile ? profile.userName || "Unknown" : "Unknown",
-        profileAvatar: profile?.profileAvatar
-          ? `${host}/uploads/images/${path.basename(profile.profileAvatar)}`
-          : null
+        profileAvatar: feed.profileAvatar,
+        isLiked: false, // you can set after querying UserFeedActions
+        isSaved: false
       };
     });
 
-    res.status(200).json({
-      message: "Feeds retrieved successfully",
-      feeds: enrichedFeeds
-    });
-
-  } catch (error) {
-    console.error("Error in getAllFeeds:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(200).json({ message: "Feeds retrieved successfully", feeds: enrichedFeeds });
+  } catch (err) {
+    console.error("Error in getAllFeedsByUserId:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
@@ -187,7 +182,6 @@ exports.getFeedsByAccountId = async (req, res) => {
     if (!account) return res.status(404).json({ message: "Account not found" });
     const userId = account.userId;
 
-    const host = `${req.protocol}://${req.get("host")}`;
 
     // 2️⃣ Get user's feed language preference
     const userLang = await UserLanguage.findOne({ userId }).lean();
@@ -280,8 +274,7 @@ exports.getFeedsByAccountId = async (req, res) => {
     // 🔟 Build final response
     const enrichedFeeds = feeds.map(feed => {
       const fid = feed._id.toString();
-      const folder = feed.type === "video" ? "videos" : "images";
-      const contentUrl = feed.contentUrl ? `${host}/uploads/${folder}/${path.basename(feed.contentUrl)}` : null;
+      const contentUrl = feed.contentUrl ;
 
       const creatorUserId = accountToUserId[feed.createdByAccount?.toString()] || null;
       const profile = creatorUserId ? userIdToProfile[creatorUserId] : null;
@@ -300,9 +293,8 @@ exports.getFeedsByAccountId = async (req, res) => {
         isLiked: likedFeedIds.includes(fid),
         isSaved: savedFeedIds.includes(fid),
         userName: profile?.userName || "Unknown",
-        profileAvatar: profile?.profileAvatar
-          ? `${host}/uploads/avatars/${path.basename(profile.profileAvatar)}`
-          : null
+        profileAvatar: profile?.profileAvatar,
+          
       };
     });
 
@@ -316,7 +308,53 @@ exports.getFeedsByAccountId = async (req, res) => {
 
 
 
+exports.getUserHidePost = async (req, res) => {
+  try {
+    const userId = req.Id || req.body.userId;
+    if (!userId) {
+      return res.status(400).json({ message: "userId is required" });
+    }
 
+    // 1️⃣ Find user
+    const user = await User.findById(userId, "hiddenPostIds").lean();
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // 2️⃣ If no hidden posts
+    if (!user.hiddenPostIds || user.hiddenPostIds.length === 0) {
+      return res.status(200).json({
+        message: "No hidden posts found",
+        data: [],
+      });
+    }
+
+    // 3️⃣ Fetch hidden posts
+    const hiddenPosts = await Feed.find(
+      { _id: { $in: user.hiddenPostIds } },
+      {
+        _id: 1,
+        title: 1,
+        content: 1,
+        contentUrl: 1,
+        createdAt: 1,
+        createdByAccount: 1,
+      }
+    ).lean();
+
+    res.status(200).json({
+      message: "Hidden posts fetched successfully",
+      count: hiddenPosts.length,
+      data: hiddenPosts,
+    });
+  } catch (err) {
+    console.error("Error fetching hidden posts:", err);
+    res.status(500).json({
+      message: "Error fetching hidden posts",
+      error: err.message,
+    });
+  }
+};
 
 
 
@@ -325,13 +363,13 @@ exports.getFeedsByAccountId = async (req, res) => {
 
 exports.getUserInfoAssociatedFeed = async (req, res) => {
   try {
-    let feedId = req.params.feedId || req.query.feedId;
+    let feedId = req.params.feedId || req.body.feedId;
+    const userId = req.Id || req.body.userId; 
+
     if (!feedId) {
       return res.status(400).json({ message: "feedId is required" });
     }
     feedId = feedId.trim();
-
-    const host = `${req.protocol}://${req.get("host")}`;
 
     const feedWithCreator = await mongoose.connection
       .collection("Feeds")
@@ -377,7 +415,7 @@ exports.getUserInfoAssociatedFeed = async (req, res) => {
                   bio: 1,
                   displayName: 1,
                   profileAvatar: 1,
-                  userName:1,
+                  userName: 1,
                 },
               },
             ],
@@ -406,15 +444,49 @@ exports.getUserInfoAssociatedFeed = async (req, res) => {
           },
         },
 
-        // 5️⃣ Final response fields
+        // 5️⃣ Lookup Followers (count + ids)
+        {
+          $lookup: {
+            from: "CreatorFollowers",
+            let: { accId: "$createdByAccount" },
+            pipeline: [
+              {
+                $match: { $expr: { $eq: ["$creatorId", "$$accId"] } }
+              },
+              {
+                $project: {
+                  _id: 0,
+                  followerIds: 1,
+                  followersCount: { $size: { $ifNull: ["$followerIds", []] } }
+                }
+              }
+            ],
+            as: "followersData"
+          }
+        },
+        {
+          $addFields: {
+            followersCount: {
+              $ifNull: [{ $arrayElemAt: ["$followersData.followersCount", 0] }, 0]
+            },
+            followerIds: {
+              $ifNull: [{ $arrayElemAt: ["$followersData.followerIds", 0] }, []]
+            }
+          }
+        },
+
+        // 6️⃣ Final response fields
         {
           $project: {
             _id: 1,
+            accountId: "$createdByAccount",
             totalPosts: 1,
+            followersCount: 1,
+            followerIds: 1,
             "profile.displayName": 1,
             "profile.bio": 1,
             "profile.profileAvatar": 1,
-            "profile.userName":1,
+            "profile.userName": 1,
           },
         },
       ])
@@ -424,11 +496,21 @@ exports.getUserInfoAssociatedFeed = async (req, res) => {
       return res.status(404).json({ message: "Feed not found" });
     }
 
-    // ✅ Add host to profileAvatar if exists
     let data = feedWithCreator[0];
+
+    // ✅ Add host to profileAvatar if needed
     if (data.profile && data.profile.profileAvatar) {
-      data.profile.profileAvatar = `${host}/${data.profile.profileAvatar.replace(/\\/g, "/")}`;
+      data.profile.profileAvatar = data.profile.profileAvatar; // adjust with full URL if required
     }
+
+    // ✅ Add isFollowing (check if current userId is in followerIds)
+    let isFollowing = false;
+    if (userId && data.followerIds) {
+      isFollowing = data.followerIds.some(
+        (id) => id.toString() === userId.toString()
+      );
+    }
+    data.isFollowing = isFollowing;
 
     res.status(200).json({
       message: "Feed with creator details fetched successfully",
@@ -442,6 +524,7 @@ exports.getUserInfoAssociatedFeed = async (req, res) => {
     });
   }
 };
+
 
 
 

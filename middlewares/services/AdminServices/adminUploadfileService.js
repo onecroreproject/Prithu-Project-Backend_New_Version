@@ -3,11 +3,12 @@ const { getVideoDurationInSeconds } = require("get-video-duration");
 const Feed = require("../../../models/feedModel");
 const Categories = require("../../../models/categorySchema");
 const Admin = require("../../../models/adminModels/adminModel");
+const ChildAdmin = require("../../../models/childAdminModel");
 
-exports.uploadFeed = async ({ language, category, type }, file, userId, options = { autoCreateCategory: true }) => {
+exports.uploadFeed = async ({ language, categoryId, type }, file, userId) => {
   if (!userId) throw new Error("User ID is required");
 
-  // ✅ Check role (Admin or Child_Admin)
+  // Determine role
   let userRole = await Admin.findById(userId).select("adminType role");
   let roleType = "Admin";
 
@@ -17,57 +18,60 @@ exports.uploadFeed = async ({ language, category, type }, file, userId, options 
     roleType = "Child_Admin";
   }
 
-  if (!language || !category || !type) {
-    throw new Error("Language, type, and category are required");
-  }
-
+  if (!language || !categoryId || !type) throw new Error("Language, type, and categoryId are required");
   if (!file) throw new Error("No file uploaded");
 
-  const newFileName = path.basename(file.path);
+  const fileUrl = file.url || file.secure_url;
+  const originalName = file.originalname || file.original_filename || "unknown";
+  const fileHash = file.fileHash; // ✅ coming from processFeedFile middleware
 
-  // ✅ Check duplicate feed
-  const existFeed = await Feed.findOne({ contentUrl: { $regex: `${newFileName}$` } });
-  if (existFeed) throw new Error("The file has already been uploaded");
+  if (!fileUrl) throw new Error("Uploaded file does not have a valid URL");
 
-  // ✅ Video duration validation
-  let videoDuration = null;
-  if (type === "video" && file.mimetype.startsWith("video/")) {
-    videoDuration = await getVideoDurationInSeconds(file.path);
-    if (videoDuration >= 90) throw new Error("Upload video below 90 seconds");
+  // Validate file type
+  if (type === "image" && !(file.mimetype || file.resource_type)?.startsWith("image/")) {
+    throw new Error("Uploaded file is not an image");
+  }
+  if (type === "video" && !(file.mimetype || file.resource_type)?.startsWith("video/")) {
+    throw new Error("Uploaded file is not a video");
   }
 
-  const formattedCategory = category.trim().charAt(0).toUpperCase() + category.trim().slice(1);
+  // Ensure category exists
+  const cat = await Categories.findById(categoryId);
+  if (!cat) throw new Error(`Category with ID "${categoryId}" does not exist`);
 
-  // ✅ Check category existence
-  let cat = await Categories.findOne({ name: { $regex: `^${formattedCategory}$`, $options: "i" } });
-  if (!cat) {
-    if (!options.autoCreateCategory) throw new Error(`Category "${formattedCategory}" does not exist`);
-    cat = new Categories({ name: formattedCategory, feedIds: [] });
-    await cat.save();
-  }
+  // ✅ Prevent duplicate feed by fileHash, URL or originalName
+  const existFeed = await Feed.findOne({
+    $or: [{ fileHash }, { contentUrl: fileUrl }, { originalName }]
+  });
+  if (existFeed) throw new Error("This file has already been uploaded");
 
-  // ✅ Save feed
+  // Save feed
   const newFeed = new Feed({
     type,
     language,
-    category: formattedCategory,
-    duration: videoDuration,
+    category: cat._id,
+    duration: type === "video" ? file.duration || null : null,
     createdByAccount: userId,
-    contentUrl: file.path,
-    roleRef: roleType, // Save Admin or Child_Admin role
+    contentUrl: fileUrl,
+    originalName,
+    fileHash, // ✅ store hash in DB
+    roleRef: roleType,
   });
   await newFeed.save();
 
-  // ✅ Add feed to category
   await Categories.updateOne({ _id: cat._id }, { $addToSet: { feedIds: newFeed._id } });
 
   return {
-    message: "Feed created successfully",
     feed: newFeed,
-    category: cat,
-    roleType
+    categoryId: cat._id,
+    language,
+    type,
+    roleType,
   };
 };
+
+
+
 
 
 // ✅ Multiple files support

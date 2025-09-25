@@ -76,50 +76,46 @@ exports.newAdmin = async (req, res) => {
 // Admin Login
 exports.adminLogin = async (req, res) => {
   try {
+    console.log("admin Login")
     const { identifier, password } = req.body;
-    if (!identifier || !password) {
+    if (!identifier || !password)
       return res.status(400).json({ error: "Identifier and password required" });
-    }
-
-    // 1️⃣ Try to find in Admin
-    let admin = await Admin.findOne({
-      $or: [{ userName: identifier }, { email: identifier }]
-    });
 
     let payload = {};
 
+    // 1️⃣ Check Admin collection
+    const admin = await Admin.findOne({
+      $or: [{ userName: identifier }, { email: identifier }],
+    });
+
     if (admin) {
-      // Validate password
       const isMatch = await bcrypt.compare(password, admin.passwordHash);
       if (!isMatch) return res.status(400).json({ error: "Invalid password" });
 
       payload = {
         role: admin.adminType,
         userName: admin.userName,
-        userId: admin._id
+        userId: admin._id.toString(),
       };
-
     } else {
-      // 2️⃣ Try to find in Child_Admin
+      // 2️⃣ Check Child Admin collection
       const child = await ChildAdmin.findOne({ email: identifier }).lean();
       if (!child) return res.status(400).json({ error: "Invalid credentials" });
 
-      // Validate password
       const isMatch = await bcrypt.compare(password, child.passwordHash);
       if (!isMatch) return res.status(400).json({ error: "Invalid password" });
 
       payload = {
         role: "Child_Admin",
         userName: child.userName,
-        userId: child.childAdminId
+        userId: child.childAdminId.toString(),
       };
     }
 
     // 3️⃣ Generate JWT
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1h" });
 
-    res.json({ token, admin: payload ,role:"Child_Admin"});
-
+    res.json({ token, admin: payload });
   } catch (error) {
     console.error("Admin login error:", error);
     res.status(500).json({ error: error.message });
@@ -139,14 +135,14 @@ exports.adminSendOtp = async (req, res) => {
     let tempOtp = Math.floor(1000 + Math.random() * 9000).toString();
     let otpExpires;
 
-    const admin = await Admin.findOne({ businessEmail:email });
+    const admin = await Admin.findOne({ email:email });
 
     if (admin) {
       otpExpires = new Date(Date.now() + 5 * 60 * 1000);
       // Save OTP and expiry on user document
-      user.otpCode = tempOtp;
-      user.otpExpiresAt = otpExpires;
-      await user.save();
+      admin.otpCode = tempOtp;
+      admin.otpExpiresAt = otpExpires;
+      await admin.save();
     } else {
       otpExpires = Date.now() + 5 * 60 * 1000;
       // Store OTP and expiration for this email in otpStore
@@ -205,7 +201,8 @@ exports.newAdminVerifyOtp = async (req, res) => {
 exports.existAdminVerifyOtp = async (req, res) => {
   try {
     
-    const {  otp } = req.body;
+    const { otp } = req.body;
+    console.log(otp)
    
     const admin = await Admin.findOne({ otpCode:otp });
     if (!admin) {
@@ -247,3 +244,33 @@ exports.adminPasswordReset = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+
+
+
+// controllers/adminAuthController.js
+exports.verifyToken = async (req, res) => {
+  try {
+    // values set by your auth middleware
+    const role = req.role;
+    const id = req.Id;
+    const userName = req.userName;
+
+    if (!id || !role || !userName) {
+      return res.status(401).json({ error: "Admin not found or token invalid" });
+    }
+
+    return res.status(200).json({
+      message: "Token verified successfully",
+      admin: {
+        id,
+        role,
+        userName,
+      },
+    });
+  } catch (err) {
+    console.error("Verify token error:", err);
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+};
+

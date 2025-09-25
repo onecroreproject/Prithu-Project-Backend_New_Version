@@ -1,32 +1,87 @@
 const UserSubscription =require ("../../models/subcriptionModels/userSubscreptionModel.js");
 const SubscriptionPlan =require("../../models/subcriptionModels/subscriptionPlanModel.js");
 const { assignPlanToUser }=require( "../../middlewares/subcriptionMiddlewares/assignPlanToUserHelper.js");
-const {processPayment}=require('../../middlewares/subcriptionMiddlewares/paymentHelper.js');
+const {activateSubscription}=require('../../middlewares/subcriptionMiddlewares/paymentHelper.js');
+const User=require('../../models/userModels/userModel.js');
+const {processReferral}=require('../../middlewares/referralMiddleware/referralCount.js');
+const mongoose =require('mongoose');
+
 
 exports.subscribePlan = async (req, res) => {
-
-  const { result } = req.body;
-  if (!result) {
-    return res.status(400).json({ message: "Payment result is required" });
-  }
-
-  const { planId } = req.body;
-  if (!planId) {
-    return res.status(400).json({ message: "Plan ID is required" });
-  }
-  const userId = req.userId;
-  if (!userId) {
-    return res.status(400).json({ message: "User ID is required" });
-  }
-
-  console.log({ userId, planId, result });
-
+  const session = await mongoose.startSession();
   try {
-    const subscriptionPayment = await processPayment(userId, planId, result);
+    session.startTransaction();
 
-    res.status(200).json({ message: "Plan assigned", subscriptionPayment });
-  } catch(err) {
-    res.status(400).json({ message: err.message });
+    const { planId, result } = req.body;
+    const userId = req.Id || req.body.userId;
+
+    if (!planId || !result || !userId)
+      return res.status(400).json({ message: "userId, planId, result required" });
+
+    const user = await User.findById(userId).session(session);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const plan = await SubscriptionPlan.findById(planId).session(session);
+    if (!plan) return res.status(404).json({ message: "Plan not found" });
+
+    const existing = await UserSubscription.findOne({ userId, planId, isActive: true }).session(session);
+    if (existing) return res.status(400).json({ message: "Already subscribed", subscription: existing });
+
+    let subscription = await UserSubscription.findOne({ userId, planId }).session(session);
+    if (!subscription) subscription = new UserSubscription({ userId, planId, paymentStatus: "pending" });
+
+    const today = new Date();
+    const durationMs = plan.durationDays ? plan.durationDays * 24*60*60*1000 : 30*24*60*60*1000;
+
+    if (result === "success") {
+      subscription.isActive = true;
+      subscription.paymentStatus = "success";
+      subscription.startDate = today;
+      subscription.endDate = new Date(today.getTime() + durationMs);
+      await subscription.save({ session });
+
+      user.subscription = {
+        isActive: true,
+        planType: plan.name,
+        startDate: subscription.startDate,
+        endDate: subscription.endDate,
+      };
+      user.referralCodeIsValid = true;
+      await user.save({ session });
+
+      // Update parent referral safely
+      if (user.referredByUserId) {
+        const parent = await User.findById(user.referredByUserId).session(session);
+        if (parent) {
+          parent.referralCodeUsageCount = (parent.referralCodeUsageCount || 0) + 1;
+          if (parent.referralCodeUsageCount >= (parent.referralCodeUsageLimit || 2)) {
+            parent.referralCodeIsValid = false;
+          }
+          await parent.save({ session });
+        }
+      }
+    } else {
+      subscription.paymentStatus = result;
+      await subscription.save({ session });
+    }
+
+    // Commit **once** here
+    await session.commitTransaction();
+    session.endSession();
+
+    // Process referral tree after commit (no session required inside processReferral)
+    if (result === "success") {
+      await processReferral(userId);
+    }
+
+    const message = result === "success" ? "Subscription activated" : `Payment ${result}`;
+    return res.status(result === "success" ? 200 : 202).json({ message, subscription });
+
+  } catch (err) {
+    try { await session.abortTransaction(); } catch(e) {}
+    session.endSession();
+    console.error("subscribePlan error:", err);
+    return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
@@ -47,24 +102,33 @@ if (!subscriptionId) {
 };
 
 
+
+
 exports.getUserSubscriptionPlanWithId = async (req, res) => {
-  const userId = req.userId;
+  const userId = req.Id || req.body.userId 
   if (!userId) {
     return res.status(400).json({ message: "User ID is required" });
   }
-  
 
   try {
-    const plan = await SubscriptionPlan.findById(userId);
+    // Find the active subscription for the user
+    const plan = await UserSubscription.findOne({ userId, isActive: true })
+      .populate("planId") // optional: get plan details
+      .populate("userId", "name email"); // optional: get user details
+
     if (!plan) {
       return res.status(404).json({ message: "Plan not found" });
     }
+
     res.status(200).json({ plan });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
+    console.error("Error fetching user subscription:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+
+
 
 exports.getAllSubscriptionPlans = async (req, res) => {
   try {

@@ -7,6 +7,11 @@ const feedSchema = new mongoose.Schema({
   duration: { type: Number, default: null },
   contentUrl: { type: String, required: true },
 
+
+  contentUrl:{type: String},  // Cloudinary URL
+  cloudinaryId:{type: String},
+  fileHash: { type: String, index: true },
+
   // Reference to Creator or Admin account
   createdByAccount: {
     type: mongoose.Schema.Types.ObjectId,

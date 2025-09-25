@@ -1,97 +1,104 @@
 const Feed = require('../../models/feedModel');
 const { getVideoDurationInSeconds } = require('get-video-duration');
 const fs = require('fs');
-const Tags = require('../../models/categorySchema');
 const path =require ('path');
 const Account=require("../../models/accountSchemaModel");
 const {feedTimeCalculator}=require("../../middlewares/feedTimeCalculator");
 const {getActiveCreatorAccount}=require("../../middlewares/creatorAccountactiveStatus");
 const Categories=require('../../models/categorySchema');
 const User=require('../../models/userModels/userModel');
-const mongoose=require("mongoose")
+const mongoose=require("mongoose");
+const { getLanguageCode, getLanguageName } = require("../../middlewares/helper/languageHelper");
+const CreatorFollowing=require('../../models/creatorFollowerModel');
 
 
- 
  
 exports.creatorFeedUpload = async (req, res) => {
   try {
     const accountId = req.accountId || req.body.accountId;
-    const creatorRole = req.role || req.body.role;
     const userId = req.Id || req.body.userId;
 
-    if (!accountId) {
-      return res.status(400).json({ message: "User ID is required" });
-    }
+    if (!accountId) return res.status(400).json({ message: "User ID is required" });
 
-    // Ensure account is Creator
-    const userRole = await Account.findById(accountId).select("type");
+    // ✅ Ensure Creator
+    const userRole = await Account.findById(accountId).select("type").lean();
     if (!userRole || userRole.type !== "Creator") {
       return res.status(403).json({ message: "Only Creators can upload feeds" });
     }
 
+    // ✅ Ensure active account
     const activeAccount = await getActiveCreatorAccount(userId);
     if (!activeAccount) {
       return res.status(403).json({ message: "Active Creator account required to upload feed" });
     }
 
-    if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
-    }
+    // ✅ Ensure file uploaded to Cloudinary
+    if (!req.cloudinaryFile) return res.status(400).json({ message: "No file uploaded to Cloudinary" });
 
-    const { language, categoryId, type } = req.body;
+    const { language, categoryId, type, scheduleDate } = req.body;
     if (!language || !categoryId || !type) {
       return res.status(400).json({ message: "Language, categoryId, and type are required" });
     }
 
-    // Validate categoryId exists
-    const categoryDoc = await Categories.findById(categoryId);
-    if (!categoryDoc) {
-      return res.status(400).json({ message: "Invalid categoryId" });
-    }
+    // ✅ Normalize language
+    const normalizedLang = getLanguageCode(language);
+    if (!normalizedLang) return res.status(400).json({ message: "Invalid language" });
 
-    // Prevent duplicate file upload
-    const newFileName = path.basename(req.file.path);
-    const existFeed = await Feed.findOne({ contentUrl: { $regex: `${newFileName}$` } });
-    if (existFeed) {
-      return res.status(400).json({ message: "The file has already been uploaded" });
-    }
+    // ✅ Validate category
+    const categoryDoc = await Categories.findById(categoryId).lean();
+    if (!categoryDoc) return res.status(400).json({ message: "Invalid categoryId" });
 
-    // Video duration check (only for video type)
-    let videoDuration = null;
-    if (type === "video" && req.file.mimetype.startsWith("video/")) {
-      videoDuration = await getVideoDurationInSeconds(req.file.path);
-      if (videoDuration >= 90.0) {
-        return res.status(400).json({ message: "Upload video below 90 seconds" });
-      }
-    }
+    const { url, public_id } = req.cloudinaryFile;
+    const fileHash = req.fileHash || null;
+    const videoDuration = req.videoDuration || null; // duration from middleware if video
 
-    // Create and save feed
+    // ✅ Check duplicate by fileHash or URL
+    if (fileHash) {
+      const existingByHash = await Feed.findOne({ fileHash }).lean();
+      if (existingByHash) return res.status(409).json({ message: "This file already exists", feedId: existingByHash._id });
+    }
+    const existingByUrl = await Feed.findOne({ contentUrl: url }).lean();
+    if (existingByUrl) return res.status(409).json({ message: "This file already exists", feedId: existingByUrl._id });
+
+    // ✅ Create feed
     const newFeed = new Feed({
       type,
-      language,
+      language: normalizedLang,
       category: categoryId,
-      duration: videoDuration,
-      createdByAccount: activeAccount._id,
-      contentUrl: req.file.path.replace(/\\/g, "/"), // ✅ normalize path
-      roleRef: creatorRole,
+      createdByAccount: accountId,
+      contentUrl: url,
+      cloudinaryId: public_id,
+      fileHash,
+      duration: videoDuration, // optional for videos
+      scheduledAt: scheduleDate ? new Date(scheduleDate) : null,
+      isPosted: scheduleDate ? false : true,
     });
 
     await newFeed.save();
 
-    // Optional: push feedId into category (if you still want denormalized data)
-    await Categories.findByIdAndUpdate(categoryId, {
-      $push: { feedIds: newFeed._id },
-    });
+    // ✅ Update category
+    await Categories.findByIdAndUpdate(categoryId, { $addToSet: { feedIds: newFeed._id } });
 
     return res.status(201).json({
-      message: "Feed created successfully",
-      feed: newFeed,
+      message: scheduleDate ? "Feed scheduled successfully" : "Feed uploaded successfully",
+      feed: {
+        ...newFeed.toObject(),
+        languageName: getLanguageName(normalizedLang),
+      },
     });
-  } catch (error) {
-    console.error("Error creating feed:", error);
-    return res.status(500).json({ message: "Server error", error: error.message });
+  } catch (err) {
+    console.error("Error creating feed:", err);
+    if (err.code === 11000) {
+      return res.status(409).json({ message: "Duplicate resource", error: err.message });
+    }
+    return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
+
+
+
+
+
 
 
 
@@ -104,7 +111,8 @@ exports.creatorFeedDelete = async (req, res) => {
 
   try {
     const accountId = req.Id;
-    const activeAccount = await getActiveCreatorAccount(accountId);
+    const userId=req.Id;
+    const activeAccount = await getActiveCreatorAccount(userId);
     if (!activeAccount) {
       await session.abortTransaction();
       return res
@@ -178,17 +186,21 @@ exports.creatorFeedDelete = async (req, res) => {
 
 exports.getCreatorPost = async (req, res) => {
   try {
-    const accountId = req.Id || req.body.accountId;
+    console.log(req)
+    const accountId = req.accountId || req.body.accountId;
+    console.log(accountId)
+    let creatorId
     if (!accountId) {
       return res.status(400).json({ message: "Account ID is required" });
     }
-
+ 
     // ✅ Fetch account
     const account = await Account.findById(accountId).lean();
     if (!account) {
       return res.status(400).json({ message: "Account not found" });
     }
-
+ 
+    if(req.accountId){
     // ✅ Ensure active creator account
     const activeAccount = await getActiveCreatorAccount(account.userId);
     if (!activeAccount) {
@@ -196,9 +208,10 @@ exports.getCreatorPost = async (req, res) => {
         message: "Only active Creator account can fetch feeds",
       });
     }
-
-    const creatorId = activeAccount._id;
-
+    creatorId = activeAccount._id
+  }
+    creatorId =  req.body.accountId
+ 
     // ✅ Run queries in parallel (feeds + count)
     const [feeds, feedCount] = await Promise.all([
       Feed.find(
@@ -209,7 +222,7 @@ exports.getCreatorPost = async (req, res) => {
         .lean(),
       Feed.countDocuments({ createdByAccount: creatorId })
     ]);
-
+ 
     if (!feeds || feeds.length === 0) {
       return res.status(404).json({
         message: "No feeds found for this creator",
@@ -217,27 +230,26 @@ exports.getCreatorPost = async (req, res) => {
         feeds: [],
       });
     }
-
-    const host = `${req.protocol}://${req.get("host")}`;
+ 
+   
     const feedsFormatted = feeds.map(feed => ({
       feedId: feed._id,
-      contentUrl: `${host}/${feed.contentUrl}`,
+      contentUrl:feed.contentUrl,
       timeAgo: feedTimeCalculator(feed.createdAt),
     }));
-
+ 
     return res.status(200).json({
       message: "Creator feeds retrieved successfully",
       feedCount, // ✅ optimized with countDocuments
       feeds: feedsFormatted,
     });
-
+ 
   } catch (error) {
     console.error("Error fetching creator feeds:", error);
     return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
-
+ 
 
 
 
@@ -246,35 +258,48 @@ exports.getCreatorPost = async (req, res) => {
 
 exports.getCreatorFeeds = async (req, res) => {
   try {
-    const accountId = req.accountId;
+    const accountId = req.accountId || req.body.accountId;
+    const userId = req.Id || req.body.userId;
+
     if (!accountId) {
       return res.status(400).json({ message: "User ID is required" });
     }
- 
-    const activeAccount = await getActiveCreatorAccount(accountId);
+
+    // ✅ Check if user has an active Creator account
+    const activeAccount = await getActiveCreatorAccount(userId);
     if (!activeAccount) {
       return res
         .status(403)
         .json({ message: "Only active Creator account can fetch feeds" });
     }
+
     const creatorId = activeAccount._id;
- 
+
     // ✅ Fetch feeds created by this creator account
     const feeds = await Feed.find({ createdByAccount: creatorId }).sort({ createdAt: -1 });
- 
+
     if (!feeds || feeds.length === 0) {
       return res.status(404).json({ message: "No feeds found for this creator" });
     }
- 
+
     // ✅ Add timeAgo property
     const feedsWithTimeAgo = feeds.map((feed) => ({
       ...feed.toObject(),
       timeAgo: feedTimeCalculator(feed.createdAt),
     }));
- 
+
+    // ✅ Get follower count from followerIds array
+    const creatorFollowDoc = await CreatorFollowing.findOne(
+      { creatorId: creatorId },
+      "followerIds"
+    );
+
+    const followerCount = creatorFollowDoc ? creatorFollowDoc.followerIds.length : 0;
+
     return res.status(200).json({
       message: "Creator feeds retrieved successfully",
       count: feedsWithTimeAgo.length,
+      followerCount, // ✅ real number of followers
       feeds: feedsWithTimeAgo,
     });
   } catch (error) {
@@ -289,10 +314,11 @@ exports.getCreatorFeeds = async (req, res) => {
 
 
 
+
+
 exports.creatorFeedScheduleUpload = async (req, res) => {
-  console.log("working")
   try {
-    const accountId = req.Id;
+    const accountId = req.Id || req.body.accountId;
     if (!accountId) {
       return res.status(400).json({ message: "User ID is required" });
     }
@@ -305,29 +331,21 @@ exports.creatorFeedScheduleUpload = async (req, res) => {
     }
     const creatorId = activeAccount._id;
 
-    if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
+    if (!req.cloudinaryFile) {
+      return res.status(400).json({ message: "No file uploaded to Cloudinary" });
     }
 
     const { language, category, type, scheduledAt } = req.body;
-
     if (!language || !category || !type) {
       return res
         .status(400)
         .json({ message: "Language, category, and type required" });
     }
 
-    const newFileName = path.basename(req.file.path);
-    const existFeed = await Feed.findOne({
-      contentUrl: { $regex: `${newFileName}$` },
-    });
-    if (existFeed) {
-      return res.status(400).json({ message: "The file has already been uploaded" });
-    }
-
+    // Video duration check
     let videoDuration = null;
-    if (type === "video" && req.file.mimetype.startsWith("video/")) {
-      videoDuration = await getVideoDurationInSeconds(req.file.path);
+    if (type === "video") {
+      videoDuration = await getVideoDurationInSeconds(req.file.path); // optional
       if (videoDuration >= 90.0) {
         return res.status(400).json({ message: "Upload video below 90 seconds" });
       }
@@ -342,23 +360,25 @@ exports.creatorFeedScheduleUpload = async (req, res) => {
       }
     }
 
-    // ✅ Capitalize first letter of category
+    // Capitalize first letter of category
     const formattedCategory = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
 
-    // Create feed
+    // Create feed using Cloudinary file
     const newFeed = new Feed({
       type,
       language,
       category: formattedCategory,
       duration: videoDuration,
       createdByAccount: creatorId,
-      contentUrl: req.file.path,
+      contentUrl: req.cloudinaryFile.url,     // Cloudinary URL
+      cloudinaryId: req.cloudinaryFile.public_id, // Cloudinary public_id
       scheduledAt: scheduleDate,
       isPosted: scheduleDate ? false : true,
     });
+
     await newFeed.save();
 
-    // ✅ Handle Category collection
+    // Handle Category collection
     let categoryDoc = await Category.findOne({
       name: { $regex: new RegExp(`^${formattedCategory}$`, "i") },
     });
@@ -375,6 +395,7 @@ exports.creatorFeedScheduleUpload = async (req, res) => {
       await categoryDoc.save();
     }
 
+    // Update Account feeds
     await Account.findByIdAndUpdate(creatorId, { $push: { feeds: newFeed._id } });
 
     return res.status(201).json({
@@ -384,8 +405,8 @@ exports.creatorFeedScheduleUpload = async (req, res) => {
       feed: newFeed,
     });
   } catch (error) {
-    console.error("Error creating feed:", error);
-    return res.status(500).json({ message: "Server error" });
+    console.error("Error creating scheduled feed:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
