@@ -3,7 +3,7 @@
 // Define your supported languages
 const LANGUAGE_MAP = {
   en: "English",
-  tn: "Tamil",
+  ta: "Tamil",
   hi: "Hindi",
   te: "Telugu",
   ml: "Malayalam",
