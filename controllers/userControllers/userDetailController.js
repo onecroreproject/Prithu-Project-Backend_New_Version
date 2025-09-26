@@ -276,4 +276,24 @@ exports.getUserReferalCode = async (req, res) => {
 
 
 
+exports.blockUserById=async(req,res)=>{
+  try{
+    const userId=req.params.userId || req.body.userId;
+    if(!userId) return res.status(400).json({message:"userId required"});
+   
+    await Users.findByIdAndUpdate(
+      userId,
+      {isBlocked:true}
+    );
+     return res.status(200).json({message:"User Blocked Sucessfully"})
+
+
+  }
+  catch(err){
+    console.error("Error blocking user:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+
 

@@ -96,6 +96,10 @@ exports.userLogin = async (req, res) => {
       return res.status(400).json({ error: "Invalid username/email or password" });
     }
 
+    if(user.isBlocked){
+      return res.status(403).json ({error:"User Credencialts are Blocked Please Contact Admin"})
+    }
+
     // 3️⃣ Run startup checks (custom business logic)
     const userStart = await startUpProcessCheck(user._id);
 
@@ -349,6 +353,39 @@ exports.userLogOut = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+
+
+exports.logout = async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    if (!sessionId) return res.status(400).json({ error: "Session ID required" });
+
+    const session = await Session.findById(sessionId);
+    if (!session) return res.status(404).json({ error: "Session not found" });
+
+    // Mark session offline
+    session.isOnline = false;
+    session.lastSeenAt = new Date();
+    await session.save();
+
+    // Check if user has other active sessions
+    const activeSessions = await Session.find({ userId: session.userId, isOnline: true });
+    if (activeSessions.length === 0) {
+      await User.findByIdAndUpdate(session.userId, {
+        isOnline: false,
+        lastSeenAt: new Date(),
+      });
+    }
+
+    res.json({ message: "Logged out successfully" });
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+
 
 
 

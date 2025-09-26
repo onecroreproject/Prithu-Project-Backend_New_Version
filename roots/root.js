@@ -6,7 +6,8 @@ const path = require('path');
 const { auth } = require('../middlewares/jwtAuthentication');
 const cloudinary = require('cloudinary').v2;
 const fs = require('fs');
-const{ upload, uploadToCloudinary,processFeedFile,deleteFromCloudinary, updateOnCloudinary }=require('../middlewares/services/cloudnaryUpload')
+const{ userUpload, userUploadToCloudinary,userProcessFeedFile,deleteFromCloudinary, updateOnCloudinary }=require('../middlewares/services/usercloudnaryUpload');
+const {adminUploadToCloudinary,adminProcessFeedFile,adminUpload}=require('../middlewares/services/adminCloudnaryUpload');
 
 
 // Controllers
@@ -154,7 +155,9 @@ const {
   subscribePlan,
   cancelSubscription,
   getAllSubscriptionPlans,
-  getUserSubscriptionPlanWithId
+  getUserSubscriptionPlanWithId,
+  userTrailPlanActive,
+  checkUserActiveSubscription,
 } = require('../controllers/userControllers/userSubcriptionController');
 
 const {
@@ -238,7 +241,12 @@ const{
   notificationRegister,
   switchNotification,
   adminSentNotification,
-}=require('../controllers/adminControllers/notificationController')
+}=require('../controllers/adminControllers/notificationController');
+
+const{
+  refreshAccessToken,
+  heartbeat,
+}=require('../controllers/sessionController')
 
 
 /* --------------------- User Authentication --------------------- */
@@ -290,15 +298,28 @@ router.get("/user/notintrested/category",auth,getUserCategory);
 
 /* --------------------- User Subscription --------------------- */
 router.post('/user/plan/subscription', auth,subscribePlan);
-router.post('/user/cancel/subscription', cancelSubscription);
+router.put('/user/cancel/subscription',auth,cancelSubscription);
 router.get('/user/getall/subscriptions', getAllPlans);
 router.get('/user/user/subscriptions', auth,getUserSubscriptionPlanWithId);
+router.post('/user/activate/trial/plan',userTrailPlanActive);
+router.get('/user/check/active/subcription',auth,checkUserActiveSubscription);
 
 /*----------------------User Report -----------------------------*/
 router.get("/report-questions/start", getStartQuestion);
 router.get("/report-questions/:id", getNextQuestion);
 router.get("/report-types", getReportTypes);
 router.post("/report-post", auth,createFeedReport);
+
+
+/*-------------------------User Session API ---------------------*/
+
+ router.post("/refresh-token", refreshAccessToken);
+
+// // Logout user (requires auth)
+// router.post("/logout", authenticateUser, logout);
+
+ // Heartbeat / mark active (requires auth)
+ router.post("/heartbeat",auth, heartbeat);
 
 
 // /* --------------------- User Subscription --------------------- */
@@ -315,20 +336,20 @@ router.post('/user/image/view/count',auth,userImageViewCount);
  router.get('/user/following/data',auth,getUserFollowersData);
 
  /* --------------------- User Notifiction API --------------------- */
- router.post("/user/notification/register",notificationRegister);
- router.post('/switch/notification',auth,switchNotification);
+//  router.post("/user/notification/register",notificationRegister);
+//  router.post('/switch/notification',auth,switchNotification);
 
 /* --------------------- User Profile API --------------------- */
-router.post("/user/profile/detail/update",auth,upload.single("file"),(req, res, next) => { req.baseUrl = "/profile"; next(); },
-  uploadToCloudinary,
+router.post("/user/profile/detail/update",auth,userUpload.single("file"),(req, res, next) => { req.baseUrl = "/profile"; next(); },
+  userUploadToCloudinary,
   userProfileDetailUpdate
 );
 router.get('/get/profile/detail',auth,getUserProfileDetail);
 
 /* --------------------- Creator Feed API --------------------- */
-router.post("/creator/feed/upload",auth,upload.single("file"),(req, res, next) => { req.baseUrl = "/feed"; next(); },
-   processFeedFile,
-  uploadToCloudinary,
+router.post("/creator/feed/upload",auth,userUpload.single("file"),(req, res, next) => { req.baseUrl = "/feed"; next(); },
+   userProcessFeedFile,
+  userUploadToCloudinary,
   creatorFeedUpload
 );
 
@@ -369,14 +390,14 @@ router.get('/get/admin/profile',auth,getAdminProfileDetail)
 router.post(
   "/admin/feed-upload",
   auth,
-  upload.array("file"), // ✅ matches frontend append("file", file)
+  adminUpload.array("file"), // ✅ matches frontend append("file", file)
   (req, res, next) => {
     req.baseUrl = "/feed";
     next();
   },
-  processFeedFile,
-  uploadToCloudinary,
-  adminFeedUpload
+   adminProcessFeedFile,
+   adminUploadToCloudinary,
+   adminFeedUpload
 );
 router.get("/admin/get/all/feed",getAllFeedAdmin);
 
@@ -401,6 +422,7 @@ router.get("/admin/user/detail/by-date", getUsersByDate);
 router.get ('/admin/user/action/intersection/count/:userId',getAnaliticalCountforUser);
 router.get('/admin/get/user/analytical/data/:userId',getUserAnalyticalData);
 router.get("/admin/user/tree/level/:userId",getUserLevelWithEarnings);
+// router.get("/admin/online-users", authenticateAdmin, getOnlineUsers);
 // router.get('/admin/user/followers/count')
 // router.get('/admin/user/followers/detail')
 // router.get('/admin/user/interest/categories')
@@ -429,14 +451,14 @@ router.get('/admin/get/user/detail', getUserProfileDetail);
 
 
 /*---------------------Admin Notification API-------------------*/
-router.post("/admin/post/notification",adminSentNotification)
+// router.post("/admin/post/notification",adminSentNotification);
 
 /* --------------------- Child Admin Profile API --------------------- */
 // router.post('/child/admin/profile/detail/update',auth, upload.single('file'),uploadToCloudinary,childAdminProfileDetailUpdate);
 router.get('/get/child/admin/profile',auth,getChildAdminProfileDetail)
 
 /* --------------------- Child Admin Feed API --------------------- */
-router.post('/child/admin/feed', upload.array('file'),auth,childAdminFeedUpload);
+router.post('/child/admin/feed', adminUpload.array('file'),auth,childAdminFeedUpload);
 
 
 /* --------------------- Feeds API --------------------- */

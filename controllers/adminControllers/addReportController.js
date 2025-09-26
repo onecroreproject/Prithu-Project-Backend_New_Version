@@ -100,25 +100,70 @@ exports.getStartQuestion = async (req, res) => {
 
 
 
+
+
 exports.getNextQuestion = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { reportId, questionId, selectedOption } = req.body;
+    const userId = req.Id || req.body.userId; // from auth middleware
 
-    const question = await ReportQuestion.findById(id).lean();
-    if (!question) {
-      return res.status(404).json({ message: "Question not found" });
-    }
+    // 1. Get the question
+    const question = await ReportQuestion.findById(questionId);
+    if (!question) return res.status(404).json({ message: "Question not found" });
 
-    res.status(200).json({
-      message: "Next question fetched successfully",
-      data: question,
+    // 2. Validate option
+    const chosenOption = question.options.find(
+      (opt) => opt._id.toString() === selectedOption
+    );
+    if (!chosenOption)
+      return res.status(400).json({ message: "Invalid option selected" });
+
+    // 3. Save to Report.answers[] (for final snapshot)
+    await Report.findByIdAndUpdate(
+      reportId,
+      {
+        $push: {
+          answers: {
+            questionId,
+            questionText: question.questionText,
+            selectedOption: chosenOption.text,
+          },
+        },
+      },
+      { new: true }
+    );
+
+    // 4. Log this answer in ReportLog
+    await ReportLog.create({
+      reportId,
+      action: "Answered",
+      performedBy: userId,
+      answer: {
+        questionId,
+        questionText: question.questionText,
+        selectedOption: chosenOption.text,
+      },
     });
+
+    // 5. Return next question (if exists)
+    if (chosenOption.nextQuestion) {
+      const nextQ = await ReportQuestion.findById(chosenOption.nextQuestion).lean();
+      return res.json({
+        message: "Next question",
+        data: nextQ,
+      });
+    } else {
+      return res.json({
+        message: "No more questions, reporting flow complete",
+      });
+    }
   } catch (error) {
-    console.error("Error fetching next question:", error);
-    res.status(500).json({ message: "Internal server error" });
+    console.error("Error answering question:", error);
+    res
+      .status(500)
+      .json({ message: "Internal server error", error: error.message });
   }
 };
-
 
 
 exports.getReportTypes = async (req, res) => {
@@ -145,33 +190,42 @@ exports.getReportTypes = async (req, res) => {
 
 exports.createFeedReport = async (req, res) => {
   try {
-    const { typeId, targetId, targetType, answers } = req.body;
-    const userId = req.Id || req.body.Id; // assuming auth middleware
+    const { typeId, targetId, targetType } = req.body;
+    const userId = req.Id || req.body.userId;
 
-    if (!typeId || !targetId || !targetType || !answers || answers.length === 0) {
+    if (!typeId || !targetId || !targetType) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Create new report
+    // Create empty report
     const report = new Report({
       typeId,
       reportedBy: userId,
       targetId,
       targetType,
-      answers, // [{questionId, questionText, selectedOption}, ...]
+      answers: [], // answers will be filled step by step
     });
 
     const savedReport = await report.save();
 
+    // Log creation
+    await ReportLog.create({
+      reportId: savedReport._id,
+      action: "Created",
+      performedBy: userId,
+      note: "User started report",
+    });
+
     res.status(201).json({
-      message: "Report submitted successfully",
+      message: "Report started successfully",
       data: savedReport,
     });
   } catch (error) {
-    console.error("Error submitting report:", error);
+    console.error("Error starting report:", error);
     res.status(500).json({ message: "Internal server error", error: error.message });
   }
 };
+
 
 
 

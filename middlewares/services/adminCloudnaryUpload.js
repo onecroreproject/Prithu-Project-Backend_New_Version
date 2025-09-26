@@ -14,7 +14,7 @@ cloudinary.config({
 
 // ✅ Multer memory storage
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const adminUpload = multer({ storage });
 
 // ✅ Generate file hash for duplicates
 const generateFileHash = (buffer) =>
@@ -29,7 +29,7 @@ const getVideoDurationFromBuffer = async (buffer) => {
 };
 
 // Middleware: check duplicates & video duration in parallel (supports multiple files)
-const processFeedFile = async (req, res, next) => {
+const adminProcessFeedFile = async (req, res, next) => {
   // Handle multiple files
   const files = req.files || (req.file ? [req.file] : []);
   if (files.length === 0) return next();
@@ -73,7 +73,7 @@ const processFeedFile = async (req, res, next) => {
 };
 
 // Upload to Cloudinary (supports multiple files)
-const uploadToCloudinary = async (req, res, next) => {
+const adminUploadToCloudinary = async (req, res, next) => {
   const files = req.files || (req.file ? [req.file] : []);
   if (files.length === 0) return next();
 
@@ -142,8 +142,8 @@ const deleteFromCloudinary = async (public_id) => {
 };
 
 module.exports = {
-  upload,
-  processFeedFile, // replaces checkFeedDuplicate + checkVideoDuration
-  uploadToCloudinary,
+  adminUpload,
+  adminProcessFeedFile, // replaces checkFeedDuplicate + checkVideoDuration
+  adminUploadToCloudinary,
   deleteFromCloudinary,
 };

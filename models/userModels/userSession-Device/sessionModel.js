@@ -25,4 +25,4 @@ const SessionSchema = new mongoose.Schema({
 // Index for auto-expiry (if refreshToken has TTL)
 SessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-module.exports = mongoose.model("Session", SessionSchema);
+module.exports = mongoose.model("Session", SessionSchema,"Session");

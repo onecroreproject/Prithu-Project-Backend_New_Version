@@ -7,8 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Ignore service account keys
-be/FCMKEY/serviceAccountKey.json
+
 
 
 node_modules
@@ -26,3 +25,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+FCMKEY/serviceAccountKey.json

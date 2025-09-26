@@ -648,6 +648,15 @@ exports.getUserLevelWithEarnings = async (req, res) => {
 
 
 
+exports.getOnlineUsers = async (req, res) => {
+  try {
+    const onlineUsers = await User.find({ isOnline: true }).select("userName email lastSeenAt");
+    res.json(onlineUsers);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 
 
 

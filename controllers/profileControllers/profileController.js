@@ -6,7 +6,7 @@ const ChildAdmin = require("../../models/childAdminModel");
 const UserLanguage=require('../../models/userModels/userLanguageModel')
 const mongoose=require('mongoose');
 const { calculateAge } = require("../../middlewares/helper/calculateAge");
-const { deleteFromCloudinary } = require("../../middlewares/services/cloudnaryUpload");
+const { deleteFromCloudinary } = require("../../middlewares/services/userCloudnaryUpload");
 
 
 // ✅ Validation middleware

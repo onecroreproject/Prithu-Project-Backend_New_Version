@@ -1,10 +1,10 @@
 const UserSubscription =require ("../../models/subcriptionModels/userSubscreptionModel.js");
 const SubscriptionPlan =require("../../models/subcriptionModels/subscriptionPlanModel.js");
-const { assignPlanToUser }=require( "../../middlewares/subcriptionMiddlewares/assignPlanToUserHelper.js");
-const {activateSubscription}=require('../../middlewares/subcriptionMiddlewares/paymentHelper.js');
 const User=require('../../models/userModels/userModel.js');
 const {processReferral}=require('../../middlewares/referralMiddleware/referralCount.js');
 const mongoose =require('mongoose');
+const activateTrialPlan = require('../../middlewares/subcriptionMiddlewares/activateTrailPlan');
+const checkActiveSubscription=require('../../middlewares/subcriptionMiddlewares/checkActiveSubcription.js');
 
 
 exports.subscribePlan = async (req, res) => {
@@ -154,3 +154,38 @@ exports.getAllSubscriptionPlans = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+
+
+
+
+
+exports.userTrailPlanActive= async (req, res) => {
+  try {
+    const userId = req.Id || req.body.userId;
+
+    const newSub = await activateTrialPlan(userId);
+
+    res.status(200).json({
+      message: "Trial activated",
+      subscription: newSub
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+
+
+
+exports.checkUserActiveSubscription=async (req, res) => {
+  try {
+    const userId = req.Id || req.body.userId;
+    if(!userId) return res.status(400).json({message:"userId required"});
+    const result = await checkActiveSubscription(userId);
+    res.status(200).json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
