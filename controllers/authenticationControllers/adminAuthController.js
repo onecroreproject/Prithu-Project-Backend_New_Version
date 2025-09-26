@@ -20,9 +20,11 @@ const transporter = nodemailer.createTransport({
 exports.newAdmin = async (req, res) => {
   try {
     const { username, email, password, adminType } = req.body;
-    const parentAdminId = req.Id||null; // from auth middleware (always available)
+    const parentAdminId = req.Id || null;
+   
 
-    // ✅ Check if username or email already exists
+    console.log({ username, email, password, adminType })
+    // Check if username or email already exists
     const existingUser = await Admin.findOne({
       $or: [{ userName: username }, { email }]
     });
@@ -35,37 +37,64 @@ exports.newAdmin = async (req, res) => {
       });
     }
 
-    // ✅ Hash password
+    // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // ✅ Handle Child Admin case
     if (adminType === "Child_Admin") {
       // Generate unique ChildAdminId
       const lastChild = await ChildAdmin.findOne().sort({ createdAt: -1 });
       let newIdNumber = 1;
-
       if (lastChild?.childAdminId) {
         newIdNumber = parseInt(lastChild.childAdminId.replace("CA", "")) + 1;
       }
-
       const childAdminId = "CA" + String(newIdNumber).padStart(4, "0"); // e.g. CA0001
 
-      const childAdmin = new ChildAdmin({
-        childAdminId,
-        inheritedPermissions: [], // default empty permissions
-        parentAdminId: parentAdminId || null
-      });
-      await childAdmin.save()
+       // Save child admin
+   const childAdmin = new ChildAdmin({
+    childAdminId,
+    userName: username, // ⚠️ Must match schema field name
+    email,
+    passwordHash: await bcrypt.hash(password, 10), // ⚠️ Hash password
+    adminType,           // or childAdminType
+    parentAdminId: req.Id, // ⚠️ ObjectId of parent admin
+    inheritedPermissions: null, // if none
+    createdBy: req.Id      // ⚠️ ObjectId of creator
+  });
 
-    // ✅ For Master/Other Admin
+      await childAdmin.save();
+
+      return res.status(201).json({
+        message: "Child Admin registered successfully",
+        admin: {
+          id: childAdmin._id,
+          username: childAdmin.userName,
+          password:password,
+          email: childAdmin.email,
+          adminType: childAdmin.adminType,
+          childAdminId: childAdmin.childAdminId
+        }
+      });
+    }
+
+    // Handle Master or other admin creation if needed
+    const admin = new Admin({
+      userName: username,
+      email,
+      password: passwordHash,
+      adminType
+    });
+    await admin.save();
+
     return res.status(201).json({
       message: "Admin registered successfully",
-      adminId: childAdmin._id,
-      username: childAdmin.userName,
-      email: childAdmin.email,
-      adminType: childAdmin.adminType
+      admin: {
+        id: admin._id,
+        username: admin.userName,
+        email: admin.email,
+        adminType: admin.adminType
+      }
     });
-  }
+
   } catch (error) {
     console.error("Error creating new admin:", error);
     return res.status(500).json({ error: error.message });

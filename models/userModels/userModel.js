@@ -33,7 +33,15 @@ const UserSchema = new mongoose.Schema(
     },
 
 
-    fcmTokens: { type: [String], default: [] },
+    fcmTokens: [
+  {
+    token: { type: String, required: true },
+    platform: { type: String }, // 'web', 'android', 'ios', etc
+    topics: { type: [String], default: [] }, // optional
+    lastSeenAt: { type: Date, default: Date.now },
+  }
+],
+
     isActive: { type: Boolean, default: true },
     lastActiveAt: { type: Date, default: Date.now },
     lastLoginAt: { type: Date },

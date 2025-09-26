@@ -234,6 +234,12 @@ updateReportStatus,
 getReportLogs,
 }=require('../controllers/adminControllers/addReportController');
 
+const{
+  notificationRegister,
+  switchNotification,
+  adminSentNotification,
+}=require('../controllers/adminControllers/notificationController')
+
 
 /* --------------------- User Authentication --------------------- */
 router.post('/auth/user/register', createNewUser);
@@ -284,7 +290,7 @@ router.get("/user/notintrested/category",auth,getUserCategory);
 
 /* --------------------- User Subscription --------------------- */
 router.post('/user/plan/subscription', auth,subscribePlan);
-router.post('/user/cancel/subscription', auth, cancelSubscription);
+router.post('/user/cancel/subscription', cancelSubscription);
 router.get('/user/getall/subscriptions', getAllPlans);
 router.get('/user/user/subscriptions', auth,getUserSubscriptionPlanWithId);
 
@@ -307,6 +313,10 @@ router.post('/user/image/view/count',auth,userImageViewCount);
  router.post('/user/follow/creator',auth, followAccount);
  router.post('/user/unfollow/creator',auth,unFollowAccount);
  router.get('/user/following/data',auth,getUserFollowersData);
+
+ /* --------------------- User Notifiction API --------------------- */
+ router.post("/user/notification/register",notificationRegister);
+ router.post('/switch/notification',auth,switchNotification);
 
 /* --------------------- User Profile API --------------------- */
 router.post("/user/profile/detail/update",auth,upload.single("file"),(req, res, next) => { req.baseUrl = "/profile"; next(); },
@@ -417,6 +427,9 @@ router.get('/admin/get/user/detail', getUserProfileDetail);
 // router.get("/admin/users/status", getUserStatus);
 // router.get("/admin/user/detail/by-date", getUsersByDate);
 
+
+/*---------------------Admin Notification API-------------------*/
+router.post("/admin/post/notification",adminSentNotification)
 
 /* --------------------- Child Admin Profile API --------------------- */
 // router.post('/child/admin/profile/detail/update',auth, upload.single('file'),uploadToCloudinary,childAdminProfileDetailUpdate);

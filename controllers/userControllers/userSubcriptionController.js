@@ -89,16 +89,31 @@ exports.subscribePlan = async (req, res) => {
 
 
 exports.cancelSubscription = async (req, res) => {
-  const { subscriptionId } = req.body;
-if (!subscriptionId) {
-    return res.status(400).json({ message: "Subscription ID is required" });
-  }
-  const subscription = await UserSubscription.findById(subscriptionId);
-  if(!subscription) return res.status(404).json({ message: "Subscription not found" });
+  try {
+    const { subscriptionId } = req.body ;
+    const userId = req.Id || req.body.userId; // get from auth middleware
 
-  subscription.isActive = false;
-  await subscription.save();
-  res.status(200).json({ message: "Subscription cancelled" });
+    if (!subscriptionId) {
+      return res.status(400).json({ message: "Subscription ID is required" });
+    }
+
+    // Find subscription for this user only
+    const subscription = await UserSubscription.findById(
+ subscriptionId,
+    );
+
+    if (!subscription) {
+      return res.status(404).json({ message: "Subscription not found" });
+    }
+
+    subscription.isActive = false;
+    await subscription.save();
+
+    res.status(200).json({ message: "Subscription cancelled successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
 };
 
 

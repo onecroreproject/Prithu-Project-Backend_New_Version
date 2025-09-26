@@ -2,6 +2,8 @@ const Account = require("../../models/accountSchemaModel");
 const Feed = require("../../models/feedModel");
 
 
+
+
 exports.getAllCreatorDetails = async (req, res) => {
   console.log("working");
 
@@ -23,21 +25,45 @@ exports.getAllCreatorDetails = async (req, res) => {
       return res.status(400).json({ message: "Creators Details not Found" });
     }
 
-    // Map creators and include feed count
+    // Map creators and include feed count + createdAt
     const creators = await Promise.all(
       allCreators.map(async (acc) => {
         const user = acc.userId || {};
         const profile = user.profileSettings || {};
 
-        // Count feeds created by this account
-        const feedCount = await Feed.countDocuments({ createdByAccount: acc._id });
+        // 🔹 Aggregate feed counts by type
+        const feedStats = await Feed.aggregate([
+          {
+            $match: { createdByAccount: acc._id }
+          },
+          {
+            $group: {
+              _id: "$type",
+              count: { $sum: 1 }
+            }
+          }
+        ]);
+
+        // Convert stats to easy lookup
+        const statsMap = feedStats.reduce((map, obj) => {
+          map[obj._id] = obj.count;
+          return map;
+        }, {});
+
+        const imageCount = statsMap["image"] || 0;
+        const videoCount = statsMap["video"] || 0;
+        const totalFeeds = imageCount + videoCount;
 
         return {
+          accountId: acc._id,
           userName: user.userName || "Unknown",
-          email:user.email,
+          email: user.email || "",
           profileAvatar: profile.profileAvatar || "",
-          followers:null,
-          totalFeeds: feedCount
+          followers: null, // placeholder
+          totalFeeds,
+          imageCount,
+          videoCount,
+          createdAt: acc.createdAt
         };
       })
     );
@@ -53,3 +79,5 @@ exports.getAllCreatorDetails = async (req, res) => {
       .json({ message: "Cannot Fetch Creator Details", error: err });
   }
 };
+
+

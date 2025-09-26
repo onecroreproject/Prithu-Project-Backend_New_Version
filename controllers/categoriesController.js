@@ -40,16 +40,23 @@ exports.getCategoryWithId = async (req, res) => {
   try {
     const categoryId = req.params.id;
 
+    // 📌 Pagination params
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
     // 1️⃣ Find category
     const category = await Categories.findById(categoryId).lean();
     if (!category) {
       return res.status(404).json({ message: "Category not found" });
     }
 
-    // 2️⃣ Aggregate feeds with account and profile info
+    // 2️⃣ Aggregate feeds with account and profile info (with pagination)
     const feeds = await Feed.aggregate([
       { $match: { category: categoryId } },
       { $sort: { createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
 
       // Lookup account
       {
@@ -73,7 +80,7 @@ exports.getCategoryWithId = async (req, res) => {
       },
       { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
 
-      // Project the fields (host removed)
+      // Project only required fields
       {
         $project: {
           type: 1,
@@ -90,11 +97,10 @@ exports.getCategoryWithId = async (req, res) => {
       },
     ]);
 
-    if (!feeds.length) {
-      return res.status(404).json({ message: "No feeds found in this category" });
-    }
+    // 3️⃣ Get total feeds count for this category
+    const totalFeeds = await Feed.countDocuments({ category: categoryId });
 
-    // 3️⃣ Add full URL for feed content and timeAgo
+    // 4️⃣ Format feeds with timeAgo
     const formattedFeeds = feeds.map((f) => ({
       ...f,
       contentUrl: f.contentUrl,
@@ -106,6 +112,12 @@ exports.getCategoryWithId = async (req, res) => {
         categoryId: category._id,
         categoryName: category.name,
         feeds: formattedFeeds,
+        pagination: {
+          total: totalFeeds,
+          page,
+          limit,
+          hasMore: skip + feeds.length < totalFeeds, // ✅ check if next page exists
+        },
       },
     });
   } catch (error) {
@@ -113,6 +125,8 @@ exports.getCategoryWithId = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+
 
 
 

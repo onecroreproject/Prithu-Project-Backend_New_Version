@@ -100,20 +100,23 @@ exports.userProfileDetailUpdate = async (req, res) => {
 
     // ---- 7. Handle username update ----
     if (userName) {
+  // ✅ Update username in User schema
+  await User.findByIdAndUpdate(
+    userId,
+    { $set: { userName } },
+    { new: true }
+  ).lean();
 
-      // Update username in User schema
-      await User.findByIdAndUpdate(
-        userId,
-        { $set: { userName } },
-        { new: true }
-      ).lean();
+  // ✅ Update username in ProfileSettings schema (if it exists there)
+  if (profile && profile._id) {
+    await Profile.findByIdAndUpdate(
+      profile._id,
+      { $set: { userName } },   // <-- update userName too
+      { new: true }
+    ).lean();
+  }
+}
 
-      // Also link profileSettings (optional, if you want)
-      await Profile.findByIdAndUpdate(
-        profile._id,
-        { $set: { profileSettings: profile._id } }
-      );
-    }
 
     // ---- 8. Populate profile with user info ----
     const populatedProfile = await Profile.findById(profile._id)

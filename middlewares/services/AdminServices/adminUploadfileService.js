@@ -39,11 +39,11 @@ exports.uploadFeed = async ({ language, categoryId, type }, file, userId) => {
   const cat = await Categories.findById(categoryId);
   if (!cat) throw new Error(`Category with ID "${categoryId}" does not exist`);
 
-  // ✅ Prevent duplicate feed by fileHash, URL or originalName
-  const existFeed = await Feed.findOne({
-    $or: [{ fileHash }, { contentUrl: fileUrl }, { originalName }]
-  });
-  if (existFeed) throw new Error("This file has already been uploaded");
+  // // ✅ Prevent duplicate feed by fileHash, URL or originalName
+  // const existFeed = await Feed.findOne({
+  //   $or: [{ fileHash }, { contentUrl: fileUrl }, { originalName }]
+  // });
+  // if (existFeed) throw new Error("This file has already been uploaded");
 
   // Save feed
   const newFeed = new Feed({

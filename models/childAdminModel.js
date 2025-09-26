@@ -192,10 +192,10 @@ childAdminSchema.methods.hasPermission = function(action, target = null) {
 
 // Index for performance
 childAdminSchema.index({ email: 1 });
-childAdminSchema.index({ username: 1 });
+childAdminSchema.index({ userName: 1 });
 childAdminSchema.index({ parentAdminId: 1 });
 childAdminSchema.index({ createdBy: 1 });
 childAdminSchema.index({ isActive: 1 });
 childAdminSchema.index({ isApprovedByParent: 1 });
 
-module.exports = mongoose.model('ChildAdmin', childAdminSchema, 'ChildAdmin');
+module.exports = mongoose.model('ChildAdmin', childAdminSchema, 'ChildAdmins');
