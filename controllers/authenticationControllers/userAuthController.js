@@ -319,71 +319,80 @@ exports.userPasswordReset = async (req, res) => {
   }
 };
 
-
 exports.userLogOut = async (req, res) => {
   try {
-    const { userId, deviceId } = req.body;
-    if (!userId || !deviceId) {
-      return res.status(400).json({ message: "userId and deviceId required" });
+    const { userId, deviceId, sessionId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
     }
 
-    // 1️⃣ Mark the device as logged out
-    await Device.findOneAndUpdate(
-      { userId, deviceId },
-      { lastActiveAt: new Date() },
-      { new: true }
-    );
+    let userStatusChanged = false;
 
-    // 2️⃣ Check if user has any active devices
-    const activeDevices = await Device.find({ userId });
-    const hasActive = activeDevices.some((d) => {
-      // Example rule: consider device "active" if lastActiveAt within 5 min
-      return Date.now() - new Date(d.lastActiveAt).getTime() < 5 * 60 * 1000;
-    });
+    // 1️⃣ If sessionId provided → handle session-based logout
+    if (sessionId) {
+      const session = await Session.findById(sessionId);
+      if (!session) return res.status(404).json({ error: "Session not found" });
 
-    // 3️⃣ Update user status
-    await User.findByIdAndUpdate(userId, {
-      isOnline: hasActive,
-      lastSeenAt: hasActive ? null : new Date(),
-      ...(hasActive ? {} : { refreshToken: null }), // clear only if no devices left
-    });
+      session.isOnline = false;
+      session.lastSeenAt = new Date();
+      await session.save();
 
-    res.json({ message: "Logged out successfully" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-
-
-exports.logout = async (req, res) => {
-  try {
-    const { sessionId } = req.body;
-    if (!sessionId) return res.status(400).json({ error: "Session ID required" });
-
-    const session = await Session.findById(sessionId);
-    if (!session) return res.status(404).json({ error: "Session not found" });
-
-    // Mark session offline
-    session.isOnline = false;
-    session.lastSeenAt = new Date();
-    await session.save();
-
-    // Check if user has other active sessions
-    const activeSessions = await Session.find({ userId: session.userId, isOnline: true });
-    if (activeSessions.length === 0) {
-      await User.findByIdAndUpdate(session.userId, {
-        isOnline: false,
-        lastSeenAt: new Date(),
+      // Check other active sessions
+      const activeSessions = await Session.find({
+        userId: session.userId,
+        isOnline: true,
       });
+
+      if (activeSessions.length === 0) {
+        await User.findByIdAndUpdate(session.userId, {
+          isOnline: false,
+          lastSeenAt: new Date(),
+        });
+        userStatusChanged = true;
+      }
     }
 
-    res.json({ message: "Logged out successfully" });
+    // 2️⃣ If deviceId provided → handle device-based logout
+    if (deviceId) {
+      await Device.findOneAndUpdate(
+        { userId, deviceId },
+        { lastActiveAt: new Date() },
+        { new: true }
+      );
+
+      // Check other active devices
+      const activeDevices = await Device.find({ userId });
+      const hasActiveDevice = activeDevices.some(
+        (d) => Date.now() - new Date(d.lastActiveAt).getTime() < 5 * 60 * 1000 // 5 mins
+      );
+
+      if (!hasActiveDevice) {
+        await User.findByIdAndUpdate(userId, {
+          isOnline: false,
+          lastSeenAt: new Date(),
+          refreshToken: null, // only clear if no devices left
+        });
+        userStatusChanged = true;
+      } else {
+        await User.findByIdAndUpdate(userId, { isOnline: true });
+      }
+    }
+
+    if (!sessionId && !deviceId) {
+      return res.status(400).json({ error: "Either sessionId or deviceId required" });
+    }
+
+    res.json({
+      message: "Logged out successfully",
+      userStatusChanged,
+    });
   } catch (error) {
     console.error("Logout error:", error);
     res.status(500).json({ error: error.message });
   }
 };
+
 
 
 

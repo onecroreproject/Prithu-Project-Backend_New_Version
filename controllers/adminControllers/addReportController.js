@@ -1,6 +1,7 @@
 const ReportQuestion = require("../../models/userModels/Report/reprotQuetionAnswerModel");
 const ReportType = require("../../models/userModels/Report/reportTypeModel");
 const ReportLog =require('../../models/reportLog');
+const ReportPost=require('../../models/feedReportModel');
 
 
 exports.addReportQuestion = async (req, res) => {
@@ -119,7 +120,7 @@ exports.getNextQuestion = async (req, res) => {
       return res.status(400).json({ message: "Invalid option selected" });
 
     // 3. Save to Report.answers[] (for final snapshot)
-    await Report.findByIdAndUpdate(
+    await ReportType.findByIdAndUpdate(
       reportId,
       {
         $push: {
@@ -198,7 +199,7 @@ exports.createFeedReport = async (req, res) => {
     }
 
     // Create empty report
-    const report = new Report({
+    const report = new ReportPost({
       typeId,
       reportedBy: userId,
       targetId,

@@ -256,7 +256,7 @@ router.post('/auth/user/otp-send', userSendOtp);
 router.post('/auth/exist/user/verify-otp', existUserVerifyOtp);
 router.post('/auth/new/user/verify-otp', newUserVerifyOtp);
 router.post('/auth/user/reset-password', userPasswordReset);
-router.post('/auth/user/logout', userLogOut);
+router.post('/auth/user/logout',auth, userLogOut);
 
 /* --------------------- User Referral API Actions --------------------- */
 router.post('/user/later/referral',applyReferralCode);
@@ -315,9 +315,6 @@ router.post("/report-post", auth,createFeedReport);
 
  router.post("/refresh-token", refreshAccessToken);
 
-// // Logout user (requires auth)
-// router.post("/logout", authenticateUser, logout);
-
  // Heartbeat / mark active (requires auth)
  router.post("/heartbeat",auth, heartbeat);
 
@@ -336,7 +333,7 @@ router.post('/user/image/view/count',auth,userImageViewCount);
  router.get('/user/following/data',auth,getUserFollowersData);
 
  /* --------------------- User Notifiction API --------------------- */
-//  router.post("/user/notification/register",notificationRegister);
+  router.post("/user/notification/register",notificationRegister);
 //  router.post('/switch/notification',auth,switchNotification);
 
 /* --------------------- User Profile API --------------------- */
@@ -384,7 +381,7 @@ router.get('/api/admin/verify-token',auth, verifyToken);
 
 /* --------------------- Admin Profile API --------------------- */
 // router.post('/admin/profile/detail/update',auth,upload.single('file'),uploadToCloudinary,adminProfileDetailUpdate);
-router.get('/get/admin/profile',auth,getAdminProfileDetail)
+router.get('/get/admin/profile',auth,getAdminProfileDetail);
 
 /* --------------------- Admin Feed API --------------------- */
 router.post(
