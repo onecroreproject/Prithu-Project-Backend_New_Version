@@ -9,7 +9,7 @@ require('dotenv').config();
 const root = require('./roots/root');
 const { scheduleFeedPosts } = require('./corn/feedCorn');
 const { startWatcher } = require('./middlewares/referralMiddleware/refferalCodeWatcher');
-const initWebSocket = require("./middlewares/webSocket");
+const {initWebSocket} = require("./middlewares/webSocket");
 
 const app = express();
 const server = http.createServer(app);
@@ -27,7 +27,7 @@ app.use(cors({
     return callback(null, true);
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS","PATCH"],
   allowedHeaders: ["Content-Type", "Authorization"],
 }));
 

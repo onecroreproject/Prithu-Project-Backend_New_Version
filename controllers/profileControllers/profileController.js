@@ -6,7 +6,9 @@ const ChildAdmin = require("../../models/childAdminModel");
 const UserLanguage=require('../../models/userModels/userLanguageModel')
 const mongoose=require('mongoose');
 const { calculateAge } = require("../../middlewares/helper/calculateAge");
-const { deleteFromCloudinary } = require("../../middlewares/services/userCloudnaryUpload");
+const { userDeleteFromCloudinary } = require("../../middlewares/services/usercloudnaryUpload");
+const {adminDeleteFromCloudinary}=require("../../middlewares/services/adminCloudnaryUpload")
+
 
 
 // ✅ Validation middleware
@@ -77,7 +79,7 @@ exports.userProfileDetailUpdate = async (req, res) => {
       if (oldProfile?.profileAvatarId !== req.cloudinaryFile.public_id) {
         // Delete old avatar if exists
         if (oldProfile?.profileAvatarId) {
-          await deleteFromCloudinary(oldProfile.profileAvatarId);
+          await userDeleteFromCloudinary(oldProfile.profileAvatarId);
         }
 
         updateData.profileAvatar = req.cloudinaryFile.url;
@@ -144,7 +146,7 @@ exports.adminProfileDetailUpdate = async (req, res) => {
     if (!adminId) {
       return res.status(400).json({ message: "adminId is required" });
     }
-
+     
     // ✅ Validate request
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -155,44 +157,51 @@ exports.adminProfileDetailUpdate = async (req, res) => {
     }
 
     // ✅ Collect allowed fields
-    const allowedFields = [
-      "phoneNumber",
-      "bio",
-      "displayName",
-      "dateOfBirth",
-      "maritalStatus",
-      "theme",
-      "maritalDate",
-      "language",
-      "timezone",
-      "details",
-      "notifications",
-      "privacy",
-      "gender",
-    ];
+ // ✅ Collect allowed fields
+const allowedFields = [
+  "phoneNumber",
+  "bio",
+  "displayName",
+  "dateOfBirth",
+  "maritalStatus",
+  "theme",
+  "maritalDate",
+  "language",
+  "timezone",
+  "details",
+  "notifications",
+  "privacy",
+  "gender",
+];
 
-    const updateData = {};
-    allowedFields.forEach((field) => {
-      if (req.body[field] !== undefined) updateData[field] = req.body[field];
-    });
+const updateData = {};
+allowedFields.forEach((field) => {
+  let value = req.body[field];
+
+  // Convert empty string or "null" to null for date fields
+  if ((field === "dateOfBirth" || field === "maritalDate") && (!value || value === "null")) {
+    value = null;
+  }
+
+  if (value !== undefined) updateData[field] = value;
+});
 
     // ✅ Handle profile avatar (Cloudinary)
-    if (req.cloudinaryFile) {
-      const oldProfile = await Profile.findOne({ adminId });
+    // ✅ Handle profile avatar (Cloudinary)
+if (req.cloudinaryFiles && req.cloudinaryFiles.length > 0) {
+  const { url, public_id } = req.cloudinaryFiles[0];
+  const oldProfile = await Profile.findOne({ adminId });
 
-      if (
-        !oldProfile?.profileAvatarId ||
-        oldProfile.profileAvatarId !== req.cloudinaryFile.public_id
-      ) {
-        // delete old avatar from cloud
-        if (oldProfile?.profileAvatarId) {
-          await deleteFromCloudinary(oldProfile.profileAvatarId);
-        }
-
-        updateData.profileAvatar = req.cloudinaryFile.url;
-        updateData.profileAvatarId = req.cloudinaryFile.public_id;
-      }
+  if (!oldProfile?.profileAvatarId || oldProfile.profileAvatarId !== public_id) {
+    if (oldProfile?.profileAvatarId) {
+      await adminDeleteFromCloudinary(oldProfile.profileAvatarId);
     }
+
+    updateData.profileAvatar = url;
+    updateData.profileAvatarId = public_id;
+  }
+}
+
 
     const userName = req.body.userName;
 
@@ -200,6 +209,8 @@ exports.adminProfileDetailUpdate = async (req, res) => {
       return res.status(400).json({ message: "No fields provided for update" });
     }
 
+    console.log( updateData.profileAvatar)
+    
     // ---- Update Profile for admin ----
     let profile = await Profile.findOneAndUpdate(
       { adminId },

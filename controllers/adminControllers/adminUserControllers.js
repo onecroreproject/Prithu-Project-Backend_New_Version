@@ -14,8 +14,11 @@ const Feed =require('../../models/feedModel.js');
 const UserLevel =require('../../models/userModels/userRefferalModels/userReferralLevelModel');
 const Withdrawal=require('../../models/userModels/userRefferalModels/withdrawal.js');
 const UserEarning=require('../../models/userModels/userRefferalModels/referralEarnings.js');
-
-
+const Session=require('../../models/userModels/userSession-Device/sessionModel.js');
+const UserSubscription=require("../../models/subcriptionModels/userSubscreptionModel.js");
+const Account=require("../../models/accountSchemaModel.js");
+const Report=require('../../models/feedReportModel.js');
+const ReportType=require('../../models/userModels/Report/reportTypeModel')
 
 // Get single user detail
 exports.getUserProfileDetail = async (req, res) => {
@@ -134,39 +137,67 @@ exports.getUsersByDate = async (req, res) => {
 
 exports.getAllUserDetails = async (req, res) => {
   try {
+    // 1️⃣ Get all users
     const allUsers = await Users.find()
-      .select("userName _id email lastActiveAt createdAt isActive profileSettings subscription") 
-      .populate({
-        path: "profileSettings",
-        select: "profileAvatar", // only profileAvatar
-      })
-      .populate({
-        path: "subscription",
-        select: "isActive", // only subscription status
-      });
+      .select("userName _id email lastActiveAt createdAt subscription isBlocked")
+      .lean();
 
     if (!allUsers || allUsers.length === 0) {
       return res.status(404).json({ message: "Users details not found" });
     }
 
-    // reshape response
+    // 2️⃣ Get all user IDs
+    const userIds = allUsers.map((u) => u._id);
+
+    // 3️⃣ Fetch profile settings for these users
+    const profileSettingsList = await ProfileSettings.find({ userId: { $in: userIds } })
+      .select("userId profileAvatar")
+      .lean();
+
+    // Create a lookup map: userId -> profileAvatar
+    const profileMap = {};
+    profileSettingsList.forEach((p) => {
+      profileMap[p.userId.toString()] = p.profileAvatar || null;
+    });
+
+    // 4️⃣ Fetch sessions for online status
+    const sessions = await Session.find({ userId: { $in: userIds } })
+      .select("userId isOnline")
+      .lean();
+
+    const sessionMap = {};
+    sessions.forEach((s) => {
+      sessionMap[s.userId.toString()] = s.isOnline;
+    });
+
+    // 5️⃣ Format response
     const formattedUsers = allUsers.map((user) => ({
-      userId:user._id,
+      userId: user._id,
       userName: user.userName,
       email: user.email,
       createdAt: user.createdAt,
-      lastActiveAt:user.lastActiveAt,
-      isActive: user.isActive,
-      profileAvatar: user.profileSettings?.profileAvatar || null,
+      lastActiveAt: user.lastActiveAt,
+      isOnline: sessionMap[user._id.toString()] || false,
+      profileAvatar: profileMap[user._id.toString()] || null,
       subscriptionActive: user.subscription?.isActive || false,
+      isBlocked: user.isBlocked,
     }));
 
-    res.status(200).json({ users: formattedUsers });
+    return res.status(200).json({ users: formattedUsers });
   } catch (err) {
     console.error("Error fetching users:", err);
-    res.status(500).json({ message: "Cannot fetch user details", error: err.message });
+    return res.status(500).json({ message: "Cannot fetch user details", error: err.message });
   }
 };
+
+
+
+
+
+
+
+
+
 
 
 
@@ -648,15 +679,137 @@ exports.getUserLevelWithEarnings = async (req, res) => {
 
 
 
-exports.getOnlineUsers = async (req, res) => {
+exports.getUserProfileDashboardMetricCount = async (req, res) => {
   try {
-    const onlineUsers = await User.find({ isOnline: true }).select("userName email lastSeenAt");
-    res.json(onlineUsers);
+    const [
+      totalUsers,
+      subscriptionCount,
+      accountCount,
+      blockedUserCount,
+      onlineUsersCount
+    ] = await Promise.all([
+      Users.countDocuments(),
+
+      UserSubscription.distinct("userId", { isActive: true }).then(ids => ids.length),
+
+      Account.distinct("userId").then(ids => ids.length),
+
+      Users.countDocuments({ isBlocked: true }),
+
+      // ✅ Ensure only recent & valid sessions count as "online"
+      Session.distinct("userId", { 
+        isOnline: true, 
+        lastActiveAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) } 
+      }).then(ids => ids.length),
+    ]);
+
+    const offlineUsersCount = totalUsers - onlineUsersCount;
+
+    res.status(200).json({
+      totalUsers,
+      onlineUsers: onlineUsersCount,
+      offlineUsers: offlineUsersCount,
+      blockedUserCount,
+      subscriptionCount,
+      accountCount,
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({
+      message: "Failed to fetch dashboard metrics",
+      error: error.message,
+    });
   }
 };
 
+
+
+
+
+exports.getReports = async (req, res) => {
+  try {
+    // Fetch all reports
+    const reports = await Report.find().lean();
+
+    if (!reports || reports.length === 0) {
+      return res.status(404).json({ message: "No reports found" });
+    }
+
+    // Map reports with extra data
+    const formattedReports = await Promise.all(
+      reports.map(async (report, index) => {
+        // ✅ Report Type
+        const reportType = await ReportType.findById(report.typeId).lean();
+
+        // ✅ Reported By (User info from ProfileSettings)
+        const reporterProfile = await ProfileSettings.findOne({
+          userId: report.reportedBy,
+        }).lean();
+
+        // ✅ Target Feed Info
+        let feedData = null;
+        let creatorProfile = null;
+
+        if (report.targetType === "Feed") {
+          feedData = await Feed.findById(report.targetId).lean();
+
+          if (feedData) {
+            const account = await Account.findById(feedData.createdByAccount).lean();
+
+            if (account) {
+              creatorProfile = await ProfileSettings.findOne({
+                userId: account.userId,
+              }).lean();
+            }
+          }
+        }
+
+        return {
+          id:report._id,
+          reportId: index + 1, // convert to 1,2,3,4...
+          type: reportType ? reportType.name : "Unknown",
+          reportedBy: reporterProfile
+            ? {
+                username: reporterProfile.userName || "Unknown",
+                avatar: reporterProfile.profileAvatar || null,
+              }
+            : { username: "Unknown", avatar: null },
+
+          target: feedData
+            ? {
+                contentUrl: feedData.contentUrl || null,
+                createdBy: creatorProfile
+                  ? {
+                      username: creatorProfile.userName || "Unknown",
+                      avatar: creatorProfile.profileAvatar || null,
+                    }
+                  : { username: "Unknown", avatar: null },
+              }
+            : null,
+
+          answers:
+            report.answers && report.answers.length > 0
+              ? report.answers.map((a) => ({
+                  questionId: a.questionId,
+                  questionText: a.questionText,
+                  selectedOption: a.selectedOption,
+                }))
+              : "Not Available",
+    
+          status: report.status,
+          actionTaken: report.actionTaken,
+          actionDate: report.actionDate,
+          createdAt: report.createdAt,
+        };
+      })
+    );
+
+    res.status(200).json({ reports: formattedReports });
+  } catch (error) {
+    console.error("Error fetching reports:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
 
 
 

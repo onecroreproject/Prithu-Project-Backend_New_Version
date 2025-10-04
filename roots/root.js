@@ -75,6 +75,7 @@ const {
   checkUsernameAvailability,
   getUserReferalCode,
   checkEmailAvailability,
+  blockUserById,
 } = require('../controllers/userControllers/userDetailController');
 
 const{
@@ -110,6 +111,8 @@ const {
   getUserDetailWithIdForAdmin,
   getUserAnalyticalData,
   getUserLevelWithEarnings,
+  getUserProfileDashboardMetricCount,
+  getReports ,
 } = require('../controllers/adminControllers/adminUserControllers');
 
 const {
@@ -301,12 +304,12 @@ router.post('/user/plan/subscription', auth,subscribePlan);
 router.put('/user/cancel/subscription',auth,cancelSubscription);
 router.get('/user/getall/subscriptions', getAllPlans);
 router.get('/user/user/subscriptions', auth,getUserSubscriptionPlanWithId);
-router.post('/user/activate/trial/plan',userTrailPlanActive);
+router.post('/user/activate/trial/plan',auth,userTrailPlanActive);
 router.get('/user/check/active/subcription',auth,checkUserActiveSubscription);
 
 /*----------------------User Report -----------------------------*/
 router.get("/report-questions/start", getStartQuestion);
-router.get("/report-questions/:id", getNextQuestion);
+router.post("/report-questions/:id", getNextQuestion);
 router.get("/report-types", getReportTypes);
 router.post("/report-post", auth,createFeedReport);
 
@@ -380,7 +383,7 @@ router.post('/auth/admin/reset-password', adminPasswordReset);
 router.get('/api/admin/verify-token',auth, verifyToken);
 
 /* --------------------- Admin Profile API --------------------- */
-// router.post('/admin/profile/detail/update',auth,upload.single('file'),uploadToCloudinary,adminProfileDetailUpdate);
+ router.put('/admin/profile/detail/update',auth,adminUpload.single('file'),(req, res, next) => { req.baseUrl = "/profile"; next(); },adminUploadToCloudinary,adminProfileDetailUpdate);
 router.get('/get/admin/profile',auth,getAdminProfileDetail);
 
 /* --------------------- Admin Feed API --------------------- */
@@ -419,6 +422,9 @@ router.get("/admin/user/detail/by-date", getUsersByDate);
 router.get ('/admin/user/action/intersection/count/:userId',getAnaliticalCountforUser);
 router.get('/admin/get/user/analytical/data/:userId',getUserAnalyticalData);
 router.get("/admin/user/tree/level/:userId",getUserLevelWithEarnings);
+router.patch("/admin/block/user/:userId",blockUserById);
+router.get('/admin/user/profile/metricks',getUserProfileDashboardMetricCount);
+router .get ('/admin/user/report',getReports);
 // router.get("/admin/online-users", authenticateAdmin, getOnlineUsers);
 // router.get('/admin/user/followers/count')
 // router.get('/admin/user/followers/detail')

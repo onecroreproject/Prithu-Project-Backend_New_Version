@@ -133,7 +133,7 @@ const adminUploadToCloudinary = async (req, res, next) => {
 
 
 // Delete from Cloudinary
-const deleteFromCloudinary = async (public_id) => {
+const adminDeleteFromCloudinary = async (public_id) => {
   try {
     return await cloudinary.uploader.destroy(public_id, { resource_type: "image" });
   } catch (err) {
@@ -145,5 +145,5 @@ module.exports = {
   adminUpload,
   adminProcessFeedFile, // replaces checkFeedDuplicate + checkVideoDuration
   adminUploadToCloudinary,
-  deleteFromCloudinary,
+  adminDeleteFromCloudinary,
 };

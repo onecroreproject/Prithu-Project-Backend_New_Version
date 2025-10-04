@@ -276,24 +276,28 @@ exports.getUserReferalCode = async (req, res) => {
 
 
 
-exports.blockUserById=async(req,res)=>{
-  try{
-    const userId=req.params.userId || req.body.userId;
-    if(!userId) return res.status(400).json({message:"userId required"});
-   
-    await Users.findByIdAndUpdate(
-      userId,
-      {isBlocked:true}
-    );
-     return res.status(200).json({message:"User Blocked Sucessfully"})
+exports.blockUserById = async (req, res) => {
+  try {
+    const userId = req.params.userId || req.body.userId;
+    if (!userId) return res.status(400).json({ message: "userId required" });
 
+    // Fetch current user
+    const user = await Users.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-  }
-  catch(err){
-    console.error("Error blocking user:", err);
+    // Toggle block state
+    user.isBlocked = !user.isBlocked;
+    await user.save();
+   console.log(user.isBlocked)
+    return res.status(200).json({
+      message: user.isBlocked ? "User Blocked Successfully" : "User Unblocked Successfully",
+      isBlocked: user.isBlocked,
+    });
+  } catch (err) {
+    console.error("Error toggling user block:", err);
     return res.status(500).json({ message: "Internal server error" });
   }
-}
+};
 
 
 

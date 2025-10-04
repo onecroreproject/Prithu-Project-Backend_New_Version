@@ -4,7 +4,6 @@ const nodemailer = require('nodemailer');
 require('dotenv').config();
 const bcrypt = require('bcrypt');
 const crypto = require("crypto"); 
-const { generateReferralCode } = require('../../middlewares/generateReferralCode');
 const otpStore=new Map();
 const {processReferral}=require('../../middlewares/referralMiddleware/referralCount');
 const {startUpProcessCheck}=require('../../middlewares/services/User Services/userStartUpProcessHelper');
@@ -12,19 +11,10 @@ const Device = require("../../models/userModels/userSession-Device/deviceModel")
 const Session = require("../../models/userModels/userSession-Device/sessionModel");
 const UserReferral=require('../../models/userModels/userRefferalModels/userReferralModel');
 const { v4: uuidv4 } = require("uuid");
-const mongoose =require("mongoose")
-
-// const sessionService = makeSessionService(User,StoreUserDevice);
+const sendMail = require('../../utils/sendMail');
 
 
-// Create nodemailer transporter
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
-  },
-});
+
 
 
 
@@ -36,16 +26,29 @@ const transporter = nodemailer.createTransport({
  * - places referral via placeReferral (idempotent)
  */
 
-exports.createNewUser = async (req,res) => {
+exports.createNewUser = async (req, res) => {
   try {
     const { username, email, password, referralCode } = req.body;
-    if (!username || !email || !password) return res.status(400).json({ message: "All fields required" });
 
+    if (!username || !email || !password) {
+      return res.status(400).json({ message: "All fields required" });
+    }
+
+    // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
-    const base = (username.replace(/\s+/g,"").slice(0,3).toUpperCase() || "XXX");
+
+    // Generate referral code
+    const base = (username.replace(/\s+/g, "").slice(0, 3).toUpperCase() || "XXX");
     let generatedCode = `${base}${crypto.randomBytes(2).toString("hex")}`;
 
-    const user = new User({ userName: username, email, passwordHash, referralCode: generatedCode, referralCodeIsValid: false });
+    // Create new user object
+    const user = new User({
+      userName: username,
+      email,
+      passwordHash,
+      referralCode: generatedCode,
+      referralCodeIsValid: false
+    });
 
     if (referralCode) {
       const parent = await User.findOne({ referralCode, referralCodeIsValid: true });
@@ -54,13 +57,32 @@ exports.createNewUser = async (req,res) => {
       user.referredByUserId = parent._id;
       await user.save();
 
-      await UserReferral.updateOne({ parentId: parent._id }, { $addToSet: { childIds: user._id } }, { upsert: true });
+      await UserReferral.updateOne(
+        { parentId: parent._id },
+        { $addToSet: { childIds: user._id } },
+        { upsert: true }
+      );
     } else {
       await user.save();
     }
 
+    // ✅ Send Welcome Email
+    try {
+      await sendMail({
+        to: email,
+        subject: "Welcome to Our Platform!",
+        text: `Hi ${username},\n\nWelcome to our platform! Your account has been successfully created.\n\nYour referral code: ${generatedCode}`,
+        html: `<h2>Hi ${username},</h2>
+               <p>Welcome to our platform! Your account has been successfully created.</p>
+               <p><strong>Your referral code:</strong> ${generatedCode}</p>`
+      });
+      console.log("Welcome email sent to:", email);
+    } catch (mailErr) {
+      console.error("Failed to send welcome email:", mailErr);
+    }
+
     res.status(201).json({ message: "User registered", referralCode: generatedCode });
-  } catch(err) {
+  } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
   }
@@ -181,57 +203,48 @@ exports.userLogin = async (req, res) => {
 
 // Request Password Reset OTP
 exports.userSendOtp = async (req, res) => {
-  
-    const email  = req.body.email;
-
-if (!email) {
-  return res.status(400).json({ error: 'Email is required' });
-}
-
-try {
-  let tempOtp = Math.floor(1000 + Math.random() * 9000).toString();
-  let otpExpires;
-  
-  // Find user by email
-  const user = await User.findOne({ email });
-  
-  if (user) {
-    // OTP valid for 15 minutes for existing users
-    otpExpires = new Date(Date.now() + 5 * 60 * 1000);
-    user.otpCode = tempOtp;
-    user.otpExpiresAt = otpExpires;
-    await user.save();
-  } else {
-    // For non-registered
-    //  users, store in temporary OTP store with 5 minutes expiration
-    console.log('non-register user')
-    otpExpires = Date.now() + 5 * 60 * 1000;
-    otpStore.set(email, { tempOtp, expires: otpExpires });
+  const { email } = req.body;
+ 
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
   }
+ 
+  try {
+    let tempOtp = Math.floor(1000 + Math.random() * 9000).toString();
+    let otpExpires;
+ 
+    // Find user by email
+    const user = await User.findOne({ email });
 
-  // Prepare email options
-  const mailOptions = {
-    from: process.env.MAIL_USER,
-    to: email,
-    subject: 'Prithu Password Reset OTP',
-    text: `Your OTP for password reset is: ${tempOtp}. It is valid for 15 minutes.`,
-  };
-
-  console.log(tempOtp)
-  
-  // Send email
-  transporter.sendMail(mailOptions, (error, info) => {
-    if (error) {
-      console.error('Error sending OTP email:', error);
-      return res.status(500).json({ error: 'Failed to send OTP email' });
+ 
+    if (user) {
+      // OTP valid for 5 minutes for existing users
+      otpExpires = new Date(Date.now() + 5 * 60 * 1000);
+      user.otpCode = tempOtp;
+      user.otpExpiresAt = otpExpires;
+      await user.save();
+    } else {
+      // For non-registered users, store in temporary OTP store
+      otpExpires = Date.now() + 5 * 60 * 1000;
+      otpStore.set(email, { tempOtp, expires: otpExpires });
+      console.log("Non-registered user OTP stored temporarily");
     }
-    console.log('OTP email sent:', info.response);
-    return res.json({ message: 'OTP sent to email' });
-  });
-} catch (error) {
-  res.status(500).json({ error: error.message });
-}
-}
+ 
+    // Send email using reusable utility
+    await sendMail({
+      to: email,
+      subject: "Prithu Password Reset OTP",
+      text: `Your OTP for password reset is: ${tempOtp}. It is valid for 5 minutes.`,
+    });
+ 
+    console.log("OTP sent:", tempOtp);
+    return res.json({ message: "OTP sent to email" });
+  } catch (error) {
+    console.error("Error in userSendOtp:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+ 
 
 
 
@@ -392,6 +405,10 @@ exports.userLogOut = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+
+
+
 
 
 

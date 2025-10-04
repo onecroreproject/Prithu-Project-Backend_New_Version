@@ -230,17 +230,19 @@ exports.getAllSubscriptionPlans = async (req, res) => {
 exports.userTrailPlanActive= async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
-
+   
+ 
     const newSub = await activateTrialPlan(userId);
-
+ 
     res.status(200).json({
-      message: "Trial activated",
       subscription: newSub
     });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 };
+ 
+ 
 
 
 

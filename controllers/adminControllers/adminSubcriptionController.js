@@ -66,7 +66,7 @@ if (description && typeof description !== 'string') {
 
 exports.updatePlan = async (req, res) => {
   try {
-    const { planId } = req.params;
+    const  planId  = req.params.id;
     if (!planId) {
       return res.status(400).json({ message: "Plan ID is required" });
     }
@@ -117,7 +117,7 @@ exports.updatePlan = async (req, res) => {
 
 
 exports.deletePlan = async (req, res) => {
-  const { planId } = req.params;
+  const  planId  = req.params.id;
   if (!planId) {
     return res.status(400).json({ message: "Plan ID is required" });
   }

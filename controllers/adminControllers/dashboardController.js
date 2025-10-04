@@ -68,12 +68,11 @@ exports.getDashUserSubscriptionRatio = async (req, res) => {
     // 1️⃣ Get total users count
     const totalUsers = await User.countDocuments();
 
-    // 2️⃣ Aggregate active subscriptions with plan price
+    // 2️⃣ Aggregate active subscriptions with plan price and overall subscription users
     const subscriptionStats = await UserSubscription.aggregate([
-      { $match: { isActive: true } },
       {
         $lookup: {
-          from: "SubscriptionPlan", // collection name in MongoDB
+          from: "SubscriptionPlan", // check your collection name in MongoDB
           localField: "planId",
           foreignField: "_id",
           as: "plan",
@@ -102,6 +101,8 @@ exports.getDashUserSubscriptionRatio = async (req, res) => {
               ],
             },
           },
+          // ✅ Count distinct active subscription users for overall ratio
+          activeUserIds: { $addToSet: "$userId" },
         },
       },
     ]);
@@ -110,17 +111,21 @@ exports.getDashUserSubscriptionRatio = async (req, res) => {
       totalSubscriptionAmount: 0,
       todaySubscriptionAmount: 0,
       todaySubscriptionUsers: 0,
+      activeUserIds: [],
     };
 
+    // 3️⃣ Calculate overall subscription ratio
+    const overallSubscriptionUsers = stats.activeUserIds.length;
     const ratioPercentage = totalUsers
-      ? ((stats.todaySubscriptionUsers / totalUsers) * 100).toFixed(2)
-      : 0;
+      ? ((overallSubscriptionUsers / totalUsers) * 100).toFixed(2)
+      : "0.00";
 
     res.json({
       totalUsers,
       totalSubscriptionAmount: stats.totalSubscriptionAmount,
       todaySubscriptionUsers: stats.todaySubscriptionUsers,
       todaySubscriptionAmount: stats.todaySubscriptionAmount,
+      overallSubscriptionUsers,
       ratioPercentage,
     });
   } catch (err) {
@@ -128,6 +133,7 @@ exports.getDashUserSubscriptionRatio = async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
+
 
 
 

@@ -3,46 +3,101 @@ const SubscriptionPlan =require("../../models/subcriptionModels/subscriptionPlan
 const hasUsedTrial =require('../../middlewares/subcriptionMiddlewares/userTrailChecker');
 
 async function activateTrialPlan(userId) {
-  // Check if user already used trial
+
   const trialPlan = await SubscriptionPlan.findOne({ planType: "trial", isActive: true });
+
   if (!trialPlan) throw new Error("Trial plan is not available");
+ 
+  const usedTrial = await hasUsedTrial(userId);
 
+  console.log("usedTrial:", usedTrial);
+ 
+  // If function returns boolean false to mean "already used"
 
-const usedTrial = await hasUsedTrial(userId);
-  
-if (usedTrial) {
-  if (usedTrial) {
-    throw new Error("You are already in the trial plan.");
-  } else {
-    throw new Error("You already used your trial plan.");
+  if (usedTrial === false) {
+
+    return {
+
+      success: false,
+
+      message: "You already finished the trial plan, please subscribe."
+
+    };
+
   }
+ 
+  // Safe access with optional chaining — won't throw if usedTrial is null/undefined
+
+  if (usedTrial?.status === true && usedTrial?.isActive) {
+
+    const today = new Date();
+
+    const endDate = new Date(usedTrial.endDate);
+
+    const diffTime = endDate - today;
+
+    const remainingDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    return {
+
+      success: false,
+
+      message: `You are already in a trial plan. It will finish in ${remainingDays} day(s).`,
+
+      endDate
+
+    };
+
+  }
+ 
+  // No record at all → create trial
+
+  if (usedTrial === null || usedTrial === undefined) {
+
+    const startDate = new Date();
+
+    const endDate = new Date();
+
+    endDate.setDate(startDate.getDate() + (trialPlan.durationDays || 0));
+ 
+    const newSubscription = new UserSubscription({
+
+      userId,
+
+      planId: trialPlan._id,
+
+      startDate,
+
+      endDate,
+
+      paymentStatus: "success",
+
+      isActive: true,
+
+      limitsUsed: {},
+
+    });
+
+    await newSubscription.save();
+ 
+    return {
+
+      success: true,
+
+      message: "Trial plan activated successfully!",
+
+      subscription: newSubscription
+
+    };
+
+  }
+ 
+  // Fallback (if usedTrial is some unexpected value)
+
+  return { success: false, message: "Unable to determine trial status." };
+
 }
 
-  const alreadyUsed = await UserSubscription.findOne({
-    userId,
-    planId: trialPlan._id,
-  });
+ 
 
-  if (alreadyUsed) {
-    throw new Error("You have already used your trial plan");
-  }
-
-  // Create new subscription
-  const startDate = new Date();
-  const endDate = new Date();
-  endDate.setDate(startDate.getDate() + trialPlan.durationDays); // 3 days trial
-
-  const newSubscription = new UserSubscription({
-    userId,
-    planId: trialPlan._id,
-    startDate,
-    endDate,
-    paymentStatus: "success", // free trial considered success
-    isActive: true,
-    limitsUsed: {},
-  });
-
-  await newSubscription.save();
-  return newSubscription;
-}
 module.exports = activateTrialPlan;
