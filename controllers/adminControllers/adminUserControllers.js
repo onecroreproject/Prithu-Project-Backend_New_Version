@@ -765,7 +765,7 @@ exports.getReports = async (req, res) => {
         }
 
         return {
-          id:report._id,
+          _id:report._id,
           reportId: index + 1, // convert to 1,2,3,4...
           type: reportType ? reportType.name : "Unknown",
           reportedBy: reporterProfile

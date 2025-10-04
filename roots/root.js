@@ -238,7 +238,8 @@ getReportTypes,
 createFeedReport,
 updateReportStatus,
 getReportLogs,
-}=require('../controllers/adminControllers/addReportController');
+adminTakeActionOnReport,
+}=require('../controllers/adminControllers/userReportController');
 
 const{
   notificationRegister,
@@ -424,7 +425,6 @@ router.get('/admin/get/user/analytical/data/:userId',getUserAnalyticalData);
 router.get("/admin/user/tree/level/:userId",getUserLevelWithEarnings);
 router.patch("/admin/block/user/:userId",blockUserById);
 router.get('/admin/user/profile/metricks',getUserProfileDashboardMetricCount);
-router .get ('/admin/user/report',getReports);
 // router.get("/admin/online-users", authenticateAdmin, getOnlineUsers);
 // router.get('/admin/user/followers/count')
 // router.get('/admin/user/followers/detail')
@@ -439,6 +439,8 @@ router.post("/admin/add/report/questions",addReportQuestion);
 router.post("/admin/report-type", createReportType);
 router.put("/:reportId/status", updateReportStatus);
 router.get("/:reportId/logs", auth,getReportLogs);
+router.get ('/admin/user/report',getReports);
+router.put("/admin/report/action/update/:reportId",auth,adminTakeActionOnReport);
 
 
 /*---------------------Admin DashBoard API---------------------*/

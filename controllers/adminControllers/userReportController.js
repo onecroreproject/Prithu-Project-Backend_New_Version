@@ -2,6 +2,11 @@ const ReportQuestion = require("../../models/userModels/Report/reprotQuetionAnsw
 const ReportType = require("../../models/userModels/Report/reportTypeModel");
 const ReportLog =require('../../models/reportLog');
 const ReportPost=require('../../models/feedReportModel');
+const Report =require("../../models/feedReportModel");
+const User =require("../../models/userModels/userModel");
+const Feed=require("../../models/feedModel");
+const Account=require('../../models/accountSchemaModel');
+const sendMail=require("../../utils/sendMail");
 
 
 exports.addReportQuestion = async (req, res) => {
@@ -190,42 +195,87 @@ exports.getReportTypes = async (req, res) => {
 
 
 exports.createFeedReport = async (req, res) => {
+
   try {
-    const { typeId, targetId, targetType } = req.body;
+
+    const { typeId, targetId, targetType, answers } = req.body;
+
     const userId = req.Id || req.body.userId;
-
+ 
     if (!typeId || !targetId || !targetType) {
+
       return res.status(400).json({ message: "Missing required fields" });
+
     }
+ 
+    if (!Array.isArray(answers) || answers.length === 0) {
 
-    // Create empty report
+      return res.status(400).json({ message: "Answers must be a non-empty array" });
+
+    }
+ 
+    // Map frontend answers to schema format
+
+    const formattedAnswers = answers.map(a => ({
+
+      questionId: a.questionId,
+
+      questionText: a.questionText,
+
+      selectedOption: a.answer, // match your schema field
+
+    }));
+ 
+    // Create report
+
     const report = new ReportPost({
+
       typeId,
+
       reportedBy: userId,
+
       targetId,
+
       targetType,
-      answers: [], // answers will be filled step by step
-    });
 
+      answers: formattedAnswers,
+
+    });
+ 
     const savedReport = await report.save();
-
+ 
     // Log creation
+
     await ReportLog.create({
+
       reportId: savedReport._id,
+
       action: "Created",
+
       performedBy: userId,
+
       note: "User started report",
+
+    });
+ 
+    res.status(201).json({
+
+      message: "Report created successfully",
+
+      data: savedReport,
+
     });
 
-    res.status(201).json({
-      message: "Report started successfully",
-      data: savedReport,
-    });
   } catch (error) {
-    console.error("Error starting report:", error);
+
+    console.error("Error creating report:", error);
+
     res.status(500).json({ message: "Internal server error", error: error.message });
+
   }
+
 };
+ 
 
 
 
@@ -278,5 +328,72 @@ exports.updateReportStatus = async (req, res) => {
   } catch (error) {
     console.error("Error updating report:", error);
     res.status(500).json({ message: "Internal server error", error: error.message });
+  }
+};
+
+
+
+exports.adminTakeActionOnReport = async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const { status, actionTaken} = req.body; 
+    const adminId=req.id;
+
+    // 1️⃣ Find report
+    const report = await Report.findById(reportId);
+    if (!report) {
+      return res.status(404).json({ message: "Report not found" });
+    }
+
+    // 2️⃣ Update report
+    report.status = status;
+    report.actionTaken = actionTaken || null;
+    report.reviewedBy = adminId || null;
+    report.actionDate = new Date();
+    await report.save();
+
+    // 3️⃣ If Action Taken → Notify Feed Creator
+    if (status === "Action Taken") {
+      // Get the Feed
+      const feed = await Feed.findById(report.targetId);
+      if (feed) {
+        // Get Account who created the feed
+        const account = await Account.findById(feed.createdByAccount);
+        if (account) {
+          // Get User from Account
+          const user = await User.findById(account.userId);
+          if (user?.email) {
+            const subject = "Action Taken on Your Feed";
+            const text = `Hello ${user.userName},
+
+An admin has reviewed a report against your feed and taken action.
+
+📌 Status: ${report.status}
+📌 Action Taken: ${report.actionTaken || "N/A"}
+📌 Date: ${report.actionDate.toLocaleString()}
+
+Thank you,
+Support Team`;
+
+            await sendMail({
+              to: user.email,
+              subject,
+              text,
+            });
+          }
+        }
+      }
+    }
+
+    res.status(200).json({
+      message: "Report updated successfully",
+      report,
+    });
+  } catch (error) {
+    console.error("Error updating report:", error);
+    res.status(500).json({
+      message: "Failed to update report",
+      error: error.message,
+    });
   }
 };
