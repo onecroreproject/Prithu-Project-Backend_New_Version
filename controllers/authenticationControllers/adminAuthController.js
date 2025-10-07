@@ -105,12 +105,12 @@ exports.newAdmin = async (req, res) => {
 // Admin Login
 exports.adminLogin = async (req, res) => {
   try {
-    console.log("admin Login")
     const { identifier, password } = req.body;
     if (!identifier || !password)
       return res.status(400).json({ error: "Identifier and password required" });
 
     let payload = {};
+    let grantedPermissions = [];
 
     // 1️⃣ Check Admin collection
     const admin = await Admin.findOne({
@@ -126,6 +126,8 @@ exports.adminLogin = async (req, res) => {
         userName: admin.userName,
         userId: admin._id.toString(),
       };
+      // Admins have all permissions
+      grantedPermissions = ["ALL"];
     } else {
       // 2️⃣ Check Child Admin collection
       const child = await ChildAdmin.findOne({ email: identifier }).lean();
@@ -139,12 +141,23 @@ exports.adminLogin = async (req, res) => {
         userName: child.userName,
         userId: child.childAdminId.toString(),
       };
+
+      // Get granted permissions from child admin
+      grantedPermissions = child.grantedPermissions || [];
     }
 
     // 3️⃣ Generate JWT
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1d" });
+    const token = jwt.sign(
+      { ...payload, grantedPermissions },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
 
-    res.json({ token, admin: payload });
+    res.json({
+      token,
+      admin: payload,
+      grantedPermissions, // send granted permissions to frontend
+    });
   } catch (error) {
     console.error("Admin login error:", error);
     res.status(500).json({ error: error.message });

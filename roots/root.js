@@ -216,6 +216,17 @@ const{
 const{
   userVideoViewCount,
   userImageViewCount,
+  fetchUserFeeds,
+fetchUserFollowing,
+fetchUserInterested,
+fetchUserHidden,
+fetchUserLiked,
+fetchUserDisliked,
+fetchUserCommented,
+fetchUserShared,
+fetchUserDownloaded,
+getUserAnalyticsSummary,
+fetchUserNonInterested,
 }=require('../controllers/userControllers/userFeedController');
 
 const{
@@ -251,6 +262,12 @@ const{
   refreshAccessToken,
   heartbeat,
 }=require('../controllers/sessionController')
+
+const {
+  getChildAdmins,
+  getChildAdminPermissions,
+  updateChildAdminPermissions,
+}=require('../controllers/adminControllers/adminChildAdminController');
 
 
 /* --------------------- User Authentication --------------------- */
@@ -425,14 +442,21 @@ router.get('/admin/get/user/analytical/data/:userId',getUserAnalyticalData);
 router.get("/admin/user/tree/level/:userId",getUserLevelWithEarnings);
 router.patch("/admin/block/user/:userId",blockUserById);
 router.get('/admin/user/profile/metricks',getUserProfileDashboardMetricCount);
-// router.get("/admin/online-users", authenticateAdmin, getOnlineUsers);
-// router.get('/admin/user/followers/count')
-// router.get('/admin/user/followers/detail')
-// router.get('/admin/user/interest/categories')
- router.get('/admin/user/likes/:userId',getUserLikedFeedsforAdmin)
-// router.get('/amin/user/share')
-// router.get('/amin/user/dwonload')
-// router.get('/amin/user/comment')
+router.get('/admin/user/likes/:userId',getUserLikedFeedsforAdmin);
+
+router.get("/feeds/:userId",fetchUserFeeds);
+router.get("/following/:userId",fetchUserFollowing);
+router.get("/interested/:userId",fetchUserInterested);
+router.get("/hidden/:userId", fetchUserHidden);
+router.get("/liked/:userId", fetchUserLiked);
+router.get("/disliked/:userId", fetchUserDisliked);
+router.get("/commented/:userId", fetchUserCommented);
+router.get("/shared/:userId", fetchUserShared);
+router.get("/downloaded/:userId", fetchUserDownloaded);
+router.get("/summary/:userId", getUserAnalyticsSummary);
+router.get("/nonInterested/:userId", fetchUserNonInterested);
+
+
 
 /*-------------------Admin Report API -------------------------*/
 router.post("/admin/add/report/questions",addReportQuestion);
@@ -459,8 +483,9 @@ router.get('/admin/get/user/detail', getUserProfileDetail);
 // router.post("/admin/post/notification",adminSentNotification);
 
 /* --------------------- Child Admin Profile API --------------------- */
-// router.post('/child/admin/profile/detail/update',auth, upload.single('file'),uploadToCloudinary,childAdminProfileDetailUpdate);
-router.get('/get/child/admin/profile',auth,getChildAdminProfileDetail)
+router.get("/admin/childadmin/list",auth,getChildAdmins);
+router.get("/admin/childadmin/permissions/:childAdminId",getChildAdminPermissions);
+router.put("/admin/childadmin/permissions/:id",updateChildAdminPermissions);
 
 /* --------------------- Child Admin Feed API --------------------- */
 router.post('/child/admin/feed', adminUpload.array('file'),auth,childAdminFeedUpload);
