@@ -20,9 +20,8 @@ const ProfileSettings=require('../../models/profileSettingModel')
 exports.getAllFeedsByUserId = async (req, res) => {
   try {
     const rawUserId = req.Id || req.body.userId;
-    const userId = rawUserId ? new mongoose.Types.ObjectId(rawUserId) : null;
-
     if (!rawUserId) return res.status(404).json({ message: "User ID Required" });
+    const userId = new mongoose.Types.ObjectId(rawUserId);
 
     // 0️⃣ Get hidden posts for this user
     const user = await User.findById(userId).select("hiddenPostIds").lean();
@@ -35,14 +34,14 @@ exports.getAllFeedsByUserId = async (req, res) => {
       // Sort newest first
       { $sort: { createdAt: -1 } },
 
-      // Lookup creator account to get userId
+      // Lookup creator account
       {
         $lookup: {
           from: "Accounts",
           localField: "createdByAccount",
           foreignField: "_id",
-          as: "account"
-        }
+          as: "account",
+        },
       },
       { $unwind: { path: "$account", preserveNullAndEmptyArrays: true } },
 
@@ -52,8 +51,8 @@ exports.getAllFeedsByUserId = async (req, res) => {
           from: "ProfileSettings",
           localField: "account.userId",
           foreignField: "userId",
-          as: "profile"
-        }
+          as: "profile",
+        },
       },
       { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
 
@@ -65,10 +64,10 @@ exports.getAllFeedsByUserId = async (req, res) => {
           pipeline: [
             { $unwind: "$likedFeeds" },
             { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$feedId"] } } },
-            { $count: "count" }
+            { $count: "count" },
           ],
-          as: "likesCount"
-        }
+          as: "likesCount",
+        },
       },
       {
         $lookup: {
@@ -77,10 +76,10 @@ exports.getAllFeedsByUserId = async (req, res) => {
           pipeline: [
             { $unwind: "$downloadedFeeds" },
             { $match: { $expr: { $eq: ["$downloadedFeeds.feedId", "$$feedId"] } } },
-            { $count: "count" }
+            { $count: "count" },
           ],
-          as: "downloadsCount"
-        }
+          as: "downloadsCount",
+        },
       },
       {
         $lookup: {
@@ -89,42 +88,54 @@ exports.getAllFeedsByUserId = async (req, res) => {
           pipeline: [
             { $unwind: "$sharedFeeds" },
             { $match: { $expr: { $eq: ["$sharedFeeds.feedId", "$$feedId"] } } },
-            { $count: "count" }
+            { $count: "count" },
           ],
-          as: "sharesCount"
-        }
+          as: "sharesCount",
+        },
       },
-
-      // Lookup views
       {
         $lookup: {
           from: "UserViews",
           let: { feedId: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } },
-            { $count: "count" }
-          ],
-          as: "viewsCount"
-        }
+          pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } }, { $count: "count" }],
+          as: "viewsCount",
+        },
       },
-
-      // Lookup comments count
       {
         $lookup: {
           from: "UserComments",
           let: { feedId: "$_id" },
+          pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } }, { $count: "count" }],
+          as: "commentsCount",
+        },
+      },
+
+      // 🔹 Lookup current user's actions for liked & saved directly
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
           pipeline: [
-            { $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } },
-            { $count: "count" }
+            { $match: { $expr: { $eq: ["$userId", userId] } } },
+            {
+              $project: {
+                isLiked: {
+                  $in: ["$$feedId", { $map: { input: "$likedFeeds", as: "f", in: "$$f.feedId" } }],
+                },
+                isSaved: {
+                  $in: ["$$feedId", { $map: { input: "$savedFeeds", as: "f", in: "$$f.feedId" } }],
+                },
+              },
+            },
           ],
-          as: "commentsCount"
-        }
+          as: "userActions",
+        },
       },
 
       // Project final fields
       {
         $project: {
-          accountId:"$account._id",
+          accountId: "$account._id",
           feedId: "$_id",
           type: 1,
           language: 1,
@@ -138,29 +149,19 @@ exports.getAllFeedsByUserId = async (req, res) => {
           commentsCount: { $arrayElemAt: ["$commentsCount.count", 0] },
           userName: "$profile.userName",
           profileAvatar: "$profile.profileAvatar",
-          createdByAccount: 1
-        }
-      }
+          createdByAccount: 1,
+          isLiked: { $arrayElemAt: ["$userActions.isLiked", 0] },
+          isSaved: { $arrayElemAt: ["$userActions.isSaved", 0] },
+        },
+      },
     ]);
 
-    // 2️⃣ Add user-specific actions (liked/saved) and format contentUrl
-    const enrichedFeeds = feeds.map(feed => {
-      const contentUrlFull = feed.contentUrl
-      // Check user actions
-      const userActionDoc = userId
-        ? UserFeedActions.findOne({ userId, "likedFeeds.feedId": feed.feedId }).lean()
-        : null;
-      // For simplicity, you can populate isLiked/isSaved in another step if needed
-
-      return {
-        ...feed,
-        contentUrl: contentUrlFull,
-        timeAgo: feedTimeCalculator(feed.createdAt),
-        profileAvatar: feed.profileAvatar,
-        isLiked: false, // you can set after querying UserFeedActions
-        isSaved: false
-      };
-    });
+    // Format timeAgo and contentUrl
+    const enrichedFeeds = feeds.map((feed) => ({
+      ...feed,
+      contentUrl: feed.contentUrl,
+      timeAgo: feedTimeCalculator(feed.createdAt),
+    }));
 
     res.status(200).json({ message: "Feeds retrieved successfully", feeds: enrichedFeeds });
   } catch (err) {
@@ -168,6 +169,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
+
 
 
 

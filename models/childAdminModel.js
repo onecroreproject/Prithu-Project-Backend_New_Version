@@ -58,4 +58,4 @@ const childAdminSchema = new mongoose.Schema({
   isApprovedByParent: { type: Boolean, default: false },
 }, { timestamps: true });
 
-module.exports = mongoose.model("ChildAdmin", childAdminSchema);
+module.exports = mongoose.model("ChildAdmin", childAdminSchema,"ChildAdmins");

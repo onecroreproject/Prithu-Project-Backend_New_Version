@@ -11,6 +11,7 @@ const  {getLanguageCode}  = require("../middlewares/helper/languageHelper");
 
 exports.getAllCategories = async (req, res) => {
   try {
+    // Step 1: Fetch all categories (only id + name)
     const categories = await Categories.find({}, { _id: 1, name: 1 })
       .sort({ createdAt: -1 })
       .lean();
@@ -19,20 +20,50 @@ exports.getAllCategories = async (req, res) => {
       return res.status(404).json({ message: "No categories found" });
     }
 
-    const formattedCategories = categories.map(cat => ({
-      categoryId: cat._id,
-      categoriesName: cat.name,
-    }));
+    // Step 2: Aggregate feed stats by category (category stored as string ID)
+    const feedStats = await Feed.aggregate([
+      {
+        $group: {
+          _id: "$category", // category field holds categoryId as string
+          totalFeeds: { $sum: 1 },
+          videoCount: {
+            $sum: { $cond: [{ $eq: ["$type", "video"] }, 1, 0] },
+          },
+          imageCount: {
+            $sum: { $cond: [{ $eq: ["$type", "image"] }, 1, 0] },
+          },
+        },
+      },
+    ]);
 
+    // Step 3: Merge category details with feed stats
+    const formattedCategories = categories.map((cat) => {
+      const stat = feedStats.find((f) => f._id === cat._id.toString());
+      return {
+        categoryId: cat._id,
+        categoriesName: cat.name,
+        totalFeeds: stat ? stat.totalFeeds : 0,
+        videoCount: stat ? stat.videoCount : 0,
+        imageCount: stat ? stat.imageCount : 0,
+      };
+    });
+
+    // Step 4: Send success response
     return res.status(200).json({
       message: "Categories retrieved successfully",
       categories: formattedCategories,
     });
   } catch (error) {
     console.error("Error fetching categories:", error);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
   }
 };
+
+
+
 
 
 

@@ -3,10 +3,14 @@ const ChildAdmin =require ('../../models/childAdminModel');
 
 exports.getChildAdmins = async (req, res) => {
   try {
-    const parentAdminId = req.Id;
+    // Assuming JWT middleware attaches admin ID as req.user.id
+    const parentAdminId = req.Id;  
+    if (!parentAdminId) {
+      return res.status(400).json({ success: false, message: 'Admin ID not found' });
+    }
 
     const childAdmins = await ChildAdmin.find(
-      { parentAdminId, isActive: true },
+      { parentAdminId },
       'userName email childAdminId childAdminType isApprovedByParent createdAt'
     ).sort({ createdAt: -1 });
 

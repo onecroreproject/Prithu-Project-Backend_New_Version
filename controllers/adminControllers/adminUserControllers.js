@@ -18,7 +18,29 @@ const Session=require('../../models/userModels/userSession-Device/sessionModel.j
 const UserSubscription=require("../../models/subcriptionModels/userSubscreptionModel.js");
 const Account=require("../../models/accountSchemaModel.js");
 const Report=require('../../models/feedReportModel.js');
-const ReportType=require('../../models/userModels/Report/reportTypeModel')
+const ReportType=require('../../models/userModels/Report/reportTypeModel');
+const Followers =require("../../models/creatorFollowerModel.js");
+const HeldReferrals=require("../../models/userModels/userRefferalModels/heldUsers.js");
+const HiddenPost=require("../../models/userModels/hiddenPostSchema.js");
+const UserComments=require("../../models/userCommentModel.js");
+const UserDeviceSchema=require("../../models/devicetrackingModel.js");
+const UserEarnings =require('../../models/userModels/userRefferalModels/referralEarnings.js');
+const UserFeedCategories=require('../../models/userModels/userCategotyModel.js');
+const UserFollowings=require("../../models/userFollowingModel.js");
+const UserLevels=require("../../models/userModels/userRefferalModels/userReferralLevelModel");
+const UserNotification=require("../../models/userModels/userNotificationSchema.js");
+const UserViews=require("../../models/userModels/MediaSchema/userImageViewsModel.js");
+const {extractPublicId}=require("../../middlewares/helper/cloudnaryDetete.js");
+const {deleteCloudinaryBatch}=require("../../middlewares/helper/geatherPubliceIds.js");
+const {gatherFeedPublicIds}=require("../../middlewares/helper/geatherPubliceIds");
+const UserSubscriptions=require("../../models/subcriptionModels/userSubscreptionModel.js");
+const CommentLikes=require("../../models/commentsLikeModel.js");
+const CreatorFollowers=require('../../models/creatorFollowerModel.js');
+const Devices=require("../../models/userModels/userSession-Device/deviceModel.js");
+
+
+
+
 
 // Get single user detail
 exports.getUserProfileDetail = async (req, res) => {
@@ -810,6 +832,161 @@ exports.getReports = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+
+
+
+exports.deleteUserAndAllRelated = async (req, res) => {
+  const { userId } = req.params;
+  console.log("🧾 Starting deletion for user:", userId);
+
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(400).json({ message: "Invalid userId" });
+  }
+
+  // 1️⃣ Find user before transaction
+  const user = await Users.findById(userId);
+  if (!user) return res.status(404).json({ message: "User not found" });
+
+  // 2️⃣ Collect Cloudinary public IDs
+  const publicIds = new Set();
+
+  const extractPublicId = (url) => {
+    if (!url) return null;
+    try {
+      const parts = url.split("/");
+      const file = parts.pop();
+      return file.split(".")[0];
+    } catch {
+      return null;
+    }
+  };
+
+  if (user.profileAvatar) {
+    const pid = extractPublicId(user.profileAvatar);
+    if (pid) publicIds.add(pid);
+  }
+
+  const accounts = await Account.find({ userId }).lean();
+  const accountIds = accounts.map((a) => a._id.toString());
+
+  const feedCursor = Feed.find({
+    $or: [{ createdBy: { $in: accountIds } }, { userId }],
+  }).cursor();
+
+  for await (const f of feedCursor) {
+    if (f.thumbnail) {
+      const pid = extractPublicId(f.thumbnail);
+      if (pid) publicIds.add(pid);
+    }
+    if (Array.isArray(f.media)) {
+      f.media.forEach((m) => {
+        const pid = extractPublicId(m.url);
+        if (pid) publicIds.add(pid);
+      });
+    }
+  }
+
+  const ufaDocs = await UserFeedActions.find({
+    $or: [{ userId }, { accountId: { $in: accountIds } }],
+  }).lean();
+
+  ufaDocs.forEach((d) => {
+    if (Array.isArray(d.media)) {
+      d.media.forEach((m) => {
+        const pid = extractPublicId(m.url);
+        if (pid) publicIds.add(pid);
+      });
+    }
+  });
+
+  // 3️⃣ Delete Cloudinary media before DB transaction
+  const deleteCloudinaryBatch = async (ids, batchSize = 10) => {
+    const results = [];
+    for (let i = 0; i < ids.length; i += batchSize) {
+      const chunk = ids.slice(i, i + batchSize);
+      try {
+        const res = await cloudinary.api.delete_resources(chunk);
+        results.push(res);
+      } catch (e) {
+        console.error("Cloudinary delete error:", e.message);
+      }
+    }
+    return results;
+  };
+
+  const publicIdArray = Array.from(publicIds);
+  console.log(`🧹 Deleting ${publicIdArray.length} Cloudinary files...`);
+  await deleteCloudinaryBatch(publicIdArray, 10);
+
+  // 4️⃣ Start session & transaction
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    // Sequential deletes (no Promise.all)
+    await Account.deleteMany({ userId }, { session });
+    await CommentLikes.deleteMany({ userId }, { session });
+    await CreatorFollowers.updateMany(
+      { followers: userId },
+      { $pull: { followers: userId } },
+      { session }
+    );
+    await Devices.deleteMany({ userId }, { session });
+    await Feed.deleteMany(
+      { $or: [{ createdBy: { $in: accountIds } }, { userId }] },
+      { session }
+    );
+    await Followers.updateMany({}, { $pull: { followerIds: userId } }, { session });
+    await HeldReferrals.deleteMany({ userId }, { session });
+    await HiddenPost.deleteMany({ userId }, { session });
+    await ImageView.deleteMany({ userId }, { session });
+    await ProfileSettings.deleteMany({ userId }, { session });
+    await Report.deleteMany({ reportedBy: userId }, { session });
+    await Session.deleteMany({ userId }, { session });
+    await UserComments.deleteMany({ userId }, { session });
+    await UserDeviceSchema.deleteMany({ userId }, { session });
+    await UserEarnings.deleteMany({ userId }, { session });
+    await UserFeedActions.deleteMany(
+      { $or: [{ accountId: { $in: accountIds } }, { userId }] },
+      { session }
+    );
+    await UserFeedCategories.deleteMany({ userId }, { session });
+    await UserFollowings.updateMany({}, { $pull: { followingIds: userId } }, { session });
+    await UserLanguage.deleteMany({ userId }, { session });
+    await UserLevels.deleteMany({ userId }, { session });
+    await UserNotification.deleteMany({ userId }, { session });
+    await UserSubscriptions.deleteMany({ userId }, { session });
+    await UserViews.deleteMany({ userId }, { session });
+    await VideoView.deleteMany({ userId }, { session });
+    await Users.deleteOne({ _id: userId }, { session });
+
+    await session.commitTransaction();
+    console.log("✅ Transaction committed successfully.");
+  } catch (err) {
+    console.error("❌ Transaction error:", err);
+    await session.abortTransaction();
+    console.log("⚠️ Transaction aborted.");
+    return res.status(500).json({
+      message: "Failed to delete user records",
+      error: err.message,
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  // 5️⃣ Done
+  return res.status(200).json({
+    message: "✅ User and all related records deleted successfully",
+    deletedMediaCount: publicIdArray.length,
+  });
+};
+
+
+
+
+
 
 
 

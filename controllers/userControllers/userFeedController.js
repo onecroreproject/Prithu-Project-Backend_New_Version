@@ -9,18 +9,12 @@ const User = require("../../models/userModels/userModel");
 const Follower = require("../../models/userFollowingModel");
 const UserFeedActions = require("../../models/userFeedInterSectionModel");
 const UserCategory = require("../../models/userModels/userCategotyModel");
+const {buildDateFilter} =require("../../middlewares/helper/buildDateFilter");
+const Hidden =require("../../models/userModels/hiddenPostSchema");
+const ProfileSettings=require('../../models/profileSettingModel');
+const UserComment=require ('../../models/userCommentModel')
 
 
-// 🔹 Helper to build date filter
-const buildDateFilter = (arrayField, dateKey, startDate, endDate) => {
-  const match = {};
-  if (startDate || endDate) {
-    match[`${arrayField}.${dateKey}`] = {};
-    if (startDate) match[`${arrayField}.${dateKey}`].$gte = new Date(startDate);
-    if (endDate) match[`${arrayField}.${dateKey}`].$lte = new Date(endDate);
-  }
-  return match;
-};
 
 
 
@@ -174,6 +168,7 @@ exports.fetchUserFeeds = async (req, res) => {
     const feeds = await Feed.find({ createdByAccount: userId, ...filter })
       .populate("createdByAccount", "userName email");
 
+
     res.status(200).json({ success: true, feeds });
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch user feeds", error: err.message });
@@ -188,14 +183,54 @@ exports.fetchUserFollowing = async (req, res) => {
     const { userId } = req.params;
     const { startDate, endDate } = req.query;
 
+    // ✅ Date filter builder (optional helper)
     const dateFilter = buildDateFilter("followerIds", "createdAt", startDate, endDate);
 
-    const following = await Follower.findOne({ userId, ...dateFilter })
+    // ✅ Find the following list
+    const followingData = await Follower.findOne({ userId, ...dateFilter })
       .populate("followerIds.userId", "userName email");
 
-    res.status(200).json({ success: true, following: following?.followerIds || [] });
+    if (!followingData || !followingData.followerIds?.length) {
+      return res.status(200).json({
+        success: true,
+        following: [],
+        message: "No following users found for the given criteria",
+      });
+    }
+
+    // ✅ Extract all followed user IDs
+    const followedUserIds = followingData.followerIds.map(f => f.userId?._id);
+
+    // ✅ Fetch corresponding profile avatars
+    const profiles = await ProfileSettings.find({
+      userId: { $in: followedUserIds },
+    }).select("userId profileAvatar");
+
+    // ✅ Map userId → avatar for quick lookup
+    const avatarMap = profiles.reduce((acc, profile) => {
+      acc[profile.userId.toString()] = profile.profileAvatar;
+      return acc;
+    }, {});
+
+    // Merge avatar into response
+    const followingWithAvatars = followingData.followerIds.map(f => ({
+      userId: f.userId?._id,
+      userName: f.userId?.userName,
+      email: f.userId?.email,
+      profileAvatar: avatarMap[f.userId?._id?.toString()] || "/default-avatar.png",
+      followedAt: f.createdAt,
+    }));
+
+    res.status(200).json({
+      success: true,
+      following: followingWithAvatars,
+    });
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch following users", error: err.message });
+    console.error(" Error in fetchUserFollowing:", err);
+    res.status(500).json({
+      message: "Failed to fetch following users",
+      error: err.message,
+    });
   }
 };
 
@@ -207,17 +242,33 @@ exports.fetchUserInterested = async (req, res) => {
     const { userId } = req.params;
     const { startDate, endDate } = req.query;
 
+    // Build the date filter if you have a utility function
     const match = buildDateFilter("interestedCategories", "updatedAt", startDate, endDate);
 
+    // Find user categories
     const userCats = await UserCategory.findOne({ userId, ...match })
-      .populate("interestedCategories.categoryId", "name description");
+  .populate({
+    path: "interestedCategories.categoryId",
+    model: "Categories",
+    select: "name", 
+  });
+// Map to get category name + user's updatedAt
+const categories = userCats?.interestedCategories.map((c) => ({
+  _id: c.categoryId._id,
+  name: c.categoryId.name,
+  updatedAt: c.updatedAt, // user's updated date
+})) || [];
 
-    res.status(200).json({
-      success: true,
-      categories: userCats?.interestedCategories || [],
-    });
+res.status(200).json({
+  success: true,
+  categories,
+});
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch interested categories", error: err.message });
+    console.error(err);
+    res.status(500).json({
+      message: "Failed to fetch interested categories",
+      error: err.message,
+    });
   }
 };
 
@@ -229,17 +280,36 @@ exports.fetchUserNonInterested = async (req, res) => {
     const { userId } = req.params;
     const { startDate, endDate } = req.query;
 
-    const match = buildDateFilter("nonInterestedCategories", "updatedAt", startDate, endDate);
+    // Build date filter for non-interested categories
+    const match = buildDateFilter(
+      "nonInterestedCategories",
+      "updatedAt",
+      startDate,
+      endDate
+    );
 
-    const userCats = await UserCategory.findOne({ userId, ...match })
-      .populate("nonInterestedCategories.categoryId", "name description");
+    const userCats = await UserCategory.findOne({ userId, ...match }).populate({
+      path: "nonInterestedCategories.categoryId",
+      model: "Categories",
+      select: "name", // only category name
+    });
+  console.log(userCats)
+    // Map to include category name + user's updatedAt
+    const categories = userCats?.nonInterestedCategories.map((c) => ({
+      _id: c.categoryId._id,
+      name: c.categoryId.name,
+      updatedAt: c.updatedAt, // user's updated date
+    })) || [];
 
     res.status(200).json({
       success: true,
-      categories: userCats?.nonInterestedCategories || [],
+      categories,
     });
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch non-interested categories", error: err.message });
+    res.status(500).json({
+      message: "Failed to fetch non-interested categories",
+      error: err.message,
+    });
   }
 };
 
@@ -250,24 +320,28 @@ exports.fetchUserHidden = async (req, res) => {
   try {
     const { userId } = req.params;
     const { type, startDate, endDate } = req.query;
-    console.log(req.query)
 
-    // Build date filter using your helper
-    const dateFilter = buildDateFilter("hiddenPostIds", "createdAt", startDate, endDate);
+    // Step 1: Find all hidden feeds for the user
+    const hiddenEntries = await Hidden.find({ userId }).select("feedId");
+    if (!hiddenEntries.length) {
+      return res.status(200).json({ success: true, hiddenFeeds: [] });
+    }
 
-    const user = await User.findById(userId).populate({
-      path: "hiddenPostIds",
-      select: "type language category contentUrl createdAt",
-      match: {
-        ...(type && type !== "all" ? { type } : {}),
-        ...dateFilter, // Apply the date filter here
-      },
-    });
-     
-    res.status(200).json({
-      success: true,
-      hiddenFeeds: user?.hiddenPostIds || [],
-    });
+    // Step 2: Extract feed IDs
+    const feedIds = hiddenEntries.map((h) => h.feedId);
+
+    // Step 3: Build filter using your utility
+    const feedFilter = {
+      _id: { $in: feedIds },
+      ...buildDateFilter({ field: "createdAt", type, startDate, endDate }),
+    };
+
+    // Step 4: Fetch hidden feeds
+    const hiddenFeeds = await Feed.find(feedFilter).select(
+      "type contentUrl language createdAt"
+    );
+
+    res.status(200).json({ success: true, hiddenFeeds });
   } catch (err) {
     console.error("Error fetching hidden feeds:", err);
     res.status(500).json({
@@ -285,19 +359,48 @@ exports.fetchUserHidden = async (req, res) => {
 exports.fetchUserLiked = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, type } = req.query;
 
-    const match = buildDateFilter("likedFeeds", "likedAt", startDate, endDate);
-
-    const actions = await UserFeedActions.findOne({ userId, ...match })
+    // Fetch user liked feeds
+    const actions = await UserFeedActions.findOne({ userId })
       .populate("likedFeeds.feedId", "type category language contentUrl");
+     
+    if (!actions) {
+      return res.status(200).json({ success: true, likedFeeds: [] });
+    }
+
+    let likedFeeds = actions.likedFeeds || [];
+
+    // Filter by type if specified (image/video)
+    if (type && type !== "all") {
+      likedFeeds = likedFeeds.filter(
+        (item) => item.feedId?.type === type
+      );
+    }
+
+    // Filter by date range if specified
+    if (startDate || endDate) {
+      likedFeeds = likedFeeds.filter((item) => {
+        const likedAt = new Date(item.likedAt);
+        if (startDate && likedAt < new Date(startDate)) return false;
+        if (endDate && likedAt > new Date(endDate)) return false;
+        return true;
+      });
+    }
+
+console.log(likedFeeds)
 
     res.status(200).json({
       success: true,
-      likedFeeds: actions?.likedFeeds || [],
+      likedFeeds,
     });
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch liked feeds", error: err.message });
+    console.error("Error fetching liked feeds:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch liked feeds",
+      error: err.message,
+    });
   }
 };
 
@@ -317,9 +420,36 @@ exports.fetchUserDisliked = async (req, res) => {
 ================================================================ */
 exports.fetchUserCommented = async (req, res) => {
   try {
-    res.status(200).json({ success: true, commentedFeeds: [] });
+    const { userId } = req.params;
+
+    // Fetch comments by user and populate feed contentUrl
+    const comments = await UserComment.find({ userId })
+      .sort({ createdAt: -1 }) // latest comments first
+      .populate({
+        path: "feedId",
+        select: "contentUrl title", // fetch only contentUrl and title
+      });
+
+    // Format response
+    const commentedFeeds = comments.map((comment) => ({
+      _id: comment._id,
+      commentText: comment.commentText,
+      createdAt: comment.createdAt,
+      feed: comment.feedId
+        ? {
+            _id: comment.feedId._id,
+            contentUrl: comment.feedId.contentUrl,
+            title: comment.feedId.title || null,
+          }
+        : null,
+    }));
+
+    res.status(200).json({ success: true, commentedFeeds });
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch commented feeds", error: err.message });
+    res.status(500).json({
+      message: "Failed to fetch commented feeds",
+      error: err.message,
+    });
   }
 };
 
@@ -329,16 +459,33 @@ exports.fetchUserCommented = async (req, res) => {
 exports.fetchUserShared = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, type } = req.query;
 
+    // Build date filter
     const match = buildDateFilter("sharedFeeds", "sharedAt", startDate, endDate);
 
+    // Get user's shared feeds
     const actions = await UserFeedActions.findOne({ userId, ...match })
-      .populate("sharedFeeds.feedId", "type category language contentUrl");
+      .populate("sharedFeeds.feedId", "type category language contentUrl title");
+
+    if (!actions || !actions.sharedFeeds) {
+      return res.status(200).json({ success: true, sharedFeeds: [] });
+    }
+
+    // Process feeds to filter by type and count
+    const processedFeeds = actions.sharedFeeds
+      .filter((item) => !type || item.feedId?.type === type) // filter by type if provided
+      .map((item) => ({
+        feed: item.feedId,
+        sharedAt: item.sharedAt,
+        count: actions.sharedFeeds.filter(
+          (f) => f.feedId?.toString() === item.feedId?._id.toString()
+        ).length,
+      }));
 
     res.status(200).json({
       success: true,
-      sharedFeeds: actions?.sharedFeeds || [],
+      sharedFeeds: processedFeeds,
     });
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch shared feeds", error: err.message });
@@ -351,16 +498,33 @@ exports.fetchUserShared = async (req, res) => {
 exports.fetchUserDownloaded = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, type } = req.query;
 
+    // Build date filter
     const match = buildDateFilter("downloadedFeeds", "downloadedAt", startDate, endDate);
 
+    // Get user's downloaded feeds
     const actions = await UserFeedActions.findOne({ userId, ...match })
-      .populate("downloadedFeeds.feedId", "type category language contentUrl");
+      .populate("downloadedFeeds.feedId", "type category language contentUrl title");
+
+    if (!actions || !actions.downloadedFeeds) {
+      return res.status(200).json({ success: true, downloadedFeeds: [] });
+    }
+
+    // Process feeds to filter by type and count
+    const processedFeeds = actions.downloadedFeeds
+      .filter((item) => !type || item.feedId?.type === type) // filter by type if provided
+      .map((item) => ({
+        feed: item.feedId,
+        downloadedAt: item.downloadedAt,
+        count: actions.downloadedFeeds.filter(
+          (f) => f.feedId?.toString() === item.feedId?._id.toString()
+        ).length,
+      }));
 
     res.status(200).json({
       success: true,
-      downloadedFeeds: actions?.downloadedFeeds || [],
+      downloadedFeeds: processedFeeds,
     });
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch downloaded feeds", error: err.message });

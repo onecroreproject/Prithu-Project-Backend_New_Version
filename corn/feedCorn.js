@@ -1,19 +1,14 @@
 const cron = require("node-cron");
-const Feed = require("../models/feedModel");
+const feedQueue = require("../queue/feedPostQueue");
 
-// Check every minute for feeds to post
-exports.scheduleFeedPosts = () => {
-  cron.schedule("* * * * *", async () => {
-    const now = new Date();
-    const feedsToPost = await Feed.find({ scheduledAt: { $lte: now }, isPosted: false });
+// Run immediately on server start
+(async () => {
+  console.log("Running feed-posting check on server start...");
+  await feedQueue.add({}, { jobId: "feedPostJob" });
+})();
 
-    feedsToPost.forEach(async (feed) => {
-      console.log("Posting feed:", feed.title); // replace with real posting logic
-
-      feed.isPosted = true;
-      await feed.save();
-    });
-  });
-};
-
-
+// Schedule every minute
+cron.schedule("* * * * *", async () => {
+  console.log("⏰ Cron triggered: feed-posts");
+  await feedQueue.add({}, { jobId: "feedPostJob" });
+});

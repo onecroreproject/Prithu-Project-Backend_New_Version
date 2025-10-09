@@ -113,6 +113,7 @@ const {
   getUserLevelWithEarnings,
   getUserProfileDashboardMetricCount,
   getReports ,
+  deleteUserAndAllRelated,
 } = require('../controllers/adminControllers/adminUserControllers');
 
 const {
@@ -268,6 +269,8 @@ const {
   getChildAdminPermissions,
   updateChildAdminPermissions,
 }=require('../controllers/adminControllers/adminChildAdminController');
+
+const computeTrendingCreators =require('../middlewares/computeTreandingCreators')
 
 
 /* --------------------- User Authentication --------------------- */
@@ -443,6 +446,7 @@ router.get("/admin/user/tree/level/:userId",getUserLevelWithEarnings);
 router.patch("/admin/block/user/:userId",blockUserById);
 router.get('/admin/user/profile/metricks',getUserProfileDashboardMetricCount);
 router.get('/admin/user/likes/:userId',getUserLikedFeedsforAdmin);
+router.delete('/admin/delete/user/:userId',deleteUserAndAllRelated);
 
 router.get("/feeds/:userId",fetchUserFeeds);
 router.get("/following/:userId",fetchUserFollowing);
@@ -511,5 +515,17 @@ router.post('/account/add', auth, addAccount);
 router.post('/account/switch/creator',auth,switchToCreator);
 router.post('/account/switch/user',auth, switchToUserAccount);
 router.post('/account/status',auth, checkAccountStatus);
+
+
+
+router.post("/trigger-trending-creators", async (req, res) => {
+  try {
+    await computeTrendingCreators();
+    return res.status(200).json({ success: true, message: "Trending creators computation triggered!" });
+  } catch (err) {
+    console.error("Error triggering trending creators:", err);
+    return res.status(500).json({ success: false, message: "Error computing trending creators", error: err.message });
+  }
+});
 
 module.exports = router;

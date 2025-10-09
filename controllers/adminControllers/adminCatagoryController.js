@@ -60,6 +60,8 @@ exports.adminAddCategory = async (req, res) => {
 
 
 
+
+
 exports.deleteCategory = async (req, res) => {
   try {
     const { id } = req.params; // expects category ID in body

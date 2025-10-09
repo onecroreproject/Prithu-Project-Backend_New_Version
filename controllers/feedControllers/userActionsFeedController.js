@@ -11,7 +11,8 @@ const ProfileSettings=require('../../models/profileSettingModel');
 const { feedTimeCalculator } = require("../../middlewares/feedTimeCalculator");
 const UserCategory=require('../../models/userModels/userCategotyModel.js');
 const Category=require('../../models/categorySchema.js');
-
+const HiddenPost=require("../../models/userModels/hiddenPostSchema.js");
+const Feed =require("../../models/feedModel.js");
 
 
 exports.likeFeed = async (req, res) => {
@@ -575,20 +576,31 @@ exports.userHideFeed = async (req, res) => {
     const userId = req.Id || req.body.userId;
     const postId = req.body.feedId;
 
-    if (!userId || !postId) return res.status(400).json({ message: "User ID and Post ID are required" });
+    if (!userId || !postId) {
+      return res.status(400).json({ message: "User ID and Post ID are required" });
+    }
 
-    // Add to hiddenPostIds if not already hidden
-    const user = await User.findById(userId);
-    if (user.hiddenPostIds.includes(postId)) {
+    // ✅ Check if post and user exist
+    const [user, post] = await Promise.all([
+      User.findById(userId),
+      Feed.findById(postId)
+    ]);
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!post) return res.status(404).json({ message: "Feed not found" });
+
+    // ✅ Check if already hidden
+    const alreadyHidden = await HiddenPost.findOne({ userId, postId });
+    if (alreadyHidden) {
       return res.status(400).json({ message: "Post already hidden" });
     }
 
-    user.hiddenPostIds.push(postId);
-    await user.save();
+    // ✅ Create new hidden post entry
+    await HiddenPost.create({ userId, postId });
 
     res.status(200).json({ message: "Post hidden successfully" });
   } catch (err) {
-    console.error(err);
+    console.error("Error hiding post:", err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
