@@ -1,16 +1,12 @@
 const Feed = require('../../models/feedModel');
 const User = require('../../models/userModels/userModel');
-const Creator = require('../../models/creatorModel');
 const { feedTimeCalculator } = require('../../middlewares/feedTimeCalculator');
 const UserFeedActions =require('../../models/userFeedInterSectionModel.js');
 const fs = require('fs');
-const path=require('path');
-const Account =require("../../models/accountSchemaModel.js")
-const Admin=require("../../models/adminModels/adminModel.js")
+const Account =require("../../models/accountSchemaModel.js");
 const mongoose = require("mongoose");
 const UserComment = require("../../models/userCommentModel.js");
 const UserView = require("../../models/userModels/userViewFeedsModel.js");
-const CommentLike = require("../../models/commentsLikeModel.js");
 const UserLanguage=require('../../models/userModels/userLanguageModel.js');
 const  UserCategory=require('../../models/userModels/userCategotyModel.js');
 const ProfileSettings=require('../../models/profileSettingModel')
@@ -21,6 +17,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
   try {
     const rawUserId = req.Id || req.body.userId;
     if (!rawUserId) return res.status(404).json({ message: "User ID Required" });
+
     const userId = new mongoose.Types.ObjectId(rawUserId);
 
     // 0️⃣ Get hidden posts for this user
@@ -97,7 +94,10 @@ exports.getAllFeedsByUserId = async (req, res) => {
         $lookup: {
           from: "UserViews",
           let: { feedId: "$_id" },
-          pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } }, { $count: "count" }],
+          pipeline: [
+            { $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } },
+            { $count: "count" },
+          ],
           as: "viewsCount",
         },
       },
@@ -105,12 +105,15 @@ exports.getAllFeedsByUserId = async (req, res) => {
         $lookup: {
           from: "UserComments",
           let: { feedId: "$_id" },
-          pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } }, { $count: "count" }],
+          pipeline: [
+            { $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } },
+            { $count: "count" },
+          ],
           as: "commentsCount",
         },
       },
 
-      // 🔹 Lookup current user's actions for liked & saved directly
+      // 🔹 Lookup current user's actions (Liked, Saved, Disliked)
       {
         $lookup: {
           from: "UserFeedActions",
@@ -120,10 +123,22 @@ exports.getAllFeedsByUserId = async (req, res) => {
             {
               $project: {
                 isLiked: {
-                  $in: ["$$feedId", { $map: { input: "$likedFeeds", as: "f", in: "$$f.feedId" } }],
+                  $in: [
+                    "$$feedId",
+                    { $map: { input: "$likedFeeds", as: "f", in: "$$f.feedId" } },
+                  ],
                 },
                 isSaved: {
-                  $in: ["$$feedId", { $map: { input: "$savedFeeds", as: "f", in: "$$f.feedId" } }],
+                  $in: [
+                    "$$feedId",
+                    { $map: { input: "$savedFeeds", as: "f", in: "$$f.feedId" } },
+                  ],
+                },
+                isDisliked: {
+                  $in: [
+                    "$$feedId",
+                    { $map: { input: "$disLikeFeeds", as: "f", in: "$$f.feedId" } },
+                  ],
                 },
               },
             },
@@ -152,6 +167,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
           createdByAccount: 1,
           isLiked: { $arrayElemAt: ["$userActions.isLiked", 0] },
           isSaved: { $arrayElemAt: ["$userActions.isSaved", 0] },
+          isDisliked: { $arrayElemAt: ["$userActions.isDisliked", 0] },
         },
       },
     ]);
@@ -163,7 +179,10 @@ exports.getAllFeedsByUserId = async (req, res) => {
       timeAgo: feedTimeCalculator(feed.createdAt),
     }));
 
-    res.status(200).json({ message: "Feeds retrieved successfully", feeds: enrichedFeeds });
+    res.status(200).json({
+      message: "Feeds retrieved successfully",
+      feeds: enrichedFeeds,
+    });
   } catch (err) {
     console.error("Error in getAllFeedsByUserId:", err);
     res.status(500).json({ message: "Server error", error: err.message });
@@ -174,26 +193,26 @@ exports.getAllFeedsByUserId = async (req, res) => {
 
 
 
+
 exports.getFeedsByAccountId = async (req, res) => {
   try {
     const accountId = req.accountId || req.body.accountId;
     if (!accountId) return res.status(400).json({ message: "accountId required" });
 
-    // 1️⃣ Find corresponding userId from Account
+    // 1️ Find corresponding userId from Account
     const account = await Account.findById(accountId).lean();
     if (!account) return res.status(404).json({ message: "Account not found" });
     const userId = account.userId;
 
-
-    // 2️⃣ Get user's feed language preference
+    // 2️ Get user's feed language preference
     const userLang = await UserLanguage.findOne({ userId }).lean();
     const feedLangCode = userLang?.feedLanguageCode || null;
 
-    // 3️⃣ Get user's category preferences
+    // 3️ Get user's category preferences
     const userCat = await UserCategory.findOne({ userId }).lean();
     const excludedCategories = (userCat?.nonInterestedCategories || []).map(c => c.toString());
 
-    // 4️⃣ Filter feeds based on language and category
+    // 4️ Filter feeds based on language and category
     const feedFilter = {};
     if (feedLangCode) feedFilter.language = feedLangCode;
     if (excludedCategories.length) feedFilter.category = { $nin: excludedCategories };
@@ -204,18 +223,18 @@ exports.getFeedsByAccountId = async (req, res) => {
     const feedIds = feeds.map(f => f._id);
     const accountIds = feeds.map(f => f.createdByAccount);
 
-    // 5️⃣ Aggregate total likes, shares, downloads
+    // 5️ Aggregate total likes, shares, downloads
     const actionsAgg = await UserFeedActions.aggregate([
       { $project: { likedFeeds: 1, downloadedFeeds: 1, sharedFeeds: 1 } },
       {
         $facet: {
           likes: [
             { $unwind: { path: "$likedFeeds", preserveNullAndEmptyArrays: true } },
-            { $group: { _id: "$likedFeeds", count: { $sum: 1 } } }
+            { $group: { _id: "$likedFeeds.feedId", count: { $sum: 1 } } }
           ],
           downloads: [
             { $unwind: { path: "$downloadedFeeds", preserveNullAndEmptyArrays: true } },
-            { $group: { _id: "$downloadedFeeds", count: { $sum: 1 } } }
+            { $group: { _id: "$downloadedFeeds.feedId", count: { $sum: 1 } } }
           ],
           shares: [
             { $unwind: { path: "$sharedFeeds", preserveNullAndEmptyArrays: true } },
@@ -229,33 +248,44 @@ exports.getFeedsByAccountId = async (req, res) => {
     const downloadsCount = {};
     const sharesCount = {};
     if (actionsAgg[0]) {
-      (actionsAgg[0].likes || []).forEach(l => { if (l._id) likesCount[l._id.toString()] = l.count; });
-      (actionsAgg[0].downloads || []).forEach(d => { if (d._id) downloadsCount[d._id.toString()] = d.count; });
-      (actionsAgg[0].shares || []).forEach(s => { if (s._id) sharesCount[s._id.toString()] = s.count; });
+      (actionsAgg[0].likes || []).forEach(l => {
+        if (l._id) likesCount[l._id.toString()] = l.count;
+      });
+      (actionsAgg[0].downloads || []).forEach(d => {
+        if (d._id) downloadsCount[d._id.toString()] = d.count;
+      });
+      (actionsAgg[0].shares || []).forEach(s => {
+        if (s._id) sharesCount[s._id.toString()] = s.count;
+      });
     }
 
-    // 6️⃣ Get current account actions
+    // 6️ Get current account actions (Liked, Saved, Disliked)
     const userActionsDoc = await UserFeedActions.findOne({ accountId }).lean();
-    const likedFeedIds = (userActionsDoc?.likedFeeds || []).map(f => f.toString());
-    const savedFeedIds = (userActionsDoc?.savedFeeds || []).map(f => f.toString());
+    const likedFeedIds = (userActionsDoc?.likedFeeds || []).map(f => f.feedId.toString());
+    const savedFeedIds = (userActionsDoc?.savedFeeds || []).map(f => f.feedId.toString());
+    const dislikedFeedIds = (userActionsDoc?.disLikeFeeds || []).map(f => f.feedId.toString());
 
-    // 7️⃣ Get views count
+    // 7️ Get views count
     const viewsAgg = await UserView.aggregate([
       { $match: { feedId: { $in: feedIds } } },
       { $group: { _id: "$feedId", count: { $sum: 1 } } }
     ]);
     const viewsCount = {};
-    viewsAgg.forEach(v => { viewsCount[v._id.toString()] = v.count });
+    viewsAgg.forEach(v => {
+      viewsCount[v._id.toString()] = v.count;
+    });
 
-    // 8️⃣ Get comment counts
+    // 8️ Get comment counts
     const commentsAgg = await UserComment.aggregate([
       { $match: { feedId: { $in: feedIds } } },
       { $group: { _id: "$feedId", count: { $sum: 1 } } }
     ]);
     const commentsCount = {};
-    commentsAgg.forEach(c => { commentsCount[c._id.toString()] = c.count });
+    commentsAgg.forEach(c => {
+      commentsCount[c._id.toString()] = c.count;
+    });
 
-    // 9️⃣ Get Accounts → Profile Settings
+    // 9️ Get Accounts → Profile Settings
     const accountsList = await Account.find(
       { _id: { $in: accountIds } },
       { _id: 1, userId: 1 }
@@ -268,16 +298,19 @@ exports.getFeedsByAccountId = async (req, res) => {
     ).lean();
 
     const accountToUserId = {};
-    accountsList.forEach(acc => { accountToUserId[acc._id.toString()] = acc.userId.toString(); });
+    accountsList.forEach(acc => {
+      accountToUserId[acc._id.toString()] = acc.userId.toString();
+    });
 
     const userIdToProfile = {};
-    profiles.forEach(p => { userIdToProfile[p.userId.toString()] = p; });
+    profiles.forEach(p => {
+      userIdToProfile[p.userId.toString()] = p;
+    });
 
-    // 🔟 Build final response
+    //  Build final response
     const enrichedFeeds = feeds.map(feed => {
       const fid = feed._id.toString();
-      const contentUrl = feed.contentUrl ;
-
+      const contentUrl = feed.contentUrl;
       const creatorUserId = accountToUserId[feed.createdByAccount?.toString()] || null;
       const profile = creatorUserId ? userIdToProfile[creatorUserId] : null;
 
@@ -294,19 +327,23 @@ exports.getFeedsByAccountId = async (req, res) => {
         commentsCount: commentsCount[fid] || 0,
         isLiked: likedFeedIds.includes(fid),
         isSaved: savedFeedIds.includes(fid),
+        isDisliked: dislikedFeedIds.includes(fid), 
         userName: profile?.userName || "Unknown",
         profileAvatar: profile?.profileAvatar,
-          
       };
     });
 
-    res.status(200).json({ message: "Filtered feeds retrieved successfully", feeds: enrichedFeeds });
+    res.status(200).json({
+      message: "Filtered feeds retrieved successfully",
+      feeds: enrichedFeeds,
+    });
 
   } catch (err) {
     console.error("Error fetching filtered feeds by accountId:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 
 
@@ -317,13 +354,13 @@ exports.getUserHidePost = async (req, res) => {
       return res.status(400).json({ message: "userId is required" });
     }
 
-    // 1️⃣ Find user
+    //  Find user
     const user = await User.findById(userId, "hiddenPostIds").lean();
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // 2️⃣ If no hidden posts
+    // 2️ If no hidden posts
     if (!user.hiddenPostIds || user.hiddenPostIds.length === 0) {
       return res.status(200).json({
         message: "No hidden posts found",
@@ -331,7 +368,7 @@ exports.getUserHidePost = async (req, res) => {
       });
     }
 
-    // 3️⃣ Fetch hidden posts
+    // 3️ Fetch hidden posts
     const hiddenPosts = await Feed.find(
       { _id: { $in: user.hiddenPostIds } },
       {

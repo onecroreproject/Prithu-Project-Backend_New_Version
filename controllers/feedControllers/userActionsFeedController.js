@@ -62,6 +62,83 @@ exports.likeFeed = async (req, res) => {
 
 
 
+exports.toggleDislikeFeed = async (req, res) => {
+  try {
+    const { feedId } = req.body;
+    const userId = req.Id || req.body.userId;
+
+
+    if (!feedId) {
+      return res.status(400).json({ success: false, message: "Feed ID is required" });
+    }
+
+    if (!userId && !accountId) {
+      return res.status(400).json({ success: false, message: "User or Account ID is required" });
+    }
+
+    //  Identify the query based on user type
+    const query = userId ? { userId } : { accountId };
+
+    //  Find or create user action document
+    let userActions = await UserFeedActions.findOne(query);
+
+    if (!userActions) {
+      userActions = new UserFeedActions({
+        ...query,
+        disLikeFeeds: [],
+      });
+    }
+
+    //  Check if feed is already disliked
+    const isDisliked = userActions.disLikeFeeds.some(
+      (item) => item.feedId.toString() === feedId
+    );
+
+    if (isDisliked) {
+      //  Pull feedId (remove dislike)
+      await UserFeedActions.updateOne(query, {
+        $pull: { disLikeFeeds: { feedId: new mongoose.Types.ObjectId(feedId) } },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Dislike removed successfully",
+        action: "removed",
+      });
+    } else {
+      //  Push feedId (add dislike)
+      await UserFeedActions.updateOne(
+        query,
+        {
+          $push: {
+            disLikeFeeds: {
+              feedId: new mongoose.Types.ObjectId(feedId),
+              downloadedAt: new Date(),
+            },
+          },
+        },
+        { upsert: true }
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Feed disliked successfully",
+        action: "added",
+      });
+    }
+  } catch (error) {
+    console.error("❌ Error toggling dislike:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+
+
+
 
 
 

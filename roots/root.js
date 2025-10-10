@@ -129,6 +129,7 @@ const {
   getUserLikedFeeds,
   userHideFeed,
   getUserCategory,
+  toggleDislikeFeed,
 } = require('../controllers/feedControllers/userActionsFeedController');
 
 const{
@@ -302,6 +303,7 @@ router.get("/check/email/availability",checkEmailAvailability);
 /* --------------------- User Feed Actions --------------------- */
 router.post('/user/feed/like',auth, likeFeed);
 router.post('/user/comment/like',auth,commentLike);
+router.post("/user/feed/dislike",auth,toggleDislikeFeed);
 router.post('/user/feed/save',auth, toggleSaveFeed);
 router.post('/user/feed/download',auth, downloadFeed);
 router.post('/user/feed/comment',auth,postComment);

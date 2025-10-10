@@ -30,6 +30,13 @@ const UserFeedActionsSchema = new mongoose.Schema(
       },
     ],
 
+     disLikeFeeds: [
+      {
+        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed" },
+        downloadedAt: { type: Date, default: Date.now },
+      },
+    ],
+
     // ✅ Track shares with timestamp + channel
     sharedFeeds: [
       {
