@@ -88,6 +88,7 @@ const adminUploadToCloudinary = async (req, res, next) => {
         if (req.baseUrl.includes("feed")) {
           folder = file.mimetype.startsWith("image/") ? "feeds/images" : "feeds/videos";
         } else if (req.baseUrl.includes("profile")) {
+          
           folder = "profile/images";
         }
 
@@ -116,7 +117,7 @@ const adminUploadToCloudinary = async (req, res, next) => {
           url: result.secure_url,
           public_id: result.public_id,
         };
-
+         console.log(file.cloudinary)
         return file.cloudinary;
       })
     );

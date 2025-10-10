@@ -275,7 +275,7 @@ const {
 const computeTrendingCreators =require('../middlewares/computeTreandingCreators')
 
 
-/* --------------------- User Authentication --------------------- */
+// /* --------------------- User Authentication --------------------- */
 router.post('/auth/user/register', createNewUser);
 router.post('/auth/user/login', userLogin);
 router.post('/auth/user/otp-send', userSendOtp);
@@ -284,13 +284,13 @@ router.post('/auth/new/user/verify-otp', newUserVerifyOtp);
 router.post('/auth/user/reset-password', userPasswordReset);
 router.post('/auth/user/logout',auth, userLogOut);
 
-/* --------------------- User Referral API Actions --------------------- */
+// /* --------------------- User Referral API Actions --------------------- */
 router.post('/user/later/referral',applyReferralCode);
 router.get('/user/referal/code',auth,getUserReferalCode);
 router.get ('/user/earning/card/data',getUserEarnings);
 router.get('/user/both/tree/referals',getUserTreeWithProfiles);
 
-/* --------------------- Fresh Users API --------------------- */
+// /* --------------------- Fresh Users API --------------------- */
 router.post('/user/app/language',auth, setAppLanguage );
 router.get('/user/get/app/language',auth,getAppLanguage);
 router.post('/user/feed/language',auth, setFeedLanguage );
@@ -301,7 +301,7 @@ router.get("/check/username/availability",checkUsernameAvailability);
 router.get("/check/email/availability",checkEmailAvailability);
 
 
-/* --------------------- User Feed Actions --------------------- */
+// /* --------------------- User Feed Actions --------------------- */
 router.post('/user/feed/like',auth, likeFeed);
 router.post('/user/comment/like',auth,commentLike);
 router.post("/user/feed/dislike",auth,toggleDislikeFeed);
@@ -314,7 +314,7 @@ router.post('/user/select/category',auth,userSelectCategory);
 router.post('/user/not/intrested',auth,userNotInterestedCategory);
 router.post('/user/interested/feed',auth,userInterestedCategory);
 
-/* --------------------- User Feed Get Actions --------------------- */
+// /* --------------------- User Feed Get Actions --------------------- */
 router.get('/user/get/saved/feeds',auth, getUserSavedFeeds);
 router.get('/user/download/feeds', auth, getUserDownloadedFeeds);
 router.get('/user/liked/feeds',auth, getUserLikedFeeds);
@@ -323,7 +323,7 @@ router.post('/get/comments/relpy/for/feed',auth,getRepliesByComment);
 router.post('/user/hide/feed',auth,userHideFeed);
 router.get("/user/notintrested/category",auth,getUserCategory);
 
-/* --------------------- User Subscription --------------------- */
+// /* --------------------- User Subscription --------------------- */
 router.post('/user/plan/subscription', auth,subscribePlan);
 router.put('/user/cancel/subscription',auth,cancelSubscription);
 router.get('/user/getall/subscriptions', getAllPlans);

@@ -1,22 +1,21 @@
 const { body, validationResult } = require("express-validator");
+const mongoose = require("mongoose");
 const Profile = require("../../models/profileSettingModel");
 const User = require("../../models/userModels/userModel");
 const Admin = require("../../models/adminModels/adminModel");
 const ChildAdmin = require("../../models/childAdminModel");
-const UserLanguage=require('../../models/userModels/userLanguageModel')
-const mongoose=require('mongoose');
+const UserLanguage = require('../../models/userModels/userLanguageModel');
 const { calculateAge } = require("../../middlewares/helper/calculateAge");
 const { userDeleteFromCloudinary } = require("../../middlewares/services/usercloudnaryUpload");
-const {adminDeleteFromCloudinary}=require("../../middlewares/services/adminCloudnaryUpload")
+const { adminDeleteFromCloudinary } = require("../../middlewares/services/adminCloudnaryUpload");
 
 
-
-// ✅ Validation middleware
+// ------------------- Validation Middleware -------------------
 exports.validateUserProfileUpdate = [
   body("phoneNumber").optional().isMobilePhone().withMessage("Invalid phone number"),
   body("bio").optional().isString(),
   body("maritalStatus").optional().isString(),
-   body("maritalDate").optional().isString(),
+  body("maritalDate").optional().isString(),
   body("dateOfBirth").optional().isISO8601().toDate(),
   body("profileAvatar").optional().isString(),
   body("userName").optional().isString(),
@@ -31,105 +30,74 @@ exports.validateUserProfileUpdate = [
 ];
 
 
-
-
-// ✅ Update profile controller
+// ------------------- User Profile Update -------------------
 exports.userProfileDetailUpdate = async (req, res) => {
   try {
-    // ---- 1. Extract userId ----
     const userId = req.Id || req.body.userId;
-    if (!userId) {
-      return res.status(400).json({ message: "userId is required" });
-    }
+    if (!userId) return res.status(400).json({ message: "userId is required" });
 
-    // ---- 2. Validate request ----
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        message: "Validation failed",
-        errors: errors.array(),
-      });
-    }
+    if (!errors.isEmpty()) return res.status(400).json({ message: "Validation failed", errors: errors.array() });
 
-    // ---- 3. Collect allowed fields ----
     const allowedFields = [
-      "phoneNumber",
-      "bio",
-      "displayName",
-      "dateOfBirth",
-      "maritalStatus",
-      "theme",
-      "language",
-      "timezone",
-      "gender",
-      "details",
-      "notifications",
-      "privacy",
+      "phoneNumber", "bio", "displayName", "dateOfBirth", "maritalStatus",
+      "theme", "language", "timezone", "gender", "details", "notifications", "privacy"
     ];
 
     const updateData = {};
-    allowedFields.forEach((field) => {
-      if (req.body[field] !== undefined) updateData[field] = req.body[field];
+    allowedFields.forEach(field => {
+      let value = req.body[field];
+      if ((field === "dateOfBirth" || field === "maritalDate") && (!value || value === "null")) value = null;
+      if (value !== undefined) updateData[field] = value;
     });
 
-    // ---- 4. Handle profile avatar (Cloudinary) ----
+    const profile = await Profile.findOne({ userId });
+
+    // ✅ Handle Cloudinary avatar
     if (req.cloudinaryFile) {
-      const oldProfile = await Profile.findOne({ userId });
+      // Delete old avatar if exists
+      if (profile?.profileAvatarId && profile.profileAvatarId !== req.cloudinaryFile.public_id) {
+        await userDeleteFromCloudinary(profile.profileAvatarId);
+      }
 
-      if (oldProfile?.profileAvatarId !== req.cloudinaryFile.public_id) {
-        // Delete old avatar if exists
-        if (oldProfile?.profileAvatarId) {
-          await userDeleteFromCloudinary(oldProfile.profileAvatarId);
-        }
+      // Set new avatar
+      updateData.profileAvatar = req.cloudinaryFile.url;
+      updateData.profileAvatarId = req.cloudinaryFile.public_id;
 
-        updateData.profileAvatar = req.cloudinaryFile.url;
-        updateData.profileAvatarId = req.cloudinaryFile.public_id;
+      // Remove background and save to modifyAvatar
+      try {
+        const bgRemovedUrl = await removeImageBackground(req.cloudinaryFile.url);
+        updateData.modifyAvatar = bgRemovedUrl;
+      } catch (err) {
+        console.error("Error removing background:", err);
       }
     }
 
-    // ---- 5. Ensure at least one field or username is provided ----
-    const userName = req.body.userName;
-    if (Object.keys(updateData).length === 0 && !userName) {
-      return res.status(400).json({ message: "No fields provided for update" });
-    }
+    // Update username if provided
+    const userName = req.body.userName?.trim();
+    if (userName) updateData.userName = userName;
 
-    // ---- 6. Update profile in DB ----
-    const profile = await Profile.findOneAndUpdate(
+    // Upsert profile (create if first-time, update if exists)
+    const updatedProfile = await Profile.findOneAndUpdate(
       { userId },
       { $set: updateData },
       { new: true, upsert: true }
     );
 
-    // ---- 7. Handle username update ----
+    // Update username in User collection
     if (userName) {
-  // ✅ Update username in User schema
-  await User.findByIdAndUpdate(
-    userId,
-    { $set: { userName } },
-    { new: true }
-  ).lean();
+      await User.findByIdAndUpdate(userId, { $set: { userName } }, { new: true });
+    }
 
-  // ✅ Update username in ProfileSettings schema (if it exists there)
-  if (profile && profile._id) {
-    await Profile.findByIdAndUpdate(
-      profile._id,
-      { $set: { userName } },   // <-- update userName too
-      { new: true }
-    ).lean();
-  }
-}
-
-
-    // ---- 8. Populate profile with user info ----
-    const populatedProfile = await Profile.findById(profile._id)
+    const populatedProfile = await Profile.findById(updatedProfile._id)
       .populate("userId", "userName email role")
       .lean();
 
-    // ---- 9. Send success response ----
     return res.status(200).json({
       message: "User profile updated successfully",
       profile: populatedProfile,
     });
+
   } catch (error) {
     console.error("Error in userProfileDetailUpdate:", error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -138,109 +106,51 @@ exports.userProfileDetailUpdate = async (req, res) => {
 
 
 
-
-
+// ------------------- Admin Profile Update -------------------
 exports.adminProfileDetailUpdate = async (req, res) => {
   try {
     const adminId = req.Id || req.body.adminId;
-    if (!adminId) {
-      return res.status(400).json({ message: "adminId is required" });
-    }
-     
-    // ✅ Validate request
+    if (!adminId) return res.status(400).json({ message: "adminId is required" });
+
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        message: "Validation failed",
-        errors: errors.array(),
-      });
+    if (!errors.isEmpty()) return res.status(400).json({ message: "Validation failed", errors: errors.array() });
+
+    const allowedFields = ["phoneNumber","bio","displayName","dateOfBirth","maritalStatus","theme","maritalDate","language","timezone","details","notifications","privacy","gender"];
+    const updateData = {};
+
+    allowedFields.forEach(field => {
+      let value = req.body[field];
+      if ((field === "dateOfBirth" || field === "maritalDate") && (!value || value === "null")) value = null;
+      if (value !== undefined) updateData[field] = value;
+    });
+
+    // Cloudinary avatar
+    if (req.cloudinaryFiles?.length > 0) {
+      const { url, public_id } = req.cloudinaryFiles[0];
+      const oldProfile = await Profile.findOne({ adminId });
+      if (!oldProfile?.profileAvatarId || oldProfile.profileAvatarId !== public_id) {
+        if (oldProfile?.profileAvatarId) await adminDeleteFromCloudinary(oldProfile.profileAvatarId);
+        updateData.profileAvatar = url;
+        updateData.profileAvatarId = public_id;
+      }
     }
 
-    // ✅ Collect allowed fields
- // ✅ Collect allowed fields
-const allowedFields = [
-  "phoneNumber",
-  "bio",
-  "displayName",
-  "dateOfBirth",
-  "maritalStatus",
-  "theme",
-  "maritalDate",
-  "language",
-  "timezone",
-  "details",
-  "notifications",
-  "privacy",
-  "gender",
-];
+    const userName = req.body.userName?.trim();
+    if (Object.keys(updateData).length === 0 && !userName) return res.status(400).json({ message: "No fields provided for update" });
 
-const updateData = {};
-allowedFields.forEach((field) => {
-  let value = req.body[field];
+    const profile = await Profile.findOneAndUpdate({ adminId }, { $set: updateData }, { new: true, upsert: true });
 
-  // Convert empty string or "null" to null for date fields
-  if ((field === "dateOfBirth" || field === "maritalDate") && (!value || value === "null")) {
-    value = null;
-  }
-
-  if (value !== undefined) updateData[field] = value;
-});
-
-    // ✅ Handle profile avatar (Cloudinary)
-    // ✅ Handle profile avatar (Cloudinary)
-if (req.cloudinaryFiles && req.cloudinaryFiles.length > 0) {
-  const { url, public_id } = req.cloudinaryFiles[0];
-  const oldProfile = await Profile.findOne({ adminId });
-
-  if (!oldProfile?.profileAvatarId || oldProfile.profileAvatarId !== public_id) {
-    if (oldProfile?.profileAvatarId) {
-      await adminDeleteFromCloudinary(oldProfile.profileAvatarId);
-    }
-
-    updateData.profileAvatar = url;
-    updateData.profileAvatarId = public_id;
-  }
-}
-
-
-    const userName = req.body.userName;
-
-    if (Object.keys(updateData).length === 0 && !userName) {
-      return res.status(400).json({ message: "No fields provided for update" });
-    }
-
-    console.log( updateData.profileAvatar)
-    
-    // ---- Update Profile for admin ----
-    let profile = await Profile.findOneAndUpdate(
-      { adminId },
-      { $set: updateData },
-      { new: true, upsert: true }
-    );
-
-    // ---- Handle username uniqueness ----
     if (userName) {
       const existing = await Admin.findOne({ userName }).lean();
-      if (existing && existing._id.toString() !== adminId.toString()) {
-        return res.status(400).json({ message: "Username already exists" });
-      }
+      if (existing && existing._id.toString() !== adminId.toString()) return res.status(400).json({ message: "Username already exists" });
 
-      await Admin.findByIdAndUpdate(
-        adminId,
-        { $set: { userName, profileSettings: profile._id } },
-        { new: true }
-      ).lean();
+      await Admin.findByIdAndUpdate(adminId, { $set: { userName, profileSettings: profile._id } }, { new: true });
+      await Profile.findOneAndUpdate({ adminId }, { $set: { userName } }, { new: true });
     }
 
-    // ✅ Populate linked admin (with username, email, role)
-    const populatedProfile = await Profile.findById(profile._id)
-      .populate("adminId", "userName email role")
-      .lean();
+    const populatedProfile = await Profile.findById(profile._id).populate("adminId", "userName email role").lean();
 
-    return res.status(200).json({
-      message: "Admin profile updated successfully",
-      profile: populatedProfile,
-    });
+    return res.status(200).json({ message: "Admin profile updated successfully", profile: populatedProfile });
   } catch (error) {
     console.error("Error in adminProfileDetailUpdate:", error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -248,126 +158,71 @@ if (req.cloudinaryFiles && req.cloudinaryFiles.length > 0) {
 };
 
 
-
-
-
+// ------------------- Child Admin Profile Update -------------------
 exports.childAdminProfileDetailUpdate = async (req, res) => {
   try {
     const childAdminId = req.Id || req.body.childAdminId;
-    if (!childAdminId) {
-      return res.status(400).json({ message: "childAdminId is required" });
-    }
+    if (!childAdminId) return res.status(400).json({ message: "childAdminId is required" });
 
-    console.log("child Admin update")
-
-    // ✅ Validate request
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        message: "Validation failed",
-        errors: errors.array(),
-      });
-    }
+    if (!errors.isEmpty()) return res.status(400).json({ message: "Validation failed", errors: errors.array() });
 
-    // ✅ Ensure child admin exists
     const childAdmin = await ChildAdmin.findById(childAdminId).lean();
-    if (!childAdmin) {
-      return res.status(404).json({ message: "Child Admin not found" });
-    }
+    if (!childAdmin) return res.status(404).json({ message: "Child Admin not found" });
 
-    // ✅ Allowed profile fields
-    const allowedFields = [
-      "phoneNumber",
-      "bio",
-      "displayName",
-      "dateOfBirth",
-      "maritalStatus",
-      "theme",
-      "maritalDate",
-      "language",
-      "timezone",
-      "details",
-      "notifications",
-      "privacy",
-      "gender",
-    ];
-
+    const allowedFields = ["phoneNumber","bio","displayName","dateOfBirth","maritalStatus","theme","maritalDate","language","timezone","details","notifications","privacy","gender"];
     const updateData = {};
-    allowedFields.forEach((field) => {
-      if (req.body[field] !== undefined) updateData[field] = req.body[field];
+    allowedFields.forEach(field => {
+      let value = req.body[field];
+      if ((field === "dateOfBirth" || field === "maritalDate") && (!value || value === "null")) value = null;
+      if (value !== undefined) updateData[field] = value;
     });
 
-    // ✅ Handle profile avatar (Cloudinary)
-    if (req.cloudinaryFile) {
+    if (req.cloudinaryFiles?.length > 0) {
+      const { url, public_id } = req.cloudinaryFiles[0];
       const oldProfile = await Profile.findOne({ childAdminId });
-
-      if (
-        !oldProfile?.profileAvatarId ||
-        oldProfile.profileAvatarId !== req.cloudinaryFile.public_id
-      ) {
-        if (oldProfile?.profileAvatarId) {
-          await adminDeleteFromCloudinary(oldProfile.profileAvatarId);
-        }
-
-        updateData.profileAvatar = req.cloudinaryFile.url;
-        updateData.profileAvatarId = req.cloudinaryFile.public_id;
+      if (!oldProfile?.profileAvatarId || oldProfile.profileAvatarId !== public_id) {
+        if (oldProfile?.profileAvatarId) await adminDeleteFromCloudinary(oldProfile.profileAvatarId);
+        updateData.profileAvatar = url;
+        updateData.profileAvatarId = public_id;
       }
     }
 
-    const userName = req.body.userName;
+    const userName = req.body.userName?.trim();
+    if (Object.keys(updateData).length === 0 && !userName) return res.status(400).json({ message: "No fields provided for update" });
 
-    if (Object.keys(updateData).length === 0 && !userName) {
-      return res.status(400).json({ message: "No fields provided for update" });
-    }
+    const profile = await Profile.findOneAndUpdate({ childAdminId }, { $set: updateData }, { new: true, upsert: true });
 
-    // ✅ Update or create child admin profile
-    let profile = await Profile.findOneAndUpdate(
-      { childAdminId },
-      { $set: updateData },
-      { new: true, upsert: true }
-    );
-
-    // ✅ Handle username uniqueness
     if (userName) {
       const existing = await ChildAdmin.findOne({ userName }).lean();
-      if (existing && existing._id.toString() !== childAdminId.toString()) {
-        return res.status(400).json({ message: "Username already exists" });
-      }
+      if (existing && existing._id.toString() !== childAdminId.toString()) return res.status(400).json({ message: "Username already exists" });
 
-      await ChildAdmin.findByIdAndUpdate(
-        childAdminId,
-        { $set: { userName, profileSettings: profile._id } },
-        { new: true }
-      ).lean();
+      await ChildAdmin.findByIdAndUpdate(childAdminId, { $set: { userName, profileSettings: profile._id } }, { new: true });
+      await Profile.findOneAndUpdate({ childAdminId }, { $set: { userName } }, { new: true });
     }
 
-    // ✅ Populate linked child admin
     const populatedProfile = await Profile.findById(profile._id)
       .populate("childAdminId", "userName email role parentAdminId")
       .lean();
 
-    // ✅ Fetch parent admin if exists
     let parentAdmin = null;
-    if (populatedProfile.childAdminId?.parentAdminId) {
-      parentAdmin = await Admin.findById(
-        populatedProfile.childAdminId.parentAdminId
-      )
+    if (populatedProfile?.childAdminId?.parentAdminId) {
+      parentAdmin = await Admin.findById(populatedProfile.childAdminId.parentAdminId)
         .select("userName email adminType")
         .lean();
     }
 
     return res.status(200).json({
       message: "Child Admin profile updated successfully",
-      profile: {
-        ...populatedProfile,
-        parentAdmin,
-      },
+      profile: { ...populatedProfile, parentAdmin }
     });
   } catch (error) {
     console.error("Error in childAdminProfileDetailUpdate:", error);
-    return res.status(500).json({ message: "Internal Server Error" });
+    return res.status(500).json({ message: "Internal Server Error", error: error.message });
   }
 };
+
+
 
 
 
@@ -437,93 +292,58 @@ exports.getUserProfileDetail = async (req, res) => {
 
 
 
-
 exports.getAdminProfileDetail = async (req, res) => {
   try {
-    const adminId = req.Id || req.body.adminId;
-    if (!adminId) return res.status(400).json({ message: "Admin ID is required" });
-    const adminRole =req.role;
-    console.log(adminRole)
-    const profile = await Profile.findOne(
-      { adminId },
-      "bio displayName maritalStatus phoneNumber dateOfBirth profileAvatar timezone "
-    )
-      .populate("adminId", "userName email adminType")
+    const userId = req.Id;
+    const role = req.role; 
+
+    if (!userId || !role) {
+      return res.status(400).json({ message: "User ID and role are required" });
+    }
+
+    let profileQuery = {};
+    let populateOptions = {};
+    let profileType = "";
+
+    if (role === "Admin") {
+      profileQuery = { adminId: userId };
+      populateOptions = { path: "adminId", select: "userName email adminType profileSettings" };
+      profileType = "Admin";
+    } else if (role === "Child_Admin") {
+      profileQuery = { childAdminId: userId };
+      populateOptions = { path: "childAdminId", select: "userName email adminType parentAdminId profileSettings" };
+      profileType = "Child_Admin";
+    } else {
+      return res.status(403).json({ message: "Unauthorized role" });
+    }
+
+    const profile = await Profile.findOne(profileQuery)
+      .populate(populateOptions)
       .lean();
 
-    if (!profile) return res.status(404).json({ message: "Admin profile not found" });
+    if (!profile) return res.status(404).json({ message: `${profileType} profile not found` });
 
-
-    const profileAvatarUrl = profile.profileAvatar
-      ?  profile.profileAvatar
-      : null;
-
-    return res.status(200).json({
-      message: "Admin profile fetched successfully",
-      profile: {
-        bio: profile.bio || null,
-        displayName: profile.displayName || null,
-        maritalStatus: profile.maritalStatus || null,
-        phoneNumber: profile.phoneNumber || null,
-        dateOfBirth: profile.dateOfBirth || null,
-        userName: profile.adminId?.userName || null,
-        profileAvatar: profileAvatarUrl,
-        timezone: profile.timezone || null,
-        userEmail: profile.adminId?.email || null,
-        adminType: profile.adminId?.adminType || null,
-      },
-    });
-  } catch (error) {
-    console.error("Error fetching admin profile:", error);
-    return res.status(500).json({ message: "Internal server error" });
-  }
-};
-
-
-
-
-exports.getChildAdminProfileDetail = async (req, res) => {
-  try {
-    const childAdminId = req.Id || req.body.childAdminId;
-    if (!childAdminId) return res.status(400).json({ message: "Child Admin ID is required" });
-
-    const profile = await Profile.findOne(
-      { childAdminId },
-      "bio displayName maritalStatus phoneNumber dateOfBirth profileAvatar timezone"
-    )
-      .populate({
-        path: "childAdminId",
-        select: "userName email adminType parentAdminId"
-      })
-      .lean();
-
-    if (!profile) return res.status(404).json({ message: "Child Admin profile not found" });
-
-    // Fetch parent admin if exists
+    // Fetch parent admin if Child_Admin
     let parentAdmin = null;
-    if (profile.childAdminId?.parentAdminId) {
+    if (role === "Child_Admin" && profile.childAdminId?.parentAdminId) {
       parentAdmin = await Admin.findById(profile.childAdminId.parentAdminId)
         .select("userName email adminType")
         .lean();
     }
 
-    const profileAvatarUrl = profile.profileAvatar
-      ?  profile.profileAvatar
-      : null;
-
     return res.status(200).json({
-      message: "Child Admin profile fetched successfully",
+      message: `${profileType} profile fetched successfully`,
       profile: {
         bio: profile.bio || null,
         displayName: profile.displayName || null,
         maritalStatus: profile.maritalStatus || null,
         phoneNumber: profile.phoneNumber || null,
         dateOfBirth: profile.dateOfBirth || null,
-        userName: profile.childAdminId?.userName || null,
-        profileAvatar: profileAvatarUrl,
+        userName: role === "Admin" ? profile.adminId?.userName : profile.childAdminId?.userName || null,
+        profileAvatar: profile.profileAvatar || null,
         timezone: profile.timezone || null,
-        userEmail: profile.childAdminId?.email || null,
-        adminType: profile.childAdminId?.adminType || null,
+        userEmail: role === "Admin" ? profile.adminId?.email : profile.childAdminId?.email || null,
+        adminType: role === "Admin" ? profile.adminId?.adminType : profile.childAdminId?.adminType || null,
         parentAdmin: parentAdmin
           ? {
               userName: parentAdmin.userName,
@@ -531,13 +351,18 @@ exports.getChildAdminProfileDetail = async (req, res) => {
               adminType: parentAdmin.adminType,
             }
           : null,
+        profileSettings: role === "Admin" ? profile.adminId?.profileSettings : profile.childAdminId?.profileSettings || null,
       },
     });
   } catch (error) {
-    console.error("Error fetching child admin profile:", error);
+    console.error("Error fetching profile:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+
+
+
 
 
 

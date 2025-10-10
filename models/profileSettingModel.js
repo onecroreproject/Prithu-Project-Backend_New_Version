@@ -15,9 +15,12 @@ const ProfileSettingsSchema = new mongoose.Schema(
     maritalStatus: { type: String },
     phoneNumber: { type: String },
 
-    // ✅ Add these two
-    profileAvatar: { type: String },        // Cloudinary URL
+    // ✅ Existing avatar fields
+    profileAvatar: { type: String },        // Original Cloudinary URL
     profileAvatarId: { type: String },      // Cloudinary public_id
+
+    // ✅ New field to store modified avatar
+    modifyAvatar: { type: String },         // Background removed or modified avatar URL
 
     theme: { type: String, default: "light" },
     notifications: {
@@ -34,6 +37,5 @@ const ProfileSettingsSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
 
 module.exports = mongoose.model("ProfileSettings", ProfileSettingsSchema, "ProfileSettings");
