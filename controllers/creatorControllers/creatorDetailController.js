@@ -1,5 +1,7 @@
 const Account = require("../../models/accountSchemaModel");
 const Feed = require("../../models/feedModel");
+const ProfileSettings=require('../../models/profileSettingModel');
+const TrendingCreators=require('../../models/treandingCreators');
 
 
 
@@ -80,4 +82,44 @@ exports.getAllCreatorDetails = async (req, res) => {
   }
 };
 
+
+
+exports.getAllTrendingCreators = async (req, res) => {
+  try {
+    // 1️⃣ Get all trending creators
+    const creators = await TrendingCreators.find({}).sort({ trendingScore: -1 });
+
+    // 2️⃣ Build response with profile info
+    const result = await Promise.all(
+      creators.map(async (creator) => {
+        // Find related account
+        const account = await Account.findById(creator.accountId);
+        if (!account) return null;
+
+        // Find profile data using accountId
+        const profile = await ProfileSettings.findOne({ userId: account.userId });
+
+        return {
+          accountId: creator.accountId,
+          userName: profile?.userName || creator.userName || "Unknown",
+          profileAvatar: profile?.profileAvatar || creator.profileAvatar || "",
+          trendingScore: creator.trendingScore || 0,
+          totalVideoViews: creator.totalVideoViews || 0,
+          totalImageViews: creator.totalImageViews || 0,
+          totalLikes: creator.totalLikes || 0,
+          totalShares: creator.totalShares || 0,
+          followerCount: creator.followerCount || 0,
+          lastUpdated: creator.lastUpdated,
+        };
+      })
+    );
+
+    // 3️⃣ Filter out null accounts and send
+    const filtered = result.filter((r) => r !== null);
+    res.status(200).json({ success: true, creators: filtered });
+  } catch (error) {
+    console.error("Error fetching trending creators:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
 

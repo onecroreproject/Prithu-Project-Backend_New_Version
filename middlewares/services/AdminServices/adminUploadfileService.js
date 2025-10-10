@@ -13,7 +13,7 @@ exports.uploadFeed = async ({ language, categoryId, type }, file, userId) => {
   let roleType = "Admin";
 
   if (!userRole) {
-    userRole = await ChildAdmin.findOne({ userId }).select("childAdminType inheritedPermissions");
+    userRole = await ChildAdmin.findById( userId ).select("adminType inheritedPermissions");
     if (!userRole) throw new Error("Only Admins or Child Admins can upload feeds");
     roleType = "Child_Admin";
   }
@@ -54,7 +54,7 @@ exports.uploadFeed = async ({ language, categoryId, type }, file, userId) => {
     createdByAccount: userId,
     contentUrl: fileUrl,
     originalName,
-    fileHash, // ✅ store hash in DB
+    fileHash, 
     roleRef: roleType,
   });
   await newFeed.save();

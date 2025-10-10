@@ -3,11 +3,7 @@ const { v2: cloudinary } = require("cloudinary");
 const Report = require("../models/feedReportModel");
 const Feed = require("../models/feedModel");
 const sendMail = require("../utils/sendMail");
-
-const redisConfig = {
-  host: process.env.REDIS_HOST || "127.0.0.1",
-  port: process.env.REDIS_PORT || 6379,
-};
+const redisConfig = require("../Config/radisConfig");
 
 const deleteQueue = new Queue("delete-reported-files", { redis: redisConfig });
 
@@ -56,5 +52,8 @@ deleteQueue.process(async (job) => {
 
   console.log("✅ Report cleanup completed");
 });
+
+deleteQueue.on("completed", (job) => console.log(`✅ Job completed: ${job.id}`));
+deleteQueue.on("failed", (job, err) => console.error(`❌ Job failed: ${job.id}`, err));
 
 module.exports = deleteQueue;

@@ -122,7 +122,7 @@ exports.adminLogin = async (req, res) => {
       if (!isMatch) return res.status(400).json({ error: "Invalid password" });
 
       payload = {
-        role: admin.adminType,
+        role: "Admin",
         userName: admin.userName,
         userId: admin._id.toString(),
       };
@@ -139,7 +139,8 @@ exports.adminLogin = async (req, res) => {
       payload = {
         role: "Child_Admin",
         userName: child.userName,
-        userId: child.childAdminId.toString(),
+        userId: child._id.toString(),
+        adminCode:child.childAdminId,
       };
 
       // Get granted permissions from child admin

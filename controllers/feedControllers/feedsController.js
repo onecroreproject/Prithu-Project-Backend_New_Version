@@ -12,11 +12,11 @@ const  UserCategory=require('../../models/userModels/userCategotyModel.js');
 const ProfileSettings=require('../../models/profileSettingModel')
 
 
-
 exports.getAllFeedsByUserId = async (req, res) => {
   try {
     const rawUserId = req.Id || req.body.userId;
-    if (!rawUserId) return res.status(404).json({ message: "User ID Required" });
+    if (!rawUserId)
+      return res.status(404).json({ message: "User ID Required" });
 
     const userId = new mongoose.Types.ObjectId(rawUserId);
 
@@ -24,14 +24,12 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const user = await User.findById(userId).select("hiddenPostIds").lean();
     const hiddenPostIds = user?.hiddenPostIds || [];
 
-    // 1️⃣ Aggregate feeds with enrichment
+    // 1️⃣ Aggregate feeds
     const feeds = await Feed.aggregate([
       { $match: { _id: { $nin: hiddenPostIds } } },
-
-      // Sort newest first
       { $sort: { createdAt: -1 } },
 
-      // Lookup creator account
+      // 🔹 Lookup dynamically based on roleRef
       {
         $lookup: {
           from: "Accounts",
@@ -40,20 +38,88 @@ exports.getAllFeedsByUserId = async (req, res) => {
           as: "account",
         },
       },
-      { $unwind: { path: "$account", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "Admins",
+          localField: "createdByAccount",
+          foreignField: "_id",
+          as: "admin",
+        },
+      },
+      {
+        $lookup: {
+          from: "Child_Admins",
+          localField: "createdByAccount",
+          foreignField: "_id",
+          as: "childAdmin",
+        },
+      },
+      {
+        $lookup: {
+          from: "Creators",
+          localField: "createdByAccount",
+          foreignField: "_id",
+          as: "creator",
+        },
+      },
 
-      // Lookup profile
+      // 🔹 Merge correct reference based on roleRef
+      {
+        $addFields: {
+          accountData: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$roleRef", "Admin"] }, then: { $arrayElemAt: ["$admin", 0] } },
+                { case: { $eq: ["$roleRef", "Account"] }, then: { $arrayElemAt: ["$account", 0] } },
+                { case: { $eq: ["$roleRef", "Child_Admin"] }, then: { $arrayElemAt: ["$childAdmin", 0] } },
+                { case: { $eq: ["$roleRef", "Creator"] }, then: { $arrayElemAt: ["$creator", 0] } },
+              ],
+              default: null,
+            },
+          },
+        },
+      },
+
+      // 🔹 Lookup ProfileSettings based on roleRef field mapping
       {
         $lookup: {
           from: "ProfileSettings",
-          localField: "account.userId",
-          foreignField: "userId",
+          let: {
+            adminId: {
+              $cond: [{ $eq: ["$roleRef", "Admin"] }, "$createdByAccount", null],
+            },
+            accountId: {
+              $cond: [{ $eq: ["$roleRef", "Account"] }, "$createdByAccount", null],
+            },
+            childAdminId: {
+              $cond: [{ $eq: ["$roleRef", "Child_Admin"] }, "$createdByAccount", null],
+            },
+            userId: {
+              $cond: [{ $eq: ["$roleRef", "Creator"] }, "$createdByAccount", null],
+            },
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $eq: ["$adminId", "$$adminId"] },
+                    { $eq: ["$accountId", "$$accountId"] },
+                    { $eq: ["$childAdminId", "$$childAdminId"] },
+                    { $eq: ["$userId", "$$userId"] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+            { $project: { userName: 1, profileAvatar: 1 } },
+          ],
           as: "profile",
         },
       },
       { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
 
-      // Lookup counts
+      // 🔹 Likes count
       {
         $lookup: {
           from: "UserFeedActions",
@@ -66,6 +132,22 @@ exports.getAllFeedsByUserId = async (req, res) => {
           as: "likesCount",
         },
       },
+
+      // 🔹 Dislikes
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: "$disLikeFeeds" },
+            { $match: { $expr: { $eq: ["$disLikeFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" },
+          ],
+          as: "dislikesCount",
+        },
+      },
+
+      // 🔹 Downloads
       {
         $lookup: {
           from: "UserFeedActions",
@@ -78,6 +160,8 @@ exports.getAllFeedsByUserId = async (req, res) => {
           as: "downloadsCount",
         },
       },
+
+      // 🔹 Shares
       {
         $lookup: {
           from: "UserFeedActions",
@@ -90,6 +174,8 @@ exports.getAllFeedsByUserId = async (req, res) => {
           as: "sharesCount",
         },
       },
+
+      // 🔹 Views
       {
         $lookup: {
           from: "UserViews",
@@ -101,6 +187,8 @@ exports.getAllFeedsByUserId = async (req, res) => {
           as: "viewsCount",
         },
       },
+
+      // 🔹 Comments
       {
         $lookup: {
           from: "UserComments",
@@ -113,7 +201,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
         },
       },
 
-      // 🔹 Lookup current user's actions (Liked, Saved, Disliked)
+      // 🔹 Current User Actions
       {
         $lookup: {
           from: "UserFeedActions",
@@ -125,19 +213,19 @@ exports.getAllFeedsByUserId = async (req, res) => {
                 isLiked: {
                   $in: [
                     "$$feedId",
-                    { $map: { input: "$likedFeeds", as: "f", in: "$$f.feedId" } },
+                    { $map: { input: { $ifNull: ["$likedFeeds", []] }, as: "f", in: "$$f.feedId" } },
                   ],
                 },
                 isSaved: {
                   $in: [
                     "$$feedId",
-                    { $map: { input: "$savedFeeds", as: "f", in: "$$f.feedId" } },
+                    { $map: { input: { $ifNull: ["$savedFeeds", []] }, as: "f", in: "$$f.feedId" } },
                   ],
                 },
                 isDisliked: {
                   $in: [
                     "$$feedId",
-                    { $map: { input: "$disLikeFeeds", as: "f", in: "$$f.feedId" } },
+                    { $map: { input: { $ifNull: ["$disLikeFeeds", []] }, as: "f", in: "$$f.feedId" } },
                   ],
                 },
               },
@@ -147,24 +235,25 @@ exports.getAllFeedsByUserId = async (req, res) => {
         },
       },
 
-      // Project final fields
+      // 🔹 Final projection
       {
         $project: {
-          accountId: "$account._id",
           feedId: "$_id",
           type: 1,
           language: 1,
           category: 1,
           contentUrl: 1,
+          roleRef: 1,
+          createdByAccount: 1,
           createdAt: 1,
-          likesCount: { $arrayElemAt: ["$likesCount.count", 0] },
-          downloadsCount: { $arrayElemAt: ["$downloadsCount.count", 0] },
-          shareCount: { $arrayElemAt: ["$sharesCount.count", 0] },
-          viewsCount: { $arrayElemAt: ["$viewsCount.count", 0] },
-          commentsCount: { $arrayElemAt: ["$commentsCount.count", 0] },
           userName: "$profile.userName",
           profileAvatar: "$profile.profileAvatar",
-          createdByAccount: 1,
+          likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCount.count", 0] }, 0] },
+          dislikesCount: { $ifNull: [{ $arrayElemAt: ["$dislikesCount.count", 0] }, 0] },
+          downloadsCount: { $ifNull: [{ $arrayElemAt: ["$downloadsCount.count", 0] }, 0] },
+          shareCount: { $ifNull: [{ $arrayElemAt: ["$sharesCount.count", 0] }, 0] },
+          viewsCount: { $ifNull: [{ $arrayElemAt: ["$viewsCount.count", 0] }, 0] },
+          commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCount.count", 0] }, 0] },
           isLiked: { $arrayElemAt: ["$userActions.isLiked", 0] },
           isSaved: { $arrayElemAt: ["$userActions.isSaved", 0] },
           isDisliked: { $arrayElemAt: ["$userActions.isDisliked", 0] },
@@ -172,10 +261,9 @@ exports.getAllFeedsByUserId = async (req, res) => {
       },
     ]);
 
-    // Format timeAgo and contentUrl
+    // Format response with timeAgo
     const enrichedFeeds = feeds.map((feed) => ({
       ...feed,
-      contentUrl: feed.contentUrl,
       timeAgo: feedTimeCalculator(feed.createdAt),
     }));
 
@@ -188,6 +276,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
+
 
 
 

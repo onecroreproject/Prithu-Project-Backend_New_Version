@@ -11,7 +11,7 @@ exports.adminFeedUpload = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
     if (!userId) return res.status(400).json({ message: "User ID is required" });
-
+    console.log(userId)
     const { language, categoryId, type } = req.body;
 
     // Validate inputs

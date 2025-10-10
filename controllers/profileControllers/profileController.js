@@ -258,6 +258,8 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
       return res.status(400).json({ message: "childAdminId is required" });
     }
 
+    console.log("child Admin update")
+
     // ✅ Validate request
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -304,7 +306,7 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
         oldProfile.profileAvatarId !== req.cloudinaryFile.public_id
       ) {
         if (oldProfile?.profileAvatarId) {
-          await deleteFromCloudinary(oldProfile.profileAvatarId);
+          await adminDeleteFromCloudinary(oldProfile.profileAvatarId);
         }
 
         updateData.profileAvatar = req.cloudinaryFile.url;
@@ -440,7 +442,8 @@ exports.getAdminProfileDetail = async (req, res) => {
   try {
     const adminId = req.Id || req.body.adminId;
     if (!adminId) return res.status(400).json({ message: "Admin ID is required" });
-
+    const adminRole =req.role;
+    console.log(adminRole)
     const profile = await Profile.findOne(
       { adminId },
       "bio displayName maritalStatus phoneNumber dateOfBirth profileAvatar timezone "

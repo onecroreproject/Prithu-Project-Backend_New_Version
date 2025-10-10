@@ -9,7 +9,7 @@ const TrendingCreators = require("../models/treandingCreators");
 
 async function computeTrendingCreators() {
   try {
-    console.log("working")
+
     // Define time window for "trending" (last 7 days)
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
@@ -147,7 +147,7 @@ async function computeTrendingCreators() {
 
     // Save/update results in TrendingCreators collection
     for (let creator of trendingCreators) {
-      console.log(creator.trendingScore)
+     
      await TrendingCreators.findOneAndUpdate(
         { accountId: creator._id },
         {
@@ -165,7 +165,7 @@ async function computeTrendingCreators() {
       );
     }
         
-    console.log("Trending creators updated successfully!");
+ 
   } catch (err) {
     console.error("Error computing trending creators:", err);
   }

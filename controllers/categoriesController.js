@@ -166,53 +166,62 @@ exports.getCategoryWithId = async (req, res) => {
 exports.getUserContentCategories = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
-    if (!userId) return res.status(400).json({ message: "userId is required" });
+    if (!userId) {
+      return res.status(400).json({ message: "userId is required" });
+    }
 
     // 1️⃣ Optional user language
     const userLang = await UserLanguage.findOne({ userId }).lean();
     const feedLang = userLang?.feedLanguageCode
       ? getLanguageCode(userLang.feedLanguageCode)
       : null;
-  console.log(feedLang)
-    // 2️⃣ Build match condition
+
+    // 2️⃣ Build match condition (based on feed language)
     const feedMatch = feedLang ? { language: feedLang } : {};
 
-    // 3️⃣ Aggregate feeds → distinct categories → join categories safely
+    // 3️⃣ Aggregate unique string categories
     const categories = await Feed.aggregate([
       { $match: feedMatch },
-      // Convert string category to ObjectId if valid, else keep null
       {
-        $addFields: {
-          categoryObjId: {
-            $cond: [
-              { $and: [
-                { $ne: ["$category", null] },
-                { $regexMatch: { input: { $toString: "$category" }, regex: /^[0-9a-fA-F]{24}$/ } }
-              ] },
-              { $toObjectId: "$category" },
-              null
-            ]
-          }
-        }
+        $group: {
+          _id: "$category", // distinct category strings
+        },
       },
-      { $group: { _id: "$categoryObjId" } }, // distinct categories
       {
-        $lookup: {
-          from: "Categories", // must match actual DB collection name
-          localField: "_id",
-          foreignField: "_id",
-          as: "category"
-        }
+        $project: {
+          _id: 0,
+          name: "$_id",
+        },
       },
-      { $unwind: "$category" },
-      { $project: { _id: "$category._id", name: "$category.name" } },
+      { $sort: { name: 1 } },
     ]);
 
-    if (!categories.length) {
-      return res.status(404).json({ message: "No categories with content found" });
+    // 4️⃣ Optionally enrich categories from a Category collection (if it exists)
+    // Example: match Feed.category (string) with Category.name
+    if (categories.length) {
+      const categoryNames = categories.map((c) => c.name);
+      const matchedCategories = await Category.find(
+        { name: { $in: categoryNames } },
+        { _id: 1, name: 1 }
+      ).lean();
+
+      // Merge matched metadata with the feed categories (if found)
+      categories.forEach((cat) => {
+        const match = matchedCategories.find((m) => m.name === cat.name);
+        if (match) {
+          cat._id = match._id;
+        }
+      });
     }
 
-    // 4️⃣ Send response
+    if (!categories.length) {
+      return res.status(404).json({
+        message: "No categories with content found",
+        categories: [],
+      });
+    }
+
+    // 5️⃣ Send response
     res.status(200).json({
       message: "Categories with content retrieved successfully",
       language: feedLang
@@ -220,12 +229,15 @@ exports.getUserContentCategories = async (req, res) => {
         : { code: null, name: "All Languages" },
       categories,
     });
-
   } catch (error) {
     console.error("Error fetching content categories:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
   }
 };
+
 
 
 

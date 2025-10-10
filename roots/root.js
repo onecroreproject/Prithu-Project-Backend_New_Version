@@ -174,6 +174,7 @@ const {
 const {
   getCreatorDetailWithId,
   getAllCreatorDetails,
+  getAllTrendingCreators,
 } = require('../controllers/creatorControllers/creatorDetailController');
 
 const {
@@ -349,7 +350,7 @@ router.post("/report-post", auth,createFeedReport);
 // router.get('/user/user/subscriptions', auth, getUserSubscriptionPlanWithId);
 
 /*---------------------- User Feed API -------------------------*/
-router.get('/get/all/feeds/user',auth,getAllFeedsByUserId);
+router.get('/get/all/feeds/user',getAllFeedsByUserId);
 router.post('/user/watching/vidoes',auth,userVideoViewCount);
 router.post('/user/image/view/count',auth,userImageViewCount);
 
@@ -422,6 +423,7 @@ router.post(
    adminUploadToCloudinary,
    adminFeedUpload
 );
+
 router.get("/admin/get/all/feed",getAllFeedAdmin);
 
 
@@ -481,6 +483,7 @@ router.get("/admin/user/subscriptionration",getDashUserSubscriptionRatio)
 /* --------------------- Admin Creator API --------------------- */
 router.get('/admin/getall/creators', getAllCreatorDetails);
 router.get('/admin/get/user/detail', getUserProfileDetail);
+router.get ('/admin/get/trending/creator',getAllTrendingCreators);
 // router.get("/admin/users/status", getUserStatus);
 // router.get("/admin/user/detail/by-date", getUsersByDate);
 
@@ -492,9 +495,11 @@ router.get('/admin/get/user/detail', getUserProfileDetail);
 router.get("/admin/childadmin/list",auth,getChildAdmins);
 router.get("/admin/childadmin/permissions/:childAdminId",getChildAdminPermissions);
 router.put("/admin/childadmin/permissions/:id",updateChildAdminPermissions);
+ router.put('/child/admin/profile/detail/update',auth,adminUpload.single('file'),(req, res, next) => { req.baseUrl = "/profile"; next(); },adminUploadToCloudinary,childAdminProfileDetailUpdate);
 
 /* --------------------- Child Admin Feed API --------------------- */
-router.post('/child/admin/feed', adminUpload.array('file'),auth,childAdminFeedUpload);
+
+// router.post('/child/admin/feed', adminUpload.array('file'),auth,childAdminFeedUpload);
 
 
 /* --------------------- Feeds API --------------------- */

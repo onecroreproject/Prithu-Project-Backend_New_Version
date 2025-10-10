@@ -7,13 +7,11 @@ const SessionSchema = new mongoose.Schema({
     required: true 
   },
 
-  deviceId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: "Device", 
-    required: true 
-  },
+  role:{type:String ,required:true},
 
-  refreshToken: { type: String, required: true },
+  deviceId: { type: String,required: true},
+    
+    refreshToken: { type: String, required: true },
 
   isOnline: { type: Boolean, default: false },
   lastSeenAt: { type: Date, default: null },
