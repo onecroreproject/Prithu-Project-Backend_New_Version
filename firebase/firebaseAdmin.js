@@ -17,7 +17,6 @@ if (process.env.FIREBASE_CONFIG) {
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  //databaseURL: "https://prithu-app-35919.firebaseio.com",
 });
 
 console.log("Firebase Admin initialized successfully");
