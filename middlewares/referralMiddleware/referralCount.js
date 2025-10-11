@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const User = require("../../models/userModels/userModel");
 const UserLevel = require("../../models/userModels/userRefferalModels/userReferralLevelModel");
-const UserEarning = require("../../models/userModels/userRefferalModels/referralEarnings");
+const UserEarning = require("../../models/userModels/referralEarnings");
 
 const LEVEL_AMOUNT = 250;
 const MAX_LEVEL = 10;

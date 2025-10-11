@@ -1,6 +1,7 @@
 const Queue = require("bull");
 const UserSubscription = require("../models/subcriptionModels/userSubscreptionModel");
-const redisConfig = require("../Config/radisConfig");
+const redisConfig = require("../Config/redisConfig");
+
 
 const deactivateQueue = new Queue("deactivate-subscriptions", { redis: redisConfig });
 

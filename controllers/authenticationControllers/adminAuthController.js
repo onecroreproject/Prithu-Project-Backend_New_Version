@@ -202,7 +202,7 @@ exports.adminSendOtp = async (req, res) => {
 
     console.log(tempOtp)
 
-    transporter.sendMail(mailOptions, (error, info) => {
+    transporter.sendMailSafe(mailOptions, (error, info) => {
       if (error) {
         console.error('Error sending OTP email:', error);
         return res.status(500).json({ error: 'Failed to send OTP email' });

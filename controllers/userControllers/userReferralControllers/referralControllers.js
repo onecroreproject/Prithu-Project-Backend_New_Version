@@ -1,7 +1,7 @@
 const User = require('../../../models/userModels/userModel');
 const UserLevel = require('../../../models/userModels/userRefferalModels/userReferralLevelModel');
 const ProfileSettings=require('../../../models/profileSettingModel');
-const Withdrawal=require('../../../models/userModels/userRefferalModels/referralEarnings');
+const Withdrawal=require('../../../models/userModels/referralEarnings');
 const mongoose=require('mongoose')
 
 

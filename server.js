@@ -5,16 +5,13 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const path = require("path");
 const http = require("http");
+const startCrons = require("./corn/index");
 
 const root = require("./roots/root");
-const { startWatcher } = require('./middlewares/referralMiddleware/refferalCodeWatcher');
 const { initWebSocket } = require("./middlewares/webSocket");
 
 // Import cron jobs (they schedule automatically)
-// require("./corn/feedCorn");
-// require("./corn/deleteReportedFileAutomatically");
-// require("./corn/deactivateExpireSubcription");
-// require("./corn/creatorTreandSet");
+
 
 const app = express();
 const server = http.createServer(app);
@@ -42,14 +39,13 @@ app.use(cookieParser());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api", root);
 
-// Start referral code watcher
-startWatcher();
+ startCrons()
 
 // MongoDB connection and server start
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
-    server.listen(process.env.SERVER_PORT, () => {
-      console.log(` Server running on port ${process.env.SERVER_PORT}`);
+    server.listen(process.env.PORT || 5000, () => {
+      console.log(` Server running on port ${process.env.PORT}`);
     });
   })
   .catch((err) => {

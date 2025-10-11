@@ -1,6 +1,6 @@
 const Queue = require("bull");
 const Feed = require("../models/feedModel");
-const redisConfig = require("../Config/radisConfig");
+const redisConfig = require("../Config/redisConfig");
 
 const feedQueue = new Queue("feed-posts", { redis: redisConfig });
 

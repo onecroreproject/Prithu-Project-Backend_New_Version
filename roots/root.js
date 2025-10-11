@@ -6,7 +6,7 @@ const path = require('path');
 const { auth } = require('../middlewares/jwtAuthentication');
 const cloudinary = require('cloudinary').v2;
 const fs = require('fs');
-const{ userUpload, userUploadToCloudinary,userProcessFeedFile,deleteFromCloudinary, updateOnCloudinary }=require('../middlewares/services/usercloudnaryUpload');
+const{ userUpload, userUploadToCloudinary,userProcessFeedFile}=require('../middlewares/services/userCloudnaryUpload');
 const {adminUploadToCloudinary,adminProcessFeedFile,adminUpload}=require('../middlewares/services/adminCloudnaryUpload');
 
 
@@ -324,7 +324,7 @@ router.post('/user/hide/feed',auth,userHideFeed);
 router.get("/user/notintrested/category",auth,getUserCategory);
 
 // /* --------------------- User Subscription --------------------- */
-router.post('/user/plan/subscription', auth,subscribePlan);
+router.post('/user/plan/subscription',subscribePlan);
 router.put('/user/cancel/subscription',auth,cancelSubscription);
 router.get('/user/getall/subscriptions', getAllPlans);
 router.get('/user/user/subscriptions', auth,getUserSubscriptionPlanWithId);

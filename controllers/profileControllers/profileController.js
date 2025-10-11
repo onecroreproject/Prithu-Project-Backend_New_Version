@@ -6,8 +6,9 @@ const Admin = require("../../models/adminModels/adminModel");
 const ChildAdmin = require("../../models/childAdminModel");
 const UserLanguage = require('../../models/userModels/userLanguageModel');
 const { calculateAge } = require("../../middlewares/helper/calculateAge");
-const { userDeleteFromCloudinary } = require("../../middlewares/services/usercloudnaryUpload");
+const { userDeleteFromCloudinary } = require("../../middlewares/services/userCloudnaryUpload");
 const { adminDeleteFromCloudinary } = require("../../middlewares/services/adminCloudnaryUpload");
+const { removeImageBackground } = require("../../middlewares/helper/backgroundRemover"); 
 
 
 // ------------------- Validation Middleware -------------------

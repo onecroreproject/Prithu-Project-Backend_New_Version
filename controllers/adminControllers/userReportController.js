@@ -6,7 +6,7 @@ const Report =require("../../models/feedReportModel");
 const User =require("../../models/userModels/userModel");
 const Feed=require("../../models/feedModel");
 const Account=require('../../models/accountSchemaModel');
-const sendMail=require("../../utils/sendMail");
+const {sendMailSafe}=require("../../utils/sendMail");
 
 
 exports.addReportQuestion = async (req, res) => {
@@ -364,7 +364,7 @@ exports.adminTakeActionOnReport = async (req, res) => {
           const user = await User.findById(account.userId);
           if (user?.email) {
             const subject = "Action Taken on Your Feed";
-            const text = `Hello ${user.userName},
+            const html = `Hello ${user.userName},
 
 An admin has reviewed a report against your feed and taken action.
 
@@ -375,10 +375,10 @@ An admin has reviewed a report against your feed and taken action.
 Thank you,
 Support Team`;
 
-            await sendMail({
+            await sendMailSafe({
               to: user.email,
               subject,
-              text,
+              html,
             });
           }
         }

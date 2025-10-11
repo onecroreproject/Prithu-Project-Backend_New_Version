@@ -1,6 +1,6 @@
 // models/Report.js
 const mongoose = require("mongoose");
-const sendMail = require("../utils/sendMail"); 
+const {sendMailSafe} = require("../utils/sendMail"); 
 
 const ReportAnswerSchema = new mongoose.Schema({
   questionId: { type: mongoose.Schema.Types.ObjectId, ref: "ReportQuestion", required: true },
@@ -38,7 +38,7 @@ ReportSchema.post("save", async function (doc) {
 
       if (populatedDoc.reportedBy?.email) {
         const subject = "Your Report Status Has Been Updated";
-        const text = `Hello ${populatedDoc.reportedBy.username},
+        const html = `Hello ${populatedDoc.reportedBy.username},
 
 Your report regarding ${populatedDoc.targetType} has been updated.
 
@@ -49,7 +49,7 @@ Your report regarding ${populatedDoc.targetType} has been updated.
 Thank you,
 Support Team`;
 
-        await sendMail({ to: populatedDoc.reportedBy.email, subject, text });
+        await sendMailSafe({ to: populatedDoc.reportedBy.email, subject, html });
 
         populatedDoc.notified = true;
         await populatedDoc.save();

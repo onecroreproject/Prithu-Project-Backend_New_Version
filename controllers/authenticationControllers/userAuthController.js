@@ -5,26 +5,15 @@ require('dotenv').config();
 const bcrypt = require('bcrypt');
 const crypto = require("crypto"); 
 const otpStore=new Map();
-const {processReferral}=require('../../middlewares/referralMiddleware/referralCount');
 const {startUpProcessCheck}=require('../../middlewares/services/User Services/userStartUpProcessHelper');
 const Device = require("../../models/userModels/userSession-Device/deviceModel");
 const Session = require("../../models/userModels/userSession-Device/sessionModel");
-const UserReferral=require('../../models/userModels/userRefferalModels/userReferralModel');
+const UserReferral=require('../../models/userModels/userReferralModel');
 const { v4: uuidv4 } = require("uuid");
-const sendMail = require('../../utils/sendMail');
+const {sendMailSafeSafe} = require('../../utils/sendMail');
 
 
 
-
-
-
-/**
- * createNewUser(req, res)
- * - creates user
- * - assigns a unique referral code
- * - atomically increments referrer's usage if referralCode provided (max 2)
- * - places referral via placeReferral (idempotent)
- */
 
 exports.createNewUser = async (req, res) => {
   try {
@@ -67,19 +56,18 @@ exports.createNewUser = async (req, res) => {
     }
 
     // ✅ Send Welcome Email
-    try {
-      await sendMail({
-        to: email,
-        subject: "Welcome to Our Platform!",
-        text: `Hi ${username},\n\nWelcome to our platform! Your account has been successfully created.\n\nYour referral code: ${generatedCode}`,
-        html: `<h2>Hi ${username},</h2>
-               <p>Welcome to our platform! Your account has been successfully created.</p>
-               <p><strong>Your referral code:</strong> ${generatedCode}</p>`
-      });
-      console.log("Welcome email sent to:", email);
-    } catch (mailErr) {
-      console.error("Failed to send welcome email:", mailErr);
-    }
+   try {
+  await sendMailSafeSafe({
+    to: email,
+    subject: "Welcome to Our Platform!",
+    html: `<h2>Hi ${username},</h2>
+           <p>Welcome! Your account has been successfully created.</p>
+           <p><strong>Your referral code:</strong> ${generatedCode}</p>`,
+  });
+  console.log("Welcome email sent to:", email);
+} catch (err) {
+  console.error("Failed to send welcome email:", err);
+}
 
     res.status(201).json({ message: "User registered", referralCode: generatedCode });
   } catch (err) {
@@ -88,11 +76,7 @@ exports.createNewUser = async (req, res) => {
   }
 };
 
-// On subscription payment success
-exports.activateSubscription = async (userId) => {
-  await User.findByIdAndUpdate(userId, { $set: { "subscription.isActive": true, referralCodeIsValid: true } });
-  await processReferral(userId);
-};
+
 
 
 
@@ -231,11 +215,11 @@ exports.userSendOtp = async (req, res) => {
     }
  
     // Send email using reusable utility
-    await sendMail({
-      to: email,
-      subject: "Prithu Password Reset OTP",
-      text: `Your OTP for password reset is: ${tempOtp}. It is valid for 5 minutes.`,
-    });
+   await sendMailSafeSafe({
+  to: email,
+  subject: "Password Reset OTP",
+  html: `Your OTP for password reset is: ${tempOtp}. It is valid for 5 minutes.`,
+});
  
     console.log("OTP sent:", tempOtp);
     return res.json({ message: "OTP sent to email" });

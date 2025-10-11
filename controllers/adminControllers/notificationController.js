@@ -1,5 +1,5 @@
 
-const admin = require('../../lib/fireBaseAdmin');
+const admin = require('../../firebase/firebaseAdmin');
 const User = require('../../models/userModels/userModel');
 const AdminNotification = require("../../models/adminModels/adminNotificationSchema");
 const UserNotification = require("../../models/userModels/userNotificationSchema");

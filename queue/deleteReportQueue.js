@@ -2,8 +2,9 @@ const Queue = require("bull");
 const { v2: cloudinary } = require("cloudinary");
 const Report = require("../models/feedReportModel");
 const Feed = require("../models/feedModel");
-const sendMail = require("../utils/sendMail");
-const redisConfig = require("../Config/radisConfig");
+const {sendMailSafesafe} = require("../utils/sendMail");
+const redisConfig = require("../Config/redisConfig");
+const myQueue=require("../queue")
 
 const deleteQueue = new Queue("delete-reported-files", { redis: redisConfig });
 
@@ -38,10 +39,10 @@ deleteQueue.process(async (job) => {
     await Feed.deleteOne({ _id: feed._id });
 
     if (feed.createdBy?.email) {
-      await sendMail({
+      await sendMailSafesafe({
         to: feed.createdBy.email,
         subject: "Feed Automatically Removed After Report",
-        text: `Hello ${feed.createdBy.userName || "User"},\n\nYour feed "${feed.title}" was removed after 10 days.\n\nThank you.`
+        html: `Hello ${feed.createdBy.userName || "User"},\n\nYour feed "${feed.title}" was removed after 10 days.\n\nThank you.`
       });
     }
 

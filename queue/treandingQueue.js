@@ -1,6 +1,6 @@
 const Queue = require("bull");
 const computeTrendingCreators = require("../middlewares/computeTreandingCreators");
-const redisConfig = require("../Config/radisConfig");
+const redisConfig = require("../Config/redisConfig");
 
 
 const trendingQueue = new Queue("trending-creators", { redis: redisConfig });
