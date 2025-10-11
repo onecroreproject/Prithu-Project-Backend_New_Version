@@ -4,6 +4,9 @@ let serviceAccount;
 if (process.env.FIREBASE_CONFIG) {
   try {
     serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+    if (serviceAccount.private_key) {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    }
   } catch (err) {
     console.error("Failed to parse FIREBASE_CONFIG:", err);
     process.exit(1);
