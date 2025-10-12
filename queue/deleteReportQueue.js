@@ -7,11 +7,11 @@ const redisConfig = require("../Config/redisConfig");
 const myQueue=require("../queue")
 
 const redisOptions = process.env.REDIS_URL
-  ? process.env.REDIS_URL
-  : {
-      host: process.env.REDIS_HOST || "127.0.0.1",
-      port: process.env.REDIS_PORT || 6379,
-    };
+  // ? process.env.REDIS_URL
+  // : {
+  //     host: process.env.REDIS_HOST || "127.0.0.1",
+  //     port: process.env.REDIS_PORT || 6379,
+  //   };
 
 const deleteQueue = new Queue("feed-posts", { redis: redisOptions });
 
