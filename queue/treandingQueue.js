@@ -1,16 +1,9 @@
-const Queue = require("bull");
 const computeTrendingCreators = require("../middlewares/computeTreandingCreators");
-const redisConfig = require("../Config/redisConfig");
+const createQueue =require("../queue.js")
 
-console.log(process.env.REDIS_URL)
-const redisOptions = process.env.REDIS_URL
-  // ? process.env.REDIS_URL
-  // : {
-  //     host: process.env.REDIS_HOST || "127.0.0.1",
-  //     port: process.env.REDIS_PORT || 6379,
-  //   };
 
-const trendingQueue = new Queue("feed-posts", { redis: redisOptions });
+
+const trendingQueue = createQueue("trending-creators")
 
 trendingQueue.process(async (job) => { // <-- include job
   console.log("🔹 Processing trending creators job...", job.id);

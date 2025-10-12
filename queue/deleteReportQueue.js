@@ -1,19 +1,12 @@
-const Queue = require("bull");
 const { v2: cloudinary } = require("cloudinary");
 const Report = require("../models/feedReportModel");
 const Feed = require("../models/feedModel");
 const {sendMailSafesafe} = require("../utils/sendMail");
-const redisConfig = require("../Config/redisConfig");
-const myQueue=require("../queue")
+const createQueue =require("../queue.js")
 
-const redisOptions = process.env.REDIS_URL
-  // ? process.env.REDIS_URL
-  // : {
-  //     host: process.env.REDIS_HOST || "127.0.0.1",
-  //     port: process.env.REDIS_PORT || 6379,
-  //   };
 
-const deleteQueue = new Queue("feed-posts", { redis: redisOptions });
+const deleteQueue = createQueue("delete-reports")
+
 
 const extractPublicId = (url) => {
   if (!url) return null;
