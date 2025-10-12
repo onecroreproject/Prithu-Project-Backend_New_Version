@@ -3,13 +3,14 @@ const computeTrendingCreators = require("../middlewares/computeTreandingCreators
 const redisConfig = require("../Config/redisConfig");
 
 
-const trendingQueue = new Queue("feed-posts", {
-  redis: {
-    host: process.env.REDIS_HOST || "127.0.0.1",
-    port: process.env.REDIS_PORT || 6379,
-    url: process.env.REDIS_URL, // Render uses this
-  },
-});
+const redisOptions = process.env.REDIS_URL
+  ? process.env.REDIS_URL
+  : {
+      host: process.env.REDIS_HOST || "127.0.0.1",
+      port: process.env.REDIS_PORT || 6379,
+    };
+
+const trendingQueue = new Queue("feed-posts", { redis: redisOptions });
 
 trendingQueue.process(async (job) => { // <-- include job
   console.log("🔹 Processing trending creators job...", job.id);

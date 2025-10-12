@@ -3,13 +3,15 @@ const UserSubscription = require("../models/subcriptionModels/userSubscreptionMo
 const redisConfig = require("../Config/redisConfig");
 
 
-const deactivateQueue = new Queue("feed-posts", {
-  redis: {
-    host: process.env.REDIS_HOST || "127.0.0.1",
-    port: process.env.REDIS_PORT || 6379,
-    url: process.env.REDIS_URL, // Render uses this
-  },
-});
+const redisOptions = process.env.REDIS_URL
+  ? process.env.REDIS_URL
+  : {
+      host: process.env.REDIS_HOST || "127.0.0.1",
+      port: process.env.REDIS_PORT || 6379,
+    };
+
+const deactivateQueue = new Queue("feed-posts", { redis: redisOptions });
+
 deactivateQueue.process(async (job) => {
   console.log("🔹 Running subscription deactivation job...", job.id);
   const now = new Date();

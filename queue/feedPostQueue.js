@@ -2,14 +2,14 @@ const Queue = require("bull");
 const Feed = require("../models/feedModel");
 const redisConfig = require("../Config/redisConfig");
 
-// Ensure correct Redis options for Bull
-const feedQueue = new Queue("feed-posts", {
-  redis: {
-    host: process.env.REDIS_HOST || "127.0.0.1",
-    port: process.env.REDIS_PORT || 6379,
-    url: process.env.REDIS_URL, // Render uses this
-  },
-});
+const redisOptions = process.env.REDIS_URL
+  ? process.env.REDIS_URL
+  : {
+      host: process.env.REDIS_HOST || "127.0.0.1",
+      port: process.env.REDIS_PORT || 6379,
+    };
+
+const feedQueue = new Queue("feed-posts", { redis: redisOptions });
 
 feedQueue.process(async (job) => {
   console.log("🔹 Processing feed-posts job...", job.id);
