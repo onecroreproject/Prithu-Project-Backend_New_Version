@@ -2,7 +2,7 @@ const Queue = require("bull");
 const computeTrendingCreators = require("../middlewares/computeTreandingCreators");
 const redisConfig = require("../Config/redisConfig");
 
-
+console.log(process.env.REDIS_URL)
 const redisOptions = process.env.REDIS_URL
   ? process.env.REDIS_URL
   : {
