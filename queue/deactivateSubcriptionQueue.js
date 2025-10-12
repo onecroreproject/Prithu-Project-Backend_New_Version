@@ -3,7 +3,7 @@ const UserSubscription = require("../models/subcriptionModels/userSubscreptionMo
 const redisConfig = require("../Config/redisConfig");
 
 
-const feedQueue = new Queue("feed-posts", {
+const deactivateQueue = new Queue("feed-posts", {
   redis: {
     host: process.env.REDIS_HOST || "127.0.0.1",
     port: process.env.REDIS_PORT || 6379,
