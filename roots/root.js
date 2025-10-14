@@ -244,10 +244,10 @@ const{
 }=require("../controllers/userControllers/userReferralControllers/referralControllers")
 
 const{
-  addReportQuestion,
-  createReportType,
-  getStartQuestion,
-  getNextQuestion,
+addReportQuestion,
+createReportType,
+getStartQuestion,
+getNextQuestion,
 getReportTypes,
 createFeedReport,
 updateReportStatus,

@@ -10,6 +10,7 @@ exports.uploadFeed = async ({ language, categoryId, type }, file, userId) => {
 
   // Determine role
   let userRole = await Admin.findById(userId).select("adminType role");
+  console.log(userRole)
   let roleType = "Admin";
 
   if (!userRole) {

@@ -87,7 +87,7 @@ exports.createNewUser = async (req, res) => {
 exports.userLogin = async (req, res) => {
   try {
     const { identifier, password, role, roleRef, deviceId, deviceType } = req.body;
-
+console.log(identifier, password)
     // 1️⃣ Find user
     const user = await User.findOne({
       $or: [{ userName: identifier }, { email: identifier }],

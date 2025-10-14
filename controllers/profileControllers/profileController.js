@@ -298,6 +298,8 @@ exports.getAdminProfileDetail = async (req, res) => {
     const userId = req.Id;
     const role = req.role; 
 
+    console.log({userId,role})
+
     if (!userId || !role) {
       return res.status(400).json({ message: "User ID and role are required" });
     }
@@ -317,44 +319,49 @@ exports.getAdminProfileDetail = async (req, res) => {
     } else {
       return res.status(403).json({ message: "Unauthorized role" });
     }
+const profile = await Profile.findOne(profileQuery)
+  .populate(populateOptions)
+  .lean();
 
-    const profile = await Profile.findOne(profileQuery)
-      .populate(populateOptions)
-      .lean();
+if (!profile) {
+  return res.status(404).json({
+    message: `${profileType} profile not found`,
+    profile: null
+  });
+}
 
-    if (!profile) return res.status(404).json({ message: `${profileType} profile not found` });
+// Fetch parent admin if Child_Admin
+let parentAdmin = null;
+if (role === "Child_Admin" && profile.childAdminId?.parentAdminId) {
+  parentAdmin = await Admin.findById(profile.childAdminId.parentAdminId)
+    .select("userName email adminType")
+    .lean();
+}
 
-    // Fetch parent admin if Child_Admin
-    let parentAdmin = null;
-    if (role === "Child_Admin" && profile.childAdminId?.parentAdminId) {
-      parentAdmin = await Admin.findById(profile.childAdminId.parentAdminId)
-        .select("userName email adminType")
-        .lean();
-    }
+return res.status(200).json({
+  message: `${profileType} profile fetched successfully`,
+  profile: {
+    bio: profile.bio || null,
+    displayName: profile.displayName || null,
+    maritalStatus: profile.maritalStatus || null,
+    phoneNumber: profile.phoneNumber || null,
+    dateOfBirth: profile.dateOfBirth || null,
+    userName: role === "Admin" ? profile.adminId?.userName : profile.childAdminId?.userName || null,
+    profileAvatar: profile.profileAvatar || null,
+    timezone: profile.timezone || null,
+    userEmail: role === "Admin" ? profile.adminId?.email : profile.childAdminId?.email || null,
+    adminType: role === "Admin" ? profile.adminId?.adminType : profile.childAdminId?.adminType || null,
+    parentAdmin: parentAdmin
+      ? {
+          userName: parentAdmin.userName,
+          email: parentAdmin.email,
+          adminType: parentAdmin.adminType,
+        }
+      : null,
+    profileSettings: role === "Admin" ? profile.adminId?.profileSettings : profile.childAdminId?.profileSettings || null,
+  },
+});
 
-    return res.status(200).json({
-      message: `${profileType} profile fetched successfully`,
-      profile: {
-        bio: profile.bio || null,
-        displayName: profile.displayName || null,
-        maritalStatus: profile.maritalStatus || null,
-        phoneNumber: profile.phoneNumber || null,
-        dateOfBirth: profile.dateOfBirth || null,
-        userName: role === "Admin" ? profile.adminId?.userName : profile.childAdminId?.userName || null,
-        profileAvatar: profile.profileAvatar || null,
-        timezone: profile.timezone || null,
-        userEmail: role === "Admin" ? profile.adminId?.email : profile.childAdminId?.email || null,
-        adminType: role === "Admin" ? profile.adminId?.adminType : profile.childAdminId?.adminType || null,
-        parentAdmin: parentAdmin
-          ? {
-              userName: parentAdmin.userName,
-              email: parentAdmin.email,
-              adminType: parentAdmin.adminType,
-            }
-          : null,
-        profileSettings: role === "Admin" ? profile.adminId?.profileSettings : profile.childAdminId?.profileSettings || null,
-      },
-    });
   } catch (error) {
     console.error("Error fetching profile:", error);
     return res.status(500).json({ message: "Internal server error" });
