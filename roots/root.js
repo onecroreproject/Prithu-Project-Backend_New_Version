@@ -270,6 +270,10 @@ const {
   getChildAdmins,
   getChildAdminPermissions,
   updateChildAdminPermissions,
+  getChildAdminById,
+  blockChildAdmin,
+  deleteChildAdmin,
+
 }=require('../controllers/adminControllers/adminChildAdminController');
 
 const computeTrendingCreators =require('../middlewares/computeTreandingCreators')
@@ -495,7 +499,10 @@ router.get ('/admin/get/trending/creator',getAllTrendingCreators);
 router.get("/admin/childadmin/list",auth,getChildAdmins);
 router.get("/admin/childadmin/permissions/:childAdminId",getChildAdminPermissions);
 router.put("/admin/childadmin/permissions/:id",updateChildAdminPermissions);
- router.put('/child/admin/profile/detail/update',auth,adminUpload.single('file'),(req, res, next) => { req.baseUrl = "/profile"; next(); },adminUploadToCloudinary,childAdminProfileDetailUpdate);
+router.put('/child/admin/profile/detail/update',auth,adminUpload.single('file'),(req, res, next) => { req.baseUrl = "/profile"; next(); },adminUploadToCloudinary,childAdminProfileDetailUpdate);
+router.get("/child/admin/:id", getChildAdminById);
+router.patch("/block/child/admin/:id", blockChildAdmin);
+router.delete("/delete/child/admin/:id", deleteChildAdmin);
 
 /* --------------------- Child Admin Feed API --------------------- */
 

@@ -80,8 +80,8 @@ exports.newAdmin = async (req, res) => {
     const admin = new Admin({
       userName: username,
       email,
-      password: passwordHash,
-      adminType
+      passwordHash: passwordHash,
+      adminType:adminType
     });
     await admin.save();
 

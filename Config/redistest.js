@@ -1,27 +1,31 @@
 const Redis = require("ioredis");
 
-// Replace with your Render Redis URL
-const redis = new Redis("redis://red-d3l7ip1r0fns73f4g1eg:6379");
+// Use your Render Key Value URL
+const REDIS_URL = "redis://red-d3li7q8gjchc73ce7jl0:D7OpD8AiQlFK0VKoGkm6sKD3byreCF6k@red-d3li7q8gjchc73ce7jl0:6379";
 
-redis.on("connect", () => {
-  console.log("✅ Connected to Redis successfully!");
-});
+// Create ioredis client
+const redis = new Redis(REDIS_URL);
 
-redis.on("error", (err) => {
-  console.error("❌ Redis connection error:", err);
-});
+redis.on("connect", () => console.log("✅ Connected to Redis!"));
+redis.on("error", (err) => console.error("❌ Redis error:", err));
 
-// Test setting and getting a value
-async function testRedis() {
+(async () => {
   try {
+    // Set a key
     await redis.set("testKey", "Hello Render Redis!");
+    
+    // Get the key
     const value = await redis.get("testKey");
     console.log("Value from Redis:", value);
-    process.exit(0);
+
+    // Delete the key
+    await redis.del("testKey");
+    
+    console.log("✅ Redis test completed");
   } catch (err) {
     console.error(err);
-    process.exit(1);
+  } finally {
+    // Quit connection
+    redis.quit();
   }
-}
-
-testRedis();
+})();

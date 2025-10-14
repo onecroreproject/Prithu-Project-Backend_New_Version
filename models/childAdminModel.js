@@ -3,18 +3,18 @@ const mongoose = require("mongoose");
 // ✅ Submenu permission schema
 const subPermissionSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true }, // e.g. "User Analytics"
+    name: { type: String, required: true },
     permission: {
       type: String,
       required: true,
       enum: [
-        "canManageChildAdminsCreation", // Admin
-        "canManageChildAdminsPermissions",       // User Profile
-        "canManageUsersDetail",    // Creator Profile
-        "canManageUsersAnalytics",       // Feeds Info
-        "canManageUsersFeedReports"     // Subscriptions Info
-      ]
-    }
+        "canManageChildAdminsCreation",
+        "canManageChildAdminsPermissions",
+        "canManageUsersDetail",
+        "canManageUsersAnalytics",
+        "canManageUsersFeedReports",
+      ],
+    },
   },
   { _id: false }
 );
@@ -22,7 +22,7 @@ const subPermissionSchema = new mongoose.Schema(
 // ✅ Main menu permission schema
 const menuPermissionSchema = new mongoose.Schema(
   {
-    mainMenu: { type: String, required: true },       // e.g. "User Profile"
+    mainMenu: { type: String, required: true },
     mainPermission: {
       type: String,
       enum: [
@@ -31,31 +31,51 @@ const menuPermissionSchema = new mongoose.Schema(
         "canManageUsers",
         "canManageCreators",
         "canManageFeeds",
-        "canManageSettings"
+        "canManageSettings",
       ],
-      default: null
+      default: null,
     },
-    subPermissions: [subPermissionSchema]
+    subPermissions: {
+      type: [subPermissionSchema],
+      default: [],
+    },
   },
   { _id: false }
 );
 
-// ✅ Child Admin Schema (excerpt)
-const childAdminSchema = new mongoose.Schema({
-  userName: { type: String, required: true, unique: true, trim: true },
-  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-  passwordHash: { type: String, required: true },
-  parentAdminId: { type: mongoose.Schema.Types.ObjectId, ref: "Admin", required: true },
+// ✅ Child Admin Schema
+const childAdminSchema = new mongoose.Schema(
+  {
+    userName: { type: String, required: true, unique: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    passwordHash: { type: String, required: true },
+    parentAdminId: { type: mongoose.Schema.Types.ObjectId, ref: "Admin", required: true },
 
-  // Menu permissions with submenu support
-  menuPermissions: [menuPermissionSchema],
+    // Unique childAdminId (string) to prevent duplicates
+    childAdminId: { 
+      type: String, 
+      unique: true, 
+      default: () => new mongoose.Types.ObjectId().toString() 
+    },
 
-  // Flat permissions for fast access
-  grantedPermissions: [String],
-  ungrantedPermissions: [String],
-  
-  isActive: { type: Boolean, default: true },
-  isApprovedByParent: { type: Boolean, default: false },
-}, { timestamps: true });
+    menuPermissions: {
+      type: [menuPermissionSchema],
+      default: [],
+    },
 
-module.exports = mongoose.model("ChildAdmin", childAdminSchema,"ChildAdmins");
+    grantedPermissions: { type: [String], default: [] },
+    ungrantedPermissions: { type: [String], default: [] },
+
+    isActive: { type: Boolean, default: true },
+    isApprovedByParent: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
+
+
+// Include virtuals in JSON output
+childAdminSchema.set("toJSON", { virtuals: true });
+childAdminSchema.set("toObject", { virtuals: true });
+
+module.exports = mongoose.model("ChildAdmin", childAdminSchema, "ChildAdmins");
