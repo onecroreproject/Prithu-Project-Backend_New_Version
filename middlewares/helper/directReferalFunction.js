@@ -2,7 +2,7 @@ const User = require("../../models/userModels/userModel");
 const UserSubscription = require("../../models/subcriptionModels/userSubscreptionModel");
 const UserEarning = require("../../models/userModels/referralEarnings");
 const UserReferral = require("../../models/userModels/userReferralModel");
-const {sendMailSafeSafe} = require("../../utils/sendMail");
+const {sendTemplateEmail} = require("../../utils/templateMailer");
 const Withdrawal =require("../../models/userModels/withdrawal");
 
 
@@ -97,16 +97,23 @@ exports.handleReferralReward = async (req, res) => {
     await UserReferral.findOneAndUpdate({ parentId: referrerId }, { $pull: { childIds: userId } });
 
     if (referrer?.email)
-      await sendMailSafe(
-        referrer.email,
-        "Referral Subscription Expired",
-        referralExpiredReferrerMail(referrer.userName, currentUser.userName, currentUser.referralCode)
-      );
+      await sendTemplateEmail({
+  templateName: "SubscriptionExpired.html", 
+  to: referrer.email,
+  subject: "Referral Subscription Expired",
+  placeholders: {
+    referrerName: referrer.userName,
+    referredUserName: currentUser.userName,
+    referralCode: currentUser.referralCode,
+  },
+  embedLogo: true,
+});
+
 
     if (currentUser?.email)
       await sendMailSafe(
         currentUser.email,
-        "Your Referral Link Has Been Reset",
+        "Your Referral Link Has Been Expired",
         referralExpiredUserMail(currentUser.userName, referrer?.userName)
       );
 

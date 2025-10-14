@@ -156,38 +156,50 @@
     }
   </style>
 </head>
-
 <body>
   <div class="email-container">
+    <!-- Header -->
     <div class="header">
       <div class="logo-text-container">
-        <img src="C:\Users\user\Pictures\prithu.png" alt="Prithu Logo" class="logo" />
+        <img src="https://res.cloudinary.com/dzp2c7ed9/image/upload/v1760440686/feeds/images/gs6sr8k6ofthrbrqmvx9.jpg" alt="Prithu Logo" class="logo" />
         <h1>Prithu</h1>
       </div>
     </div>
 
+    <!-- Content -->
     <div class="content">
       <h2>Hi {userName},</h2>
 
-      <p>Great news! Your <strong>Prithu Trial Plan</strong> has been successfully activated.
+      <p>Great news! Your <strong>{planType} Trial Plan</strong> has been successfully activated.
       You can now explore all the amazing features of Prithu Premium for a limited time, absolutely free.</p>
 
-      <p>Here’s what you can enjoy during your trial:</p>
+      <p><strong>Trial Details:</strong></p>
+      <ul style="font-size: 16px; margin-left: -10px;">
+        <li>Plan Type: {planType}</li>
+        <li>Start Date: {startDate}</li>
+        <li>End Date: {endDate}</li>
+      </ul>
 
+      <p>Here’s what you can enjoy during your trial:</p>
       <ul>
-       <li>📸<strong>Post & Share</strong> your favorite moments through images and videos.</li>
-       <li>❤️<strong>Like, Comment & Download</strong> the content that inspires you.</li>
-       <li>🚀<strong>Discover What’s Trending</strong> — stay updated with the latest viral posts.</li>
+        <li>📸 <strong>Post & Share</strong> your favorite moments through images and videos.</li>
+        <li>❤️ <strong>Like, Comment & Download</strong> the content that inspires you.</li>
+        <li>🚀 <strong>Discover What’s Trending</strong> — stay updated with the latest viral posts.</li>
       </ul>
 
       <p style="text-align:center; margin-top: -18px">
         <a href="https://www.prithu.com/home" class="cta-button">Go to your feed</a>
       </p>
 
-      <p style="margin-top: -8px">When your trial ends, you’ll have the option to upgrade to full Premium and continue enjoying all features without interruption.</p>
+      <p style="margin-top: -8px">
+        When your trial ends on <strong>{endDate}</strong>, you’ll have the option to upgrade to full Premium 
+        and continue enjoying all features without interruption.
+      </p>
+
       <p style="text-align:center;"><strong>Warm regards,<br>The Prithu Team</strong></p>
     </div>
 
+    <!-- Footer -->
     <div class="footer">
       <p><a href="mailto:contact@prithu.in" style="color: black;">info@prithu.in</a></p>
       <p>If you wish to unsubscribe, <a href="#" style="color: black;">let us know!</a></p>
@@ -195,4 +207,5 @@
     </div>
   </div>
 </body>
+
 </html>

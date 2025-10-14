@@ -66,6 +66,7 @@ exports.createNewUser = async (req, res) => {
           password, 
           referralCode: generatedCode,
         },
+         embedLogo: true,
       });
       console.log("✅ Registration confirmation email sent to:", email);
     } catch (err) {
@@ -208,7 +209,7 @@ exports.userLogin = async (req, res) => {
 
 
 
-// Request Password Reset OTP
+
 
 
 
@@ -347,6 +348,16 @@ exports.userPasswordReset = async (req, res) => {
     user.otpExpiresAt = undefined;
 
     await user.save();
+
+      await sendTemplateEmail({
+      templateName: "password-reset-sucessfull.html", 
+      to: user.email,
+      subject: "Your Prithu Password Has Been Reset",
+      placeholders: {
+        username: user.userName,
+      },
+      embedLogo: true, 
+    });
 
     res.json({ message: 'Password reset successful' });
   } catch (error) {

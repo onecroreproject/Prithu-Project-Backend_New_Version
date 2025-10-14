@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Prithu Trial Ended</title>
+  <title>Prithu Trial Already Active</title>
   <style>
     body {
       margin: 0;
@@ -41,23 +41,16 @@
       font-family: serif;
     }
 
-   /* Add rotation animation */
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
 
-/* Apply the animation to your logo */
-.header img.logo {
-  width: 65px;
-  height: auto;
-  animation: spin 4s linear infinite; /* 4s = rotation speed */
-}
-
+    .header img.logo {
+      width: 65px;
+      height: auto;
+      animation: spin 4s linear infinite;
+    }
 
     .header h1 {
       margin: 0;
@@ -156,9 +149,9 @@
     }
   </style>
 </head>
-
 <body>
   <div class="email-container">
+    <!-- Header -->
     <div class="header">
       <div class="logo-text-container">
         <img src="https://res.cloudinary.com/dzp2c7ed9/image/upload/v1760440686/feeds/images/gs6sr8k6ofthrbrqmvx9.jpg" alt="Prithu Logo" class="logo" />
@@ -166,29 +159,33 @@
       </div>
     </div>
 
+    <!-- Content -->
     <div class="content">
       <h2>Hi {userName},</h2>
 
-      <p>We hope you enjoyed exploring <strong>Prithu Premium</strong>! Your trial plan has now expired. </p>
+      <p>It looks like you are already enrolled in a <strong>{planType} Trial Plan</strong>.</p>
 
-      <p> Note: The trial plan can only be used once per user, so this was your one-time opportunity to experience Premium for free.</p>
+      <p>Your trial will end on <strong>{endDate}</strong>, which is in <strong>{remainingDays} day(s)</strong>.</p>
 
-      <p>But don’t worry — you can upgrade to a full Premium subscription anytime to continue enjoying all the awesome features:</p>
-
+      <p>During this trial, you can continue enjoying all premium features:</p>
       <ul>
-        <li>📸<strong>Post & Share</strong> your favorite moments through images and videos.</li>
-        <li>❤️<strong>Like, Comment & Download</strong> the content that inspires you.</li>
-        <li>🚀<strong>Discover What’s Trending</strong> — stay updated with the latest viral posts.</li>
+        <li>📸 <strong>Post & Share</strong> your favorite moments through images and videos.</li>
+        <li>❤️ <strong>Like, Comment & Download</strong> the content that inspires you.</li>
+        <li>🚀 <strong>Discover What’s Trending</strong> — stay updated with the latest viral posts.</li>
       </ul>
 
       <p style="text-align:center; margin-top: -18px">
-        <a href="https://www.prithu.com/subscribe" class="cta-button">Upgrade Now</a>
+        <a href="https://www.prithu.com/home" class="cta-button">Go to your feed</a>
       </p>
 
-      <p style="text-align:center;">Don’t miss out on your favorite content and premium perks — we’d love to keep you in the Prithu Premium community!</p>
+      <p style="margin-top: -8px">
+        Enjoy your trial! Once it ends, you’ll have the option to upgrade to full Premium and keep exploring all features without interruption.
+      </p>
+
       <p style="text-align:center;"><strong>Warm regards,<br>The Prithu Team</strong></p>
     </div>
 
+    <!-- Footer -->
     <div class="footer">
       <p><a href="mailto:contact@prithu.in" style="color: black;">info@prithu.in</a></p>
       <p>If you wish to unsubscribe, <a href="#" style="color: black;">let us know!</a></p>

@@ -6,7 +6,7 @@ const mongoose =require('mongoose');
 const activateTrialPlan = require('../../middlewares/subcriptionMiddlewares/activateTrailPlan');
 const checkActiveSubscription=require('../../middlewares/subcriptionMiddlewares/checkActiveSubcription.js');
 const razorpay = require("../../middlewares/helper/razorPayConfig.js");
-const {sendMailSafeSafe} = require("../../utils/sendMail");
+const {sendTemplateEmail} = require("../../utils/templateMailer.js");
 const  {handleReferralReward} = require("../../middlewares/helper/directReferalFunction.js");
 
 
@@ -43,27 +43,22 @@ exports.subscribePlan = async (req, res) => {
       isActive: true,
     }).session(session);
 
-    if (existing) {
-      const now = new Date();
-      if (existing.endDate && existing.endDate > now) {
-        await sendMailSafeSafe({
-          to: user.email,
-          subject: "Active Subscription Notice",
-          html: activeSubscriptionNoticeTemplate(existing.endDate.toDateString()),
-        });
+   if (existing) {
+  const now = new Date();
+  if (existing.endDate && existing.endDate > now) {
+    await sendTemplateEmail({
+      templateName: "SubscrioptionAlreadyActive.html", 
+      to: user.email,
+      subject: "Active Subscription Notice",
+      placeholders: {
+        username: user.userName,
+        endDate: existing.endDate.toDateString(), 
+      },
+      embedLogo: true, 
+    });
+  }
+}
 
-        await session.commitTransaction();
-        session.endSession();
-        return res.status(400).json({
-          message: `You already have an active subscription until ${existing.endDate.toDateString()}`,
-          subscription: existing,
-        });
-      } else {
-        existing.isActive = false;
-        await existing.save({ session });
-        await UserSubscription.deleteOne({ _id: existing._id }).session(session);
-      }
-    }
 
     // 🆕 Create or find subscription record
     let subscription = await UserSubscription.findOne({ userId, planId }).session(session);
@@ -119,15 +114,19 @@ exports.subscribePlan = async (req, res) => {
       await user.save({ session });
 
       // ✅ Send subscription confirmation email
-      await sendMailSafeSafe({
-        to: user.email,
-        subject: "Subscription Activated",
-        html: subscriptionActivatedTemplate(
-          user.name,
-          plan.name,
-          subscription.endDate.toDateString()
-        ),
-      });
+   await sendTemplateEmail({
+  templateName: "SubscriptionActivation.html",
+  to: user.email,
+  subject: "🎉 Your Prithu Subscription is Activated!",
+  placeholders: {
+    userName: user.name,
+    planType: plan.name,
+    startDate: subscription.startDate.toDateString(),
+    endDate: subscription.endDate.toDateString(),
+  },
+  embedLogo: true,
+});
+
 
       await session.commitTransaction();
       session.endSession();

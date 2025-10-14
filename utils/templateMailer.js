@@ -34,7 +34,7 @@ const sendTemplateEmail = async ({
         path: logoPath,
         cid: "prithu-logo", // use in template as src="cid:prithu-logo"
       };
-
+        console.log(logoAttachment)
       attachments = Array.isArray(attachments) ? attachments.concat(logoAttachment) : [logoAttachment];
       // provide placeholder so templates can use either {logoCid} or hard-coded cid
       placeholders.logoCid = "cid:prithu-logo";
