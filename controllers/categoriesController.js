@@ -6,6 +6,7 @@ const mongoose=require('mongoose')
 const {feedTimeCalculator}=require("../middlewares/feedTimeCalculator");
 const UserLanguage=require('../models/userModels/userLanguageModel');
 const  {getLanguageCode}  = require("../middlewares/helper/languageHelper");
+const UserCategory = require("../models/userModels/userCategotyModel");
 
 
 
@@ -112,6 +113,68 @@ exports.getCategoriesWithFeeds = async (req, res) => {
       message: "Server error",
       error: error.message,
     });
+  }
+};
+
+
+
+
+
+
+
+// Save interested category (single or multiple)
+exports.saveInterestedCategory = async (req, res) => {
+  try {
+    const { userId, categoryIds } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: "Invalid userId" });
+    }
+
+    // Ensure categoryIds is always an array
+    const categories = Array.isArray(categoryIds) ? categoryIds : [categoryIds];
+
+    // Validate all category IDs
+    for (const id of categories) {
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ message: `Invalid categoryId: ${id}` });
+      }
+    }
+
+    let userCategory = await UserCategory.findOne({ userId });
+
+    if (!userCategory) {
+      // Create new document if not exists
+      userCategory = new UserCategory({
+        userId,
+        interestedCategories: categories.map(id => ({ categoryId: id })),
+      });
+    } else {
+      // Add categories to interestedCategories if not already present
+      categories.forEach(id => {
+        const exists = userCategory.interestedCategories.some(c => c.categoryId.toString() === id);
+        if (!exists) {
+          userCategory.interestedCategories.push({ categoryId: id });
+        } else {
+          // Update timestamp if already exists
+          userCategory.interestedCategories = userCategory.interestedCategories.map(c =>
+            c.categoryId.toString() === id ? { ...c.toObject(), updatedAt: new Date() } : c
+          );
+        }
+
+        // Remove from nonInterestedCategories if exists
+        userCategory.nonInterestedCategories = userCategory.nonInterestedCategories.filter(
+          c => c.categoryId.toString() !== id
+        );
+      });
+    }
+
+    await userCategory.save();
+
+    res.status(200).json({ message: "Interested categories saved successfully", userCategory });
+  } catch (error) {
+    console.error("Error saving interested categories:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };
 

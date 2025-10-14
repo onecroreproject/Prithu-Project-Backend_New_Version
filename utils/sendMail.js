@@ -1,38 +1,42 @@
-const nodemailer = require('nodemailer');
+// utils/sendMail.js
+const nodemailer = require("nodemailer");
 
-// Create transporter using environment variables
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  service: "gmail",
   auth: {
     user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS, 
+    pass: process.env.MAIL_PASS,
   },
 });
 
-const sendMail = async ({ to, subject, html }) => {
-   
-  const info = await transporter.sendMail({
-    from: process.env.MAIL_USER,
+/**
+ * Send mail. Accepts attachments array in same shape as Nodemailer.
+ * @param {{to:string, subject:string, html:string, attachments?:Array}} opts
+ */
+const sendMail = async ({ to, subject, html, attachments = [] }) => {
+  const mailOptions = {
+    from: `"Prithu" <${process.env.MAIL_USER}>`,
     to,
     subject,
     html,
-  });
-  console.log('Email sent:', info.messageId);
+    attachments,
+  };
+
+  const info = await transporter.sendMail(mailOptions);
+  console.log("Email sent:", info.messageId);
   return info;
 };
 
-// ✅ Safe wrapper to prevent "No recipients defined"
-const sendMailSafeSafe= async ({ to, subject, html }) => {
+const sendMailSafeSafe = async ({ to, subject, html, attachments = [] }) => {
   if (!to) {
     console.warn("Email not sent: 'to' address is missing");
     return;
   }
-  console.log({to,subject,html})
   try {
-    return await sendMail({ to, subject, html });
+    return await sendMail({ to, subject, html, attachments });
   } catch (err) {
     console.error("Failed to send email:", err);
   }
 };
 
-module.exports = {sendMail , sendMailSafeSafe };
+module.exports = { sendMail, sendMailSafeSafe };

@@ -90,6 +90,7 @@ const {
   getUserContentCategories,
   searchCategories,
   getCategoriesWithFeeds,
+  saveInterestedCategory,
 } = require('../controllers/categoriesController');
 
 const {
@@ -317,6 +318,7 @@ router.post('/user/feed/share',auth, shareFeed);
 router.post('/user/select/category',auth,userSelectCategory);
 router.post('/user/not/intrested',auth,userNotInterestedCategory);
 router.post('/user/interested/feed',auth,userInterestedCategory);
+router.post("/user/intrested/category/begin",saveInterestedCategory);
 
 // /* --------------------- User Feed Get Actions --------------------- */
 router.get('/user/get/saved/feeds',auth, getUserSavedFeeds);

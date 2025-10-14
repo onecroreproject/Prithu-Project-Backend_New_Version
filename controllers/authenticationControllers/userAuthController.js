@@ -13,6 +13,7 @@ const { v4: uuidv4 } = require("uuid");
 const {sendMailSafeSafe} = require('../../utils/sendMail');
 const fs = require("fs");
 const path = require("path");
+const { sendTemplateEmail } = require("../../utils/templateMailer"); 
 
 
 
@@ -25,20 +26,16 @@ exports.createNewUser = async (req, res) => {
       return res.status(400).json({ message: "All fields required" });
     }
 
-    // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
+    const base = username.replace(/\s+/g, "").slice(0, 3).toUpperCase() || "XXX";
+    const generatedCode = `${base}${crypto.randomBytes(2).toString("hex")}`;
 
-    // Generate referral code
-    const base = (username.replace(/\s+/g, "").slice(0, 3).toUpperCase() || "XXX");
-    let generatedCode = `${base}${crypto.randomBytes(2).toString("hex")}`;
-
-    // Create new user object
     const user = new User({
       userName: username,
       email,
       passwordHash,
       referralCode: generatedCode,
-      referralCodeIsValid: false
+      referralCodeIsValid: false,
     });
 
     if (referralCode) {
@@ -57,26 +54,34 @@ exports.createNewUser = async (req, res) => {
       await user.save();
     }
 
-    // ✅ Send Welcome Email
-   try {
-  await sendMailSafeSafe({
-    to: email,
-    subject: "Welcome to Our Platform!",
-    html: `<h2>Hi ${username},</h2>
-           <p>Welcome! Your account has been successfully created.</p>
-           <p><strong>Your referral code:</strong> ${generatedCode}</p>`,
-  });
-  console.log("Welcome email sent to:", email);
-} catch (err) {
-  console.error("Failed to send welcome email:", err);
-}
+    // ✅ Send beautiful registration confirmation email
+    try {
+      await sendTemplateEmail({
+        templateName: "registration-confirmation.html",
+        to: email,
+        subject: "🎉 Welcome to Prithu - Registration Confirmed!",
+        placeholders: {
+          username,
+          email,
+          password, 
+          referralCode: generatedCode,
+        },
+      });
+      console.log("✅ Registration confirmation email sent to:", email);
+    } catch (err) {
+      console.error("❌ Failed to send registration email:", err);
+    }
 
-    res.status(201).json({ message: "User registered", referralCode: generatedCode });
+    res.status(201).json({
+      message: "User registered successfully",
+      referralCode: generatedCode,
+    });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Error creating user:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
+
 
 
 
@@ -204,48 +209,63 @@ exports.userLogin = async (req, res) => {
 
 
 // Request Password Reset OTP
+
+
+
 exports.userSendOtp = async (req, res) => {
   const { email } = req.body;
- 
+
   if (!email) {
     return res.status(400).json({ error: "Email is required" });
   }
- 
+
   try {
-    let tempOtp = Math.floor(1000 + Math.random() * 9000).toString();
-    let otpExpires;
- 
-    // Find user by email
+    // Generate 6-digit OTP and expiry time
+    const tempOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry
+    let username = "User";
+    let templateName = "otp-verification.html";
+    let subject = "Prithu - OTP Verification Code";
+
+    // Check if user exists
     const user = await User.findOne({ email });
 
- 
     if (user) {
-      // OTP valid for 5 minutes for existing users
-      otpExpires = new Date(Date.now() + 5 * 60 * 1000);
+      // Existing user → Reset Password OTP
+      username = user.userName || "User";
       user.otpCode = tempOtp;
       user.otpExpiresAt = otpExpires;
       await user.save();
+
+      templateName = "reset-password-otp.html";
+      subject = "Prithu - Password Reset OTP";
     } else {
-      // For non-registered users, store in temporary OTP store
-      otpExpires = Date.now() + 5 * 60 * 1000;
-      otpStore.set(email, { tempOtp, expires: otpExpires });
-      console.log("Non-registered user OTP stored temporarily");
+      // New user → Store OTP temporarily for verification flow
+      if (!global.otpStore) global.otpStore = new Map();
+      global.otpStore.set(email, { tempOtp, expires: otpExpires });
+      console.log("Temporary OTP saved for unregistered user:", email);
     }
- 
-    // Send email using reusable utility
-   await sendMailSafeSafe({
-  to: email,
-  subject: "Password Reset OTP",
-  html: `Your OTP for password reset is: ${tempOtp}. It is valid for 5 minutes.`,
-});
- 
-    console.log("OTP sent:", tempOtp);
-    return res.json({ message: "OTP sent to email" });
+
+    // ✅ Send correct email template
+    await sendTemplateEmail({
+      templateName,
+      to: email,
+      subject,
+      placeholders: {
+        username,
+        otp: tempOtp,
+      },
+    });
+
+    console.log(`✅ OTP email sent to: ${email} | OTP: ${tempOtp}`);
+    res.json({ message: "OTP sent successfully to email" });
+
   } catch (error) {
-    console.error("Error in userSendOtp:", error);
+    console.error("❌ Error in userSendOtp:", error);
     res.status(500).json({ error: error.message });
   }
 };
+
  
 
 
