@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prithu Premium Expired</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #f9f9f7;
+      font-family: Arial, sans-serif;
+      line-height: 1.4;
+    }
+
+    .email-container {
+      max-width: 600px;
+      margin: 40px auto;
+      background-color: #f9f9f7;
+      box-shadow: 2px 6px 30px rgba(0, 0, 0, 0.15);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .header {
+      background-color: #f9f9f7;
+      color: #064d3b;
+      padding: 40px 20px 20px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .logo-text-container {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      font-family: serif;
+    }
+
+   /* Add rotation animation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Apply the animation to your logo */
+.header img.logo {
+  width: 65px;
+  height: auto;
+  animation: spin 4s linear infinite; /* 4s = rotation speed */
+}
+
+
+    .header h1 {
+      margin: 0;
+      font-size: 37px;
+      color: #064d3b;
+    }
+
+    .content {
+      padding: 0 40px;
+      background-color: #f9f9f7;
+      color: black;
+      text-align: left;
+    }
+
+    .content h2 {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+
+    .content p {
+      font-size: 18px;
+      margin-bottom: 15px;
+    }
+
+    .content a {
+      color: #4169E1;
+      text-decoration: none;
+    }
+
+    .content ul {
+      margin-left: 5px;
+      font-size: 17px;
+      padding-left: 0;
+      list-style-position: inside;
+    }
+
+    .cta-button {
+      display: inline-block;
+      background-color: #4169E1;
+      color: #ffffff !important;
+      padding: 15px 30px;
+      text-decoration: none;
+      border-radius: 5px;
+      font-size: 18px;
+      margin: 20px 0;
+      font-weight: bold;
+      transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    }
+    .cta-button:hover {
+      background-color: #365fc0;
+      transform: translateY(-2px);
+    }
+
+    .footer {
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #064d3b;
+      background-color: #f9f9f7;
+      border-top: 1px solid rgba(0, 0, 0, 0.05);
+    }
+
+    .footer a {
+      color: #064d3b;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    .footer p {
+      margin: 8px 0;
+      color: black;
+    }
+
+    @media only screen and (max-width: 600px) {
+      .header {
+        padding: 20px;
+      }
+      .logo-text-container {
+        flex-direction: row;
+        align-items: center;
+      }
+      .header img.logo {
+        width: 50px;
+      }
+      .header h1 {
+        font-size: 32px;
+      }
+      .content {
+        padding: 25px 15px 40px 15px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="email-container">
+    <div class="header">
+      <div class="logo-text-container">
+        <img src="C:\Users\user\Pictures\prithu.png" alt="Prithu Logo" class="logo" />
+        <h1>Prithu</h1>
+      </div>
+    </div>
+
+    <div class="content">
+      <h2>Hi {userName},</h2>
+
+      <p>We wanted to let you know that your <strong>Prithu Premium</strong> subscription has expired.</p>
+
+      <p>Don’t worry — you can renew your subscription at any time to continue enjoying all premium features:</p>
+
+      <ul>
+        <li>📸 <strong>Post & Share</strong> your favorite moments through images and videos.</li>
+        <li>❤️ <strong>Like, Comment & Download</strong> the content that inspires you.</li>
+        <li>🚀 <strong>Discover What’s Trending</strong> — stay updated with the latest viral posts.</li>
+      </ul>
+
+      <p style="text-align:center; margin-top: -18px">
+        <a href="https://www.prithu.com/subscribe" class="cta-button">Renew Now</a>
+      </p>
+
+      <p style="margin-top: -8px">We’d love to keep you as part of our premium community, so don’t miss out on your favorite posts and exclusive perks!</p>
+      <p style="text-align:center;"><strong>Warm regards,<br>The Prithu Team</strong></p>
+    </div>
+
+    <div class="footer">
+      <p><a href="mailto:contact@prithu.in" style="color: black;">info@prithu.in</a></p>
+      <p>If you wish to unsubscribe, <a href="#" style="color: black;">let us know!</a></p>
+      <p><a href="#" style="color: black;">View this email as a web page</a></p>
+    </div>
+  </div>
+</body>
+</html>

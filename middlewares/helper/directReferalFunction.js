@@ -5,11 +5,7 @@ const UserReferral = require("../../models/userModels/userReferralModel");
 const {sendMailSafeSafe} = require("../../utils/sendMail");
 const Withdrawal =require("../../models/userModels/withdrawal");
 
-// Email templates
-const referralRewardReferrerMail = require("../../utils/templates/emailTemplates");
-const referralRewardUserMail = require("../../utils/templates/emailTemplates");
-const referralExpiredReferrerMail = require("../../utils/templates/emailTemplates");
-const referralExpiredUserMail = require("../../utils/templates/emailTemplates");
+
 
 
 exports.handleReferralReward = async (req, res) => {

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prithu OTP Verification</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #f9f9f7; /* subtle page background */
+      font-family: Arial, sans-serif;
+      line-height: 1.4;
+    }
+
+    .email-container {
+      max-width: 600px;
+      margin: 40px auto;
+      background-color: #f9f9f7; /* uniform off-white color for entire email */
+      box-shadow: 2px 6px 30px rgba(0,0,0,0.15);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .header {
+      background-color: #f9f9f7; /* same as container */
+      color: #064d3b;
+      padding: 45px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .logo-text-container {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      font-family: serif;
+    }
+/* Add rotation animation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Apply the animation to your logo */
+.header img.logo {
+  width: 65px;
+  height: auto;
+  animation: spin 4s linear infinite; /* 4s = rotation speed */
+}
+
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+      color: #064d3b;
+    }
+
+    .content {
+      padding: 0px 40px;
+      background-color: #f9f9f7 /* same off-white */
+      color: #064d3b;
+      text-align: center;
+	  
+    }
+
+    .content h2 {
+      font-size: 18px;
+      text-align: left;
+      color: black;
+      margin-bottom: 10px;
+    }
+
+    .content p {
+      font-size: 18px;
+      margin-bottom: 15px;
+      text-align: left;
+      color: black;
+    }
+
+    .otp-box {
+      background: #f9f9f7 /* slightly warm tone to stand out subtly */
+      border-radius: 10px;
+      padding: 15px;
+      margin: 20px auto;
+      width: 45%;
+      color: black;
+      font-size: 22px;
+      letter-spacing: 2px;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      border: 1px solid rgba(0,0,0,0.1);
+    }
+
+    .important-heading {
+      color: black;
+      text-align: left;
+      font-size: 19px;
+      font-weight: 600;
+      font-family: serif;
+      margin: 15px 0 8px 0;
+    }
+
+    .security-list {
+      list-style: none;
+      text-align: left;
+      display: inline-block;
+      padding: 0;
+      margin: 5px auto 20px auto;
+      font-size: 18px;
+      line-height: 1.6;
+      color: black;
+    }
+
+    .cta-button {
+      display: inline-block;
+      background-color: #4169E1;
+      color: white;
+      padding: 15px 30px;
+      text-decoration: none;
+      border-radius: 5px;
+      font-size: 18px;
+      margin: 20px 0;
+      transition: background 0.3s ease, transform 0.2s ease;
+    }
+
+    .cta-button:hover {
+      background-color: #365fc0;
+      transform: translateY(-2px);
+    }
+
+    .footer {
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #064d3b;
+      background-color:#f9f9f7; /* same as content & header */
+      border-top: 1px solid rgba(0,0,0,0.05);
+    }
+
+    .footer a {
+      color: #064d3b;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    .footer p {
+      margin: 8px 0;
+      color: black;
+    }
+
+    @media only screen and (max-width: 600px) {
+      .header {
+        flex-direction: column;
+        gap: 10px;
+        padding: 15px;
+      }
+      .logo-text-container {
+        flex-direction: row;
+        align-items: center;
+      }
+      .header img.logo {
+        width: 50px;
+      }
+      .header h1 {
+        font-size: 24px;
+      }
+      .footer {
+        padding: 15px 10px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="email-container">
+    <div class="header"  ">
+      <div class="logo-text-container">
+        <img src="C:\Users\user\Pictures\prithu.png" alt="Prithu Logo" class="logo" />
+        <h1 style="font-size: 37px">Prithu</h1>
+      </div>
+    </div>
+
+    <div class="content">
+      <h2 style="font-size: 19px">Dear {username},</h2>
+      <p style="font-size: 18px;  line-height: 1.6;">As part of our enhanced security measures, we've sent you this One-Time Password (OTP) to verify your identity and complete your SignUp to your <strong>Prithu</strong> account.</p>
+
+      <div class="otp-box">[XXXX]</div>
+      <p style="text-align:center; margin-bottom:30px;"><em>(This is a 4-digit code: e.g., 1234)</em></p>
+
+      <h3 class="important-heading">Important Security Information:</h3>
+      <ul class="security-list">
+        <li>• Valid for 10 minutes only from the time of generation</li>
+        <li>• Do not share this OTP with anyone</li>
+        <li>• Use this OTP only once for this specific verification</li>
+        <li>• If you didn't request this OTP, please ignore this email or contact our support team immediately</li>
+      </ul>
+
+      <a href="#" class="cta-button">Go To Dashboard</a>
+
+      <p style="text-align:center;">Thank you for being a part of our community.</p>
+      <p style="text-align:center;"><strong>Warm regards,<br>The Prithu Team</strong></p>
+    </div>
+
+    <div class="footer">
+      <p><a href="mailto:contact@prithu.in" style="color: black;">info@prithu.in</a></p>
+      <p>If you wish to unsubscribe, <a href="#" style="color: black;">let us know!</a></p>
+      <p><a href="#" style="color: black;">View this email as a web page</a></p>
+    </div>
+  </div>
+</body>
+</html>

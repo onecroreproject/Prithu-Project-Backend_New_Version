@@ -89,7 +89,7 @@ const {
   getAllCategories,
   getUserContentCategories,
   searchCategories,
-
+  getCategoriesWithFeeds,
 } = require('../controllers/categoriesController');
 
 const {
@@ -521,6 +521,7 @@ router.delete("/delete/child/admin/:id", deleteChildAdmin);
 /* --------------------- Tags API --------------------- */
 router.post('/search/all/category',searchCategories)
 router.get('/all/catagories/:id', getCategoryWithId);
+router.get("/get/feed/category",getCategoriesWithFeeds);
 
 
 

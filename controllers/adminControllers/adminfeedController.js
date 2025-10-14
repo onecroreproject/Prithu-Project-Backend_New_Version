@@ -157,29 +157,24 @@ exports.getAllFeedAdmin = async (req, res) => {
     const results = await Promise.all(
       feeds.map(async (feed) => {
         let profile = null;
-
-        // Case 1: roleRef available (Admin, Child_Admin, Creator, Account)
-        if (feed.roleRef && feed.roleRef === "Admin" || feed.roleRef === "Child_Admin" ) {
-          // Check in ProfileSettings by matching correct role field
-          profile = await ProfileSettings.findOne(
-              { userId: feed.createdByAccount }, // fallback for direct user ref
-          )
-            .select("userName profileAvatar")
-            .lean();
-        }
-
-        // Case 2: No profile found but feed belongs to Account
-        if (!profile && feed.roleRef === "Account") {
-          const account = await Account.findById(feed.createdByAccount)
-            .populate("userId")
-            .lean();
-
-          if (account) {
-            profile = await ProfileSettings.findOne({ userId: account.userId })
-              .select("userName profileAvatar")
-              .lean();
-          }
-        }
+        
+if (feed.roleRef === "Admin") {
+  profile = await ProfileSettings.findOne({ adminId: feed.createdByAccount })
+    .select("userName profileAvatar")
+    .lean();
+} else if (feed.roleRef === "Child_Admin") {
+  profile = await ProfileSettings.findOne({ childAdminId: feed.createdByAccount })
+    .select("userName profileAvatar")
+    .lean();
+} else if (feed.roleRef === "Account") {
+  profile = await ProfileSettings.findOne({ accountId: feed.createdByAccount })
+    .select("userName profileAvatar")
+    .lean();
+} else if (feed.roleRef === "User") {
+  profile = await ProfileSettings.findOne({ userId: feed.createdByAccount })
+    .select("userName profileAvatar")
+    .lean();
+}
 
         return {
           ...feed,

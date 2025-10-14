@@ -11,6 +11,8 @@ const Session = require("../../models/userModels/userSession-Device/sessionModel
 const UserReferral=require('../../models/userModels/userReferralModel');
 const { v4: uuidv4 } = require("uuid");
 const {sendMailSafeSafe} = require('../../utils/sendMail');
+const fs = require("fs");
+const path = require("path");
 
 
 
@@ -82,8 +84,6 @@ exports.createNewUser = async (req, res) => {
 
 
 
-
-// User Login
 exports.userLogin = async (req, res) => {
   try {
     const { identifier, password, role, roleRef, deviceId, deviceType } = req.body;
@@ -103,10 +103,10 @@ exports.userLogin = async (req, res) => {
     }
 
     if(user.isBlocked){
-      return res.status(403).json ({error:"User Credencialts are Blocked Please Contact Admin"})
+      return res.status(403).json ({error:"User credentials are blocked. Please contact admin."});
     }
 
-    // 3️⃣ Run startup checks (custom business logic)
+    // 3️⃣ Run startup checks
     const userStart = await startUpProcessCheck(user._id);
 
     // 4️⃣ Generate tokens
@@ -127,8 +127,8 @@ exports.userLogin = async (req, res) => {
       { expiresIn: "30d" }
     );
 
-    // 5️⃣ Handle device (create or update)
-    const deviceIdentifier = deviceId || uuidv4(); // generate one if not provided
+    // 5️⃣ Handle device
+    const deviceIdentifier = deviceId || uuidv4();
     let device = await Device.findOne({ deviceId: deviceIdentifier, userId: user._id });
 
     if (!device) {
@@ -152,7 +152,7 @@ exports.userLogin = async (req, res) => {
       session = await Session.create({
         userId: user._id,
         deviceId: device._id,
-        role:"user",
+        role: "user",
         refreshToken,
         isOnline: true,
         lastSeenAt: null,
@@ -169,21 +169,38 @@ exports.userLogin = async (req, res) => {
     user.lastSeenAt = null;
     await user.save();
 
-    // 8️⃣ Return tokens + session info
+    // 8️⃣ Send "Welcome Back" email
+    const emailTemplatePath = path.join(__dirname, "../../utils/templates/login.html");
+    let emailHtml = fs.readFileSync(emailTemplatePath, "utf-8");
+
+    // Replace placeholders
+    emailHtml = emailHtml.replace("{username}", user.userName);
+    emailHtml = emailHtml.replace("[Insert Dashboard Link]", `${process.env.FRONTEND_URL}/dashboard`);
+
+    // Send mail
+    sendMailSafeSafe({
+      to: user.email,
+      subject: "Welcome Back to Prithu!",
+      html: emailHtml
+    });
+
+    // 9️⃣ Return tokens + session info
     res.json({
       accessToken,
       refreshToken,
       sessionId: session._id,
       deviceId: device.deviceId,
       appLanguage: userStart.appLanguage,
-      feedLanguage:userStart.feedLanguage,
-      gender:userStart.gender,
+      feedLanguage: userStart.feedLanguage,
+      gender: userStart.gender,
     });
+
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ error: error.message });
   }
 };
+
 
 
 // Request Password Reset OTP

@@ -11,7 +11,7 @@ const  {getLanguageCode}  = require("../middlewares/helper/languageHelper");
 
 exports.getAllCategories = async (req, res) => {
   try {
-    // Step 1: Fetch all categories (only id + name)
+    // Step 1: Fetch all categories (only _id + name)
     const categories = await Categories.find({}, { _id: 1, name: 1 })
       .sort({ createdAt: -1 })
       .lean();
@@ -20,11 +20,11 @@ exports.getAllCategories = async (req, res) => {
       return res.status(404).json({ message: "No categories found" });
     }
 
-    // Step 2: Aggregate feed stats by category (category stored as string ID)
+    // Step 2: Aggregate feed stats by category (category stored as ObjectId)
     const feedStats = await Feed.aggregate([
       {
         $group: {
-          _id: "$category", // category field holds categoryId as string
+          _id: "$category", // ObjectId reference to Categories
           totalFeeds: { $sum: 1 },
           videoCount: {
             $sum: { $cond: [{ $eq: ["$type", "video"] }, 1, 0] },
@@ -38,7 +38,7 @@ exports.getAllCategories = async (req, res) => {
 
     // Step 3: Merge category details with feed stats
     const formattedCategories = categories.map((cat) => {
-      const stat = feedStats.find((f) => f._id === cat._id.toString());
+      const stat = feedStats.find((f) => f._id.toString() === cat._id.toString());
       return {
         categoryId: cat._id,
         categoriesName: cat.name,
@@ -67,9 +67,68 @@ exports.getAllCategories = async (req, res) => {
 
 
 
+exports.getCategoriesWithFeeds = async (req, res) => {
+  try {
+    // 1️⃣ Fetch categories that have at least one feed
+    const categories = await Categories.find({ feedIds: { $exists: true, $ne: [] } })
+      .select("_id name feedIds")
+      .lean();
+
+    if (!categories.length) {
+      return res.status(404).json({
+        message: "No categories with feeds found",
+        categories: [],
+      });
+    }
+
+    // 2️⃣ Optional: filter out categories where all feedIds do not exist in Feed collection
+    const filteredCategories = [];
+    for (const cat of categories) {
+      const feedCount = await Feed.countDocuments({ _id: { $in: cat.feedIds } });
+      if (feedCount > 0) {
+        filteredCategories.push({
+          categoryId: cat._id,
+          categoryName: cat.name,
+          totalFeeds: feedCount,
+        });
+      }
+    }
+
+    if (!filteredCategories.length) {
+      return res.status(404).json({
+        message: "No categories with active feeds found",
+        categories: [],
+      });
+    }
+
+    // 3️⃣ Return response
+    res.status(200).json({
+      message: "Categories with feeds retrieved successfully",
+      categories: filteredCategories,
+    });
+  } catch (error) {
+    console.error("Error fetching categories with feeds:", error);
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
+
+
+
+
+
+
+
 exports.getCategoryWithId = async (req, res) => {
   try {
     const categoryId = req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+      return res.status(400).json({ message: "Invalid category ID" });
+    }
 
     // 📌 Pagination params
     const page = parseInt(req.query.page) || 1;
@@ -84,7 +143,7 @@ exports.getCategoryWithId = async (req, res) => {
 
     // 2️⃣ Aggregate feeds with account and profile info (with pagination)
     const feeds = await Feed.aggregate([
-      { $match: { category: categoryId } },
+      { $match: { category: mongoose.Types.ObjectId(categoryId) } },
       { $sort: { createdAt: -1 } },
       { $skip: skip },
       { $limit: limit },
@@ -147,7 +206,7 @@ exports.getCategoryWithId = async (req, res) => {
           total: totalFeeds,
           page,
           limit,
-          hasMore: skip + feeds.length < totalFeeds, // ✅ check if next page exists
+          hasMore: skip + feeds.length < totalFeeds,
         },
       },
     });
@@ -156,6 +215,7 @@ exports.getCategoryWithId = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
 
 
 

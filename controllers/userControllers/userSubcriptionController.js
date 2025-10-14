@@ -8,8 +8,7 @@ const checkActiveSubscription=require('../../middlewares/subcriptionMiddlewares/
 const razorpay = require("../../middlewares/helper/razorPayConfig.js");
 const {sendMailSafeSafe} = require("../../utils/sendMail");
 const  {handleReferralReward} = require("../../middlewares/helper/directReferalFunction.js");
-const subscriptionActivatedTemplate = require("../../utils/templates/subscriptionActivatedTemplate.js");
-const activeSubscriptionNoticeTemplate = require("../../utils/templates/activeSubscriptionNoticeTemplate");
+
 
 
 

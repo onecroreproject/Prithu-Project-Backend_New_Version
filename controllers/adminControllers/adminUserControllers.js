@@ -703,28 +703,24 @@ exports.getUserLevelWithEarnings = async (req, res) => {
 
 exports.getUserProfileDashboardMetricCount = async (req, res) => {
   try {
-    const [
-      totalUsers,
-      subscriptionCount,
-      accountCount,
-      blockedUserCount,
-      onlineUsersCount
-    ] = await Promise.all([
-      Users.countDocuments(),
+    // 1️⃣ Total users
+    const totalUsers = await Users.countDocuments();
 
-      UserSubscription.distinct("userId", { isActive: true }).then(ids => ids.length),
+    // 2️⃣ Active subscriptions
+    const subscriptionCount = await UserSubscription.distinct("userId", { isActive: true }).then(ids => ids.length);
 
-      Account.distinct("userId").then(ids => ids.length),
+    // 3️⃣ Account count
+    const accountCount = await Account.distinct("userId").then(ids => ids.length);
 
-      Users.countDocuments({ isBlocked: true }),
+    // 4️⃣ Blocked users
+    const blockedUserCount = await Users.countDocuments({ isBlocked: true });
 
-      // ✅ Ensure only recent & valid sessions count as "online"
-      Session.distinct("userId", { 
-        isOnline: true, 
-        lastActiveAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) } 
-      }).then(ids => ids.length),
-    ]);
+    // 5️⃣ Immediate online users
+    // Get distinct userIds where any session has isOnline: true
+    const onlineUserIds = await Session.distinct("userId", { isOnline: true });
+    const onlineUsersCount = onlineUserIds.length;
 
+    // 6️⃣ Offline users = total - online
     const offlineUsersCount = totalUsers - onlineUsersCount;
 
     res.status(200).json({
@@ -743,6 +739,8 @@ exports.getUserProfileDashboardMetricCount = async (req, res) => {
     });
   }
 };
+
+
 
 
 
