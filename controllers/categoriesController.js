@@ -170,49 +170,17 @@ exports.getUserContentCategories = async (req, res) => {
       return res.status(400).json({ message: "userId is required" });
     }
 
-    // 1️⃣ Optional user language
+    // Optional user language
     const userLang = await UserLanguage.findOne({ userId }).lean();
     const feedLang = userLang?.feedLanguageCode
       ? getLanguageCode(userLang.feedLanguageCode)
       : null;
 
-    // 2️⃣ Build match condition (based on feed language)
     const feedMatch = feedLang ? { language: feedLang } : {};
 
-    // 3️⃣ Aggregate unique string categories
-    const categories = await Feed.aggregate([
-      { $match: feedMatch },
-      {
-        $group: {
-          _id: "$category", // distinct category strings
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          name: "$_id",
-        },
-      },
-      { $sort: { name: 1 } },
-    ]);
-
-    // 4️⃣ Optionally enrich categories from a Category collection (if it exists)
-    // Example: match Feed.category (string) with Category.name
-    if (categories.length) {
-      const categoryNames = categories.map((c) => c.name);
-      const matchedCategories = await Category.find(
-        { name: { $in: categoryNames } },
-        { _id: 1, name: 1 }
-      ).lean();
-
-      // Merge matched metadata with the feed categories (if found)
-      categories.forEach((cat) => {
-        const match = matchedCategories.find((m) => m.name === cat.name);
-        if (match) {
-          cat._id = match._id;
-        }
-      });
-    }
+    // Find unique categories from feeds
+    const categories = await Feed.find(feedMatch)
+      .distinct("category"); // get unique category ObjectIds
 
     if (!categories.length) {
       return res.status(404).json({
@@ -221,13 +189,18 @@ exports.getUserContentCategories = async (req, res) => {
       });
     }
 
-    // 5️⃣ Send response
+    // Fetch category details
+    const categoryDetails = await Categories.find({ _id: { $in: categories } })
+      .select("_id name")
+      .sort({ name: 1 })
+      .lean();
+
     res.status(200).json({
       message: "Categories with content retrieved successfully",
       language: feedLang
         ? { code: userLang.feedLanguageCode, name: feedLang }
         : { code: null, name: "All Languages" },
-      categories,
+      categories: categoryDetails,
     });
   } catch (error) {
     console.error("Error fetching content categories:", error);
@@ -237,6 +210,8 @@ exports.getUserContentCategories = async (req, res) => {
     });
   }
 };
+
+
 
 
 

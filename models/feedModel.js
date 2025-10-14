@@ -3,7 +3,11 @@ const mongoose = require("mongoose");
 const feedSchema = new mongoose.Schema({
   type: { type: String, required: true },       // image or video
   language: { type: String, required: true },
-  category: { type: String, required: true },
+    category: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: "Categories", 
+    required: true 
+  },
   duration: { type: Number, default: null },
   contentUrl: { type: String, required: true },
 
