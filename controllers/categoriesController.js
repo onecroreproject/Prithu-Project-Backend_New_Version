@@ -286,14 +286,16 @@ exports.getCategoryWithId = async (req, res) => {
 
 
 
+
 exports.getUserContentCategories = async (req, res) => {
   try {
-    const userId = req.Id || req.body.userId;
+    // 1️⃣ Get userId from token
+    const userId = req.user?.id; // assuming middleware sets req.user
     if (!userId) {
-      return res.status(400).json({ message: "userId is required" });
+      return res.status(401).json({ message: "Unauthorized: user not found in token" });
     }
 
-    // Optional user language
+    // 2️⃣ Get user's preferred feed language
     const userLang = await UserLanguage.findOne({ userId }).lean();
     const feedLang = userLang?.feedLanguageCode
       ? getLanguageCode(userLang.feedLanguageCode)
@@ -301,19 +303,33 @@ exports.getUserContentCategories = async (req, res) => {
 
     const feedMatch = feedLang ? { language: feedLang } : {};
 
-    // Find unique categories from feeds
-    const categories = await Feed.find(feedMatch)
-      .distinct("category"); // get unique category ObjectIds
+    // 3️⃣ Find all unique feed category IDs in user's language
+    const categoryIds = await Feed.find(feedMatch).distinct("category");
 
-    if (!categories.length) {
+    if (!categoryIds.length) {
       return res.status(404).json({
         message: "No categories with content found",
         categories: [],
       });
     }
 
-    // Fetch category details
-    const categoryDetails = await Categories.find({ _id: { $in: categories } })
+    // 4️⃣ Check if user has a UserCategory record
+    const userCategory = await UserCategory.findOne({ userId }).lean();
+
+    let filteredCategoryIds = categoryIds;
+
+    // If first time (no record), filter by interested categories
+    if (!userCategory) {
+      // Here you might want to define default interested categories for first-time users
+      // For now, assuming all categories are sent as "interested" for the first time
+      filteredCategoryIds = categoryIds;
+    } else if (userCategory.interestedCategories?.length > 0) {
+      // If record exists, send all categories regardless of interested (per requirement)
+      filteredCategoryIds = categoryIds;
+    }
+
+    // 5️⃣ Fetch category details
+    const categories = await Categories.find({ _id: { $in: filteredCategoryIds } })
       .select("_id name")
       .sort({ name: 1 })
       .lean();
@@ -323,7 +339,7 @@ exports.getUserContentCategories = async (req, res) => {
       language: feedLang
         ? { code: userLang.feedLanguageCode, name: feedLang }
         : { code: null, name: "All Languages" },
-      categories: categoryDetails,
+      categories,
     });
   } catch (error) {
     console.error("Error fetching content categories:", error);
@@ -333,6 +349,7 @@ exports.getUserContentCategories = async (req, res) => {
     });
   }
 };
+
 
 
 

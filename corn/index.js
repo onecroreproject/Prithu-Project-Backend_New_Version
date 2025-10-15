@@ -7,12 +7,12 @@ const cron = require("node-cron");
 
 module.exports = () => {
   // Every day at midnight
-  cron.schedule("* * * * *", () => {
+  cron.schedule("0 0 * * *", () => {
     deactivateQueue.add({});
   });
 
   // Every 2 hours
-  cron.schedule("* * * * *", () => {
+  cron.schedule("0 0 * * *", () => {
     deleteQueue.add({});
   });
 
@@ -22,7 +22,7 @@ module.exports = () => {
   });
 
   // Every 6 hours
-  cron.schedule("* * * * *", () => {
+  cron.schedule("0 0 * * *", () => {
     trendingQueue.add({});
   });
 

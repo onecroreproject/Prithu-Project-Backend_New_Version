@@ -290,7 +290,8 @@ router.post('/auth/user/reset-password', userPasswordReset);
 router.post('/auth/user/logout',auth, userLogOut);
 
 // /* --------------------- User Referral API Actions --------------------- */
-router.post('/user/later/referral',applyReferralCode);
+// router.post('/user/later/referral',applyReferralCode);
+// router.post('/user/later/referral',applyReferralCode);
 router.get('/user/referal/code',auth,getUserReferalCode);
 router.get ('/user/earning/card/data',getUserEarnings);
 router.get('/user/both/tree/referals',getUserTreeWithProfiles);

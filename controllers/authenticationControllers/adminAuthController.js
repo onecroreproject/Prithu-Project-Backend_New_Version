@@ -57,8 +57,8 @@ exports.newAdmin = async (req, res) => {
     passwordHash: await bcrypt.hash(password, 10), // ⚠️ Hash password
     adminType,           // or childAdminType
     parentAdminId: req.Id, // ⚠️ ObjectId of parent admin
-    inheritedPermissions: null, // if none
-    createdBy: req.Id      // ⚠️ ObjectId of creator
+    inheritedPermissions: null,
+    createdBy: req.Id   
   });
 
       await childAdmin.save();

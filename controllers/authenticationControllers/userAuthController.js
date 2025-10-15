@@ -199,6 +199,7 @@ exports.userLogin = async (req, res) => {
       appLanguage: userStart.appLanguage,
       feedLanguage: userStart.feedLanguage,
       gender: userStart.gender,
+      category: userStart.hasInterestedCategory,
     });
 
   } catch (error) {
