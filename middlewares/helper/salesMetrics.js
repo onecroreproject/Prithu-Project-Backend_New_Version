@@ -3,7 +3,9 @@ const UserSubscription = require("../../models/subcriptionModels/userSubscreptio
 const SubscriptionInvoice = require("../../models/InvoiceModel/subscriptionInvoice.js");
 const WithdrawalInvoice = require("../../models/InvoiceModel/withdrawelInvoice.js");
 const AnalyticsMetric = require("../../models/adminModels/salesDashboardMetricks.js");
-const User =require("../../models/userModels/userModel.js")
+const User =require("../../models/userModels/userModel.js");
+const Subscriptions=require("../../models/subcriptionModels/subscriptionPlanModel.js");
+
 
 
 exports.updateDailyAnalytics = async () => {
@@ -13,11 +15,19 @@ exports.updateDailyAnalytics = async () => {
     const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
     // ✅ Active subscriptions
-    const activeSubscriptions = await UserSubscription.find({ isActive: true })
-      .populate("planId", "planType price");
+const activeSubscriptions = await UserSubscription.find()
+  .populate({
+    path: "planId",
+    select: "planType price name", // include name if you want
+    model: "SubscriptionPlan", // explicitly specify model
+  })
+  .lean();
 
-      const totalUsers = await User.countDocuments();
 
+    // ✅ Total users
+    const totalUsers = await User.countDocuments();
+
+    // ✅ Trial & paid subscribers count
     const totalTrialUsers = activeSubscriptions.filter(
       (sub) => sub.planId?.planType === "trial"
     ).length;
@@ -25,33 +35,37 @@ exports.updateDailyAnalytics = async () => {
     const totalSubscribers = activeSubscriptions.filter(
       (sub) => sub.planId?.planType !== "trial"
     ).length;
+console.log(activeSubscriptions)
+    // ✅ Total revenue from active & successful subscriptions
+    const totalRevenue = activeSubscriptions.reduce((sum, sub) => {
+      if (sub.isActive && sub.paymentStatus === "success") {
+        return sum + (sub.planId?.price || 0);
+      }
+      return sum;
+    }, 0);
 
-
-    // ✅ Total revenue from paid invoices for today
+    // ✅ Paid invoices today
     const paidInvoices = await SubscriptionInvoice.find({
       status: "paid",
       paidAt: { $gte: startOfDay, $lte: endOfDay },
     });
-
-    const totalRevenue = paidInvoices.reduce(
-      (sum, inv) => sum + inv.amount / 100, // Razorpay amount in paise
-      0
-    );
-
     const totalInvoices = paidInvoices.length;
 
-    // ✅ Total withdrawals for today
+    // ✅ Total withdrawals today
     const completedWithdrawals = await WithdrawalInvoice.find({
       status: "completed",
       processedAt: { $gte: startOfDay, $lte: endOfDay },
     });
-
     const totalWithdrawals = completedWithdrawals.reduce(
       (sum, w) => sum + w.withdrawalAmount,
       0
     );
-
     const totalWithdrawalInvoices = completedWithdrawals.length;
+
+    // ✅ Total referral users
+    const totalReferralUsers = await User.countDocuments({
+      referredByUserId: { $ne: null },
+    });
 
     // ✅ Upsert analytics metric for today
     const analytics = await AnalyticsMetric.findOneAndUpdate(
@@ -65,15 +79,16 @@ exports.updateDailyAnalytics = async () => {
           totalWithdrawalInvoices,
           totalSubscribers,
           totalTrialUsers,
+          byReferralUsers: totalReferralUsers, // added referral user count
         },
       },
       { upsert: true, new: true }
     );
 
-  
     return analytics;
   } catch (err) {
     console.error("❌ Error updating daily analytics:", err);
     throw err;
   }
 };
+

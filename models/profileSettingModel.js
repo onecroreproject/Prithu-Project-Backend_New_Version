@@ -6,6 +6,7 @@ const ProfileSettingsSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     adminId: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
     childAdminId: { type: mongoose.Schema.Types.ObjectId, ref: "ChildAdmin" },
+
     displayName: { type: String },
     gender: { type: String },
     userName: { type: String },
@@ -15,12 +16,21 @@ const ProfileSettingsSchema = new mongoose.Schema(
     maritalStatus: { type: String },
     phoneNumber: { type: String },
 
-    // ✅ Existing avatar fields
-    profileAvatar: { type: String },        // Original Cloudinary URL
-    profileAvatarId: { type: String },      // Cloudinary public_id
+    // ✅ Avatar fields
+    profileAvatar: { type: String },   // Original Cloudinary URL
+    profileAvatarId: { type: String }, // Cloudinary public_id
+    modifyAvatar: { type: String },    // Background removed or modified avatar URL
 
-    // ✅ New field to store modified avatar
-    modifyAvatar: { type: String },         // Background removed or modified avatar URL
+    // ✅ Social media links
+    socialLinks: {
+      facebook: { type: String, default: "" },
+      instagram: { type: String, default: "" },
+      twitter: { type: String, default: "" },
+      linkedin: { type: String, default: "" },
+      github: { type: String, default: "" },
+      youtube: { type: String, default: "" },
+      website: { type: String, default: "" },
+    },
 
     theme: { type: String, default: "light" },
     notifications: {
@@ -38,4 +48,8 @@ const ProfileSettingsSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("ProfileSettings", ProfileSettingsSchema, "ProfileSettings");
+module.exports = mongoose.model(
+  "ProfileSettings",
+  ProfileSettingsSchema,
+  "ProfileSettings"
+);

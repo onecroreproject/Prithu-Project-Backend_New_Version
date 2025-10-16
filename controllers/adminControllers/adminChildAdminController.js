@@ -43,7 +43,6 @@ exports.getChildAdminPermissions = async (req, res) => {
       'canManageBusinesses',
       'canManageCategories',
       'canManageReports',
-      'canViewAnalytics',
       "canManageSalesSettings",
     ];
 
@@ -102,7 +101,6 @@ exports.updateChildAdminPermissions = async (req, res) => {
       'canManageBusinesses',
       'canManageCategories',
       'canManageReports',
-      'canViewAnalytics',
       'canManageSalesSettings'
     ];
 
@@ -163,7 +161,6 @@ exports.getChildAdminById = async (req, res) => {
       'canManageBusinesses',
       'canManageCategories',
       'canManageReports',
-      'canViewAnalytics',
       'canManageSalesSettings',
     ];
 

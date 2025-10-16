@@ -37,6 +37,7 @@ const UserSubscriptions=require("../../models/subcriptionModels/userSubscreption
 const CommentLikes=require("../../models/commentsLikeModel.js");
 const CreatorFollowers=require('../../models/creatorFollowerModel.js');
 const Devices=require("../../models/userModels/userSession-Device/deviceModel.js");
+const UserReferral =require("../../models/userModels/userReferralModel")
 
 
 
@@ -418,7 +419,9 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
 
     // ✅ Base user info
     const user = await Users.findById(userId)
-      .select("userName email role referralCode referredByUserId directReferrals currentLevel currentTier totalEarnings withdrawableEarnings isActive lastActiveAt lastLoginAt")
+      .select(
+        "userName email role referralCode referredByUserId directReferrals currentLevel currentTier totalEarnings withdrawableEarnings isActive lastActiveAt lastLoginAt"
+      )
       .lean();
 
     if (!user) {
@@ -427,7 +430,9 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
 
     // ✅ Profile settings
     const profile = await ProfileSettings.findOne({ userId })
-      .select("gender bio dateOfBirth maritalStatus maritalDate phoneNumber profileAvatar timezone")
+      .select(
+        "gender bio dateOfBirth maritalStatus maritalDate phoneNumber profileAvatar timezone"
+      )
       .lean();
 
     // ✅ Subscription info
@@ -443,8 +448,43 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
     // ✅ Device info
     const device = await UserDevices.findOne({ userId })
       .select("deviceType deviceName ipAddress")
-      .sort({ createdAt: -1 }) // latest device
+      .sort({ createdAt: -1 })
       .lean();
+
+    // ✅ Referral details (get all child users)
+ // ✅ Referral details (get all child users)
+const referralData = await UserReferral.findOne({ parentId: userId })
+  .populate({
+    path: "childIds",
+    select: "_id userName email createdAt", 
+  })
+  .lean();
+
+let childDetails = [];
+
+if (referralData && referralData.childIds.length > 0) {
+  const childIds = referralData.childIds.map((child) => child._id);
+
+  // ✅ Fetch profile avatars for all referred users
+  const profiles = await ProfileSettings.find({ userId: { $in: childIds } })
+    .select("userId profileAvatar userName")
+    .lean();
+
+  // ✅ Merge child user info + profile avatar + join date
+  childDetails = referralData.childIds.map((child) => {
+    const profile = profiles.find(
+      (p) => p.userId.toString() === child._id.toString()
+    );
+    return {
+      _id: child._id,
+      userName: child.userName,
+      email: child.email,
+      profileAvatar: profile?.profileAvatar || null,
+      joinDate: child.createdAt, // ✅ joining date
+    };
+  });
+}
+
 
     // ✅ Merge all details
     const userDetails = {
@@ -453,7 +493,7 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
       role: user.role,
       referralCode: user.referralCode,
       referredByUserId: user.referredByUserId,
-      directReferrals: user.directReferrals || [],
+      directReferrals: childDetails, // ✅ Updated with referral details
       currentLevel: user.currentLevel,
       currentTier: user.currentTier,
       totalEarnings: user.totalEarnings || 0,
@@ -463,12 +503,13 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
       lastLoginAt: user.lastLoginAt,
 
       profile: profile || {},
-      subscription: subscription || {
-        subscriptionActive: false,
-        startDate: null,
-        endDate: null,
-        subscriptionActiveDate: null,
-      },
+      subscription:
+        subscription || {
+          subscriptionActive: false,
+          startDate: null,
+          endDate: null,
+          subscriptionActiveDate: null,
+        },
       language: language || { feedLanguageCode: "en", appLanguageCode: "en" },
       device: device || {},
     };
@@ -483,6 +524,7 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
     });
   }
 };
+
 
 
 

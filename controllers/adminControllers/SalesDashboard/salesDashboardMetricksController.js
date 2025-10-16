@@ -10,7 +10,7 @@ const User =require("../../../models/userModels/userModel")
 exports.getAnalytics = async (req, res) => {
   try {
     let { startDate, endDate } = req.query;
- console.log("called")
+
     const query = {};
 
     if (startDate && endDate) {
@@ -214,7 +214,72 @@ exports.getTopReferralUsers = async (req, res) => {
 
 
 
+exports.getUserAndSubscriptionCountsDaily = async (req, res) => {
+  try {
+    const { days = 30 } = req.query; // last N days, default 30
 
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days + 1);
+    startDate.setHours(0, 0, 0, 0);
+
+    // Aggregate registered users by day
+    const userCounts = await User.aggregate([
+      { $match: { createdAt: { $gte: startDate } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    // Aggregate subscription users by day
+    const subscriptionCounts = await UserSubscription.aggregate([
+      { $match: { isActive: true, createdAt: { $gte: startDate } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    // Prepare results with all days
+    const resultDates = [];
+    const regData = [];
+    const subData = [];
+
+    for (let i = 0; i < days; i++) {
+      const date = new Date(startDate);
+      date.setDate(startDate.getDate() + i);
+      const dateStr = date.toISOString().split("T")[0];
+
+      resultDates.push(dateStr);
+      const regCount = userCounts.find((u) => u._id === dateStr)?.count || 0;
+      const subCount = subscriptionCounts.find((s) => s._id === dateStr)?.count || 0;
+
+      regData.push(regCount);
+      subData.push(subCount);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        categories: resultDates,
+        registeredUsers: regData,
+        subscriptionUsers: subData,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching daily user/subscription counts:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching counts",
+    });
+  }
+};
 
 
 

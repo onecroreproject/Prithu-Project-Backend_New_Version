@@ -281,6 +281,7 @@ const{
   getAnalytics,
   getRecentSubscriptionUsers,
   getTopReferralUsers,
+  getUserAndSubscriptionCountsDaily,
 }=require("../controllers/adminControllers/SalesDashboard/salesDashboardMetricksController");
 
 const computeTrendingCreators =require('../middlewares/computeTreandingCreators')
@@ -503,7 +504,8 @@ router.get ('/admin/get/trending/creator',getAllTrendingCreators);
 /*----------------------Admin Sales Dashboard------------------*/
 router.get("/sales/dashboard/analytics", getAnalytics);
 router.get("/get/recent/subscribers",getRecentSubscriptionUsers);
-router.get("/top/referral/users",getTopReferralUsers)
+router.get("/top/referral/users",getTopReferralUsers);
+router.get("/dashboard/user-subscription-counts",getUserAndSubscriptionCountsDaily);
 
 
 /*---------------------Admin Notification API-------------------*/

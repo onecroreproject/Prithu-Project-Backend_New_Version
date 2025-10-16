@@ -24,7 +24,14 @@ const analyticsMetricSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-
+     totalWithdrawalAmount: {
+      type: Number,
+      default: 0,
+    },
+    byReferralUsers:{
+      type: Number,
+      default: 0,
+    },
   
     totalSubscribers: {
       type: Number,

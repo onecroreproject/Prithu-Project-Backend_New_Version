@@ -6,8 +6,6 @@ const subscriptionPlanSchema = new mongoose.Schema({
   durationDays: { type: Number, required: true },
   
   limits: {
-    downloadLimit: { type: Number, default: 0 },
-    adFree: { type: Boolean, default: false },
     deviceLimit: { type: Number, default: 1 },
   },
 

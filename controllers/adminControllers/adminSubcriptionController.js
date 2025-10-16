@@ -3,17 +3,15 @@ const SubscriptionPlan= require ("../../models/subcriptionModels/subscriptionPla
 
 exports.createPlan = async (req, res) => {
   try {
-    const { name, price, durationDays, limits, description, planType, isActive } = req.body;
-    console.log({ name, price, durationDays, limits, description, planType, isActive });
+    const { name, price, durationDays, limits, description, isActive } = req.body;
+    console.log({ name, price, durationDays, limits, description, isActive });
 
     // Basic validation
 if(isActive !== undefined && typeof isActive !== 'boolean') {
       return res.status(400).json({ message: "isActive must be a boolean" });
     }
 
-if (planType && typeof planType !== 'string') {
-      return res.status(400).json({ message: "PlanType must be a string" });
-    }
+
 
 if (description && typeof description !== 'string') {
       return res.status(400).json({ message: "Description must be a string" });
@@ -31,11 +29,11 @@ if (description && typeof description !== 'string') {
       return res.status(400).json({ message: "Price is required (can be 0 for trial)" });
     }
 
-    // Validate planType (default: "basic")
-    const allowedTypes = ["trial", "basic", "premium"];
-    if (planType && !allowedTypes.includes(planType)) {
-      return res.status(400).json({ message: `Invalid planType. Allowed: ${allowedTypes.join(", ")}` });
-    }
+    // // Validate planType (default: "basic")
+    // const allowedTypes = ["trial", "basic", "premium"];
+    // if (planType && !allowedTypes.includes(planType)) {
+    //   return res.status(400).json({ message: `Invalid planType. Allowed: ${allowedTypes.join(", ")}` });
+    // }
 
     // Create subscription plan
     const plan = await SubscriptionPlan.create({
@@ -43,12 +41,10 @@ if (description && typeof description !== 'string') {
       price,
       durationDays,
       limits: {
-        downloadLimit: limits?.downloadLimit || 0,
-        adFree: limits?.adFree || false,
         deviceLimit: limits?.deviceLimit || 1,
       },
       description: description || "",
-      planType: planType || "basic",
+      planType: "basic",
       isActive: isActive !== undefined ? isActive : true,
     });
 
