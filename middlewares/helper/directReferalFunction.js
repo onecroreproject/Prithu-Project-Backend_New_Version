@@ -4,8 +4,7 @@ const UserEarning = require("../../models/userModels/referralEarnings");
 const UserReferral = require("../../models/userModels/userReferralModel");
 const {sendTemplateEmail} = require("../../utils/templateMailer");
 const Withdrawal =require("../../models/userModels/withdrawal");
-
-
+const {sendMailSafeSafe}=require("../../utils/sendMail");
 
 
 exports.handleReferralReward = async (req, res) => {

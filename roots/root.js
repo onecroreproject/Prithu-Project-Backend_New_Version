@@ -277,6 +277,12 @@ const {
 
 }=require('../controllers/adminControllers/adminChildAdminController');
 
+const{
+  getAnalytics,
+  getRecentSubscriptionUsers,
+  getTopReferralUsers,
+}=require("../controllers/adminControllers/SalesDashboard/salesDashboardMetricksController");
+
 const computeTrendingCreators =require('../middlewares/computeTreandingCreators')
 
 
@@ -319,7 +325,7 @@ router.post('/user/feed/share',auth, shareFeed);
 router.post('/user/select/category',auth,userSelectCategory);
 router.post('/user/not/intrested',auth,userNotInterestedCategory);
 router.post('/user/interested/feed',auth,userInterestedCategory);
-router.post("/user/intrested/category/begin",saveInterestedCategory);
+router.post("/user/intrested/category/begin",auth,saveInterestedCategory);
 
 // /* --------------------- User Feed Get Actions --------------------- */
 router.get('/user/get/saved/feeds',auth, getUserSavedFeeds);
@@ -493,6 +499,11 @@ router.get('/admin/get/user/detail', getUserProfileDetail);
 router.get ('/admin/get/trending/creator',getAllTrendingCreators);
 // router.get("/admin/users/status", getUserStatus);
 // router.get("/admin/user/detail/by-date", getUsersByDate);
+
+/*----------------------Admin Sales Dashboard------------------*/
+router.get("/sales/dashboard/analytics", getAnalytics);
+router.get("/get/recent/subscribers",getRecentSubscriptionUsers);
+router.get("/top/referral/users",getTopReferralUsers)
 
 
 /*---------------------Admin Notification API-------------------*/

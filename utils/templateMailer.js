@@ -22,7 +22,7 @@ const sendTemplateEmail = async ({
   attachments = [],
 }) => {
   try {
-    const templatePath = path.join(__dirname, "../templates", templateName);
+    const templatePath = path.join(__dirname, "../utils/templates", templateName);
     let html = fs.readFileSync(templatePath, "utf-8");
 
     // If embedLogo requested, attach local logo and set logoCid placeholder

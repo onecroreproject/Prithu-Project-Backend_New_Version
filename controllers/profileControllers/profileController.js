@@ -244,7 +244,7 @@ exports.getUserProfileDetail = async (req, res) => {
 
     const profile = await Profile.findOne(
       { userId },
-      "bio displayName maritalStatus phoneNumber dateOfBirth profileAvatar timezone maritalDate"
+      "bio displayName maritalStatus phoneNumber dateOfBirth profileAvatar modifyAvatar timezone maritalDate"
     )
       .populate("userId", "userName email")
       .lean();
@@ -256,6 +256,8 @@ exports.getUserProfileDetail = async (req, res) => {
     const profileAvatarUrl = profile.profileAvatar
       ? profile.profileAvatar
       : null;
+
+      const modifyAvatarUrl= profile.modifyAvatar?profile.modifyAvatar:null;
 
     const {
       bio = null,
@@ -280,6 +282,7 @@ exports.getUserProfileDetail = async (req, res) => {
         userName: user.userName || null,
         userEmail: user.email || null,
         profileAvatar: profileAvatarUrl,
+        modifyAvatar:modifyAvatarUrl,
         timezone,
         maritalDate,
       },

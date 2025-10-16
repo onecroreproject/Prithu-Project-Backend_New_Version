@@ -43,7 +43,8 @@ exports.getChildAdminPermissions = async (req, res) => {
       'canManageBusinesses',
       'canManageCategories',
       'canManageReports',
-      'canViewAnalytics'
+      'canViewAnalytics',
+      "canManageSalesSettings",
     ];
 
     const childAdmin = await ChildAdmin.findById(childAdminId)
@@ -101,7 +102,8 @@ exports.updateChildAdminPermissions = async (req, res) => {
       'canManageBusinesses',
       'canManageCategories',
       'canManageReports',
-      'canViewAnalytics'
+      'canViewAnalytics',
+      'canManageSalesSettings'
     ];
 
     // Compute ungranted permissions
@@ -161,7 +163,8 @@ exports.getChildAdminById = async (req, res) => {
       'canManageBusinesses',
       'canManageCategories',
       'canManageReports',
-      'canViewAnalytics'
+      'canViewAnalytics',
+      'canManageSalesSettings',
     ];
 
     // 1️⃣ Fetch ChildAdmin basic details (excluding password), populate parent

@@ -9,7 +9,8 @@ const UserComment = require("../../models/userCommentModel.js");
 const UserView = require("../../models/userModels/userViewFeedsModel.js");
 const UserLanguage=require('../../models/userModels/userLanguageModel.js');
 const  UserCategory=require('../../models/userModels/userCategotyModel.js');
-const ProfileSettings=require('../../models/profileSettingModel')
+const ProfileSettings=require('../../models/profileSettingModel');
+const { applyFrame } = require("../../middlewares/helper/AddFrame/addFrame.js");
 
 
 exports.getAllFeedsByUserId = async (req, res) => {
@@ -262,10 +263,23 @@ exports.getAllFeedsByUserId = async (req, res) => {
     ]);
 
     // Format response with timeAgo
-    const enrichedFeeds = feeds.map((feed) => ({
+const enrichedFeeds = await Promise.all(
+  feeds.map(async (feed) => {
+    // Check ProfileSettings for modifyAvatar
+    const profileSetting = await ProfileSettings.findOne({userId:userId})
+      
+
+    const avatarToUse = profileSetting?.modifyAvatar || feed.profileAvatar;
+
+    const framedAvatar = await applyFrame(avatarToUse);
+
+    return {
       ...feed,
+      profileAvatar: framedAvatar || avatarToUse, // override with framed avatar
       timeAgo: feedTimeCalculator(feed.createdAt),
-    }));
+    };
+  })
+);
 
     res.status(200).json({
       message: "Feeds retrieved successfully",

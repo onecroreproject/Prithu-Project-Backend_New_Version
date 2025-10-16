@@ -1,6 +1,6 @@
 const Categories= require('../models/categorySchema');
 const Feed = require('../models/feedModel');
-const Account=require('../models/accountSchemaModel');
+const Accounts=require('../models/accountSchemaModel');
 const ProfileSettings=require('../models/profileSettingModel');
 const mongoose=require('mongoose')
 const {feedTimeCalculator}=require("../middlewares/feedTimeCalculator");
@@ -125,9 +125,9 @@ exports.getCategoriesWithFeeds = async (req, res) => {
 // Save interested category (single or multiple)
 exports.saveInterestedCategory = async (req, res) => {
   try {
-    const { userId, categoryIds } = req.body;
-
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
+    const {categoryIds } = req.body;
+   const userId=req.Id;
+       if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({ message: "Invalid userId" });
     }
 
@@ -188,12 +188,10 @@ exports.saveInterestedCategory = async (req, res) => {
 exports.getCategoryWithId = async (req, res) => {
   try {
     const categoryId = req.params.id;
-
-    if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+  if (!mongoose.Types.ObjectId.isValid(categoryId)) {
       return res.status(400).json({ message: "Invalid category ID" });
     }
 
-    // 📌 Pagination params
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
@@ -205,50 +203,87 @@ exports.getCategoryWithId = async (req, res) => {
     }
 
     // 2️⃣ Aggregate feeds with account and profile info (with pagination)
-    const feeds = await Feed.aggregate([
-      { $match: { category: mongoose.Types.ObjectId(categoryId) } },
-      { $sort: { createdAt: -1 } },
-      { $skip: skip },
-      { $limit: limit },
+  const feeds = await Feed.aggregate([
+  { $match: { category: new mongoose.Types.ObjectId(categoryId) } },
+  { $sort: { createdAt: -1 } },
+  { $skip: skip },
+  { $limit: limit },
 
-      // Lookup account
-      {
-        $lookup: {
-          from: "Accounts",
-          localField: "createdByAccount",
-          foreignField: "_id",
-          as: "account",
+  // Lookup for Admin profile
+  {
+    $lookup: {
+      from: "ProfileSettings",
+      localField: "createdByAccount",
+      foreignField: "adminId",
+      as: "adminProfile",
+    },
+  },
+
+  // Lookup for Account profile
+  {
+    $lookup: {
+      from: "ProfileSettings",
+      localField: "createdByAccount",
+      foreignField: "accountId",
+      as: "accountProfile",
+    },
+  },
+
+  // Lookup for Child Admin profile
+  {
+    $lookup: {
+      from: "ProfileSettings",
+      localField: "createdByAccount",
+      foreignField: "childAdminId",
+      as: "childAdminProfile",
+    },
+  },
+
+  // Lookup for Creator profile
+  {
+    $lookup: {
+      from: "ProfileSettings",
+      localField: "createdByAccount",
+      foreignField: "userId",
+      as: "creatorProfile",
+    },
+  },
+
+  // Pick the correct profile based on roleRef
+  {
+    $addFields: {
+      profile: {
+        $switch: {
+          branches: [
+            { case: { $eq: ["$roleRef", "Admin"] }, then: { $arrayElemAt: ["$adminProfile", 0] } },
+            { case: { $eq: ["$roleRef", "Account"] }, then: { $arrayElemAt: ["$accountProfile", 0] } },
+            { case: { $eq: ["$roleRef", "Child_Admin"] }, then: { $arrayElemAt: ["$childAdminProfile", 0] } },
+            { case: { $eq: ["$roleRef", "Creator"] }, then: { $arrayElemAt: ["$creatorProfile", 0] } },
+          ],
+          default: null,
         },
       },
-      { $unwind: "$account" },
+    },
+  },
 
-      // Lookup profile using account.userId
-      {
-        $lookup: {
-          from: "ProfileSettings",
-          localField: "account.userId",
-          foreignField: "userId",
-          as: "profile",
-        },
-      },
-      { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
+  // Project only the needed fields
+  {
+    $project: {
+      type: 1,
+      language: 1,
+      category: 1,
+      duration: 1,
+      contentUrl: 1,
+      roleRef: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      userName: "$profile.userName",
+      profileAvatar: "$profile.profileAvatar",
+    },
+  },
+]);
 
-      // Project only required fields
-      {
-        $project: {
-          type: 1,
-          language: 1,
-          category: 1,
-          duration: 1,
-          contentUrl: 1,
-          roleRef: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          userName: "$profile.userName",
-          profileAvatar: "$profile.profileAvatar",
-        },
-      },
-    ]);
+
 
     // 3️⃣ Get total feeds count for this category
     const totalFeeds = await Feed.countDocuments({ category: categoryId });
@@ -256,7 +291,6 @@ exports.getCategoryWithId = async (req, res) => {
     // 4️⃣ Format feeds with timeAgo
     const formattedFeeds = feeds.map((f) => ({
       ...f,
-      contentUrl: f.contentUrl,
       timeAgo: feedTimeCalculator(new Date(f.createdAt)),
     }));
 
@@ -285,12 +319,10 @@ exports.getCategoryWithId = async (req, res) => {
 
 
 
-
-
 exports.getUserContentCategories = async (req, res) => {
   try {
     // 1️⃣ Get userId from token
-    const userId = req.user?.id; // assuming middleware sets req.user
+    const userId = req.Id; // assuming middleware sets req.user
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized: user not found in token" });
     }
