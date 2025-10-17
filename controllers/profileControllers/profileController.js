@@ -415,6 +415,78 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
 
 
 
+exports.toggleFieldVisibility = async (req, res) => {
+  try {
+    const userId = req.user._id;       // From token middleware
+    const role = req.user.role;        // From token middleware
+    const { field, value, type = "general" } = req.body;
+
+    if (!field || typeof value !== "boolean") {
+      return res.status(400).json({ message: "Field and value are required" });
+    }
+
+    // Determine which profile to update based on role
+    let profileQuery = {};
+    if (role === "Admin") profileQuery = { adminId: userId, userId: userId };
+    else if (role === "Child_Admin") profileQuery = { childAdminId: userId, userId: userId };
+    else return res.status(403).json({ message: "Unauthorized role" });
+
+    const profile = await ProfileSettings.findOne(profileQuery);
+    if (!profile) return res.status(404).json({ message: "ProfileSettings not found" });
+
+    // Toggle fields
+    if (type === "general") {
+      if (!(field in profile.visibility)) {
+        return res.status(400).json({ message: "Invalid field for general visibility" });
+      }
+      profile.visibility[field] = value;
+    } else if (type === "social") {
+      if (!(field in profile.socialLinksVisibility)) {
+        return res.status(400).json({ message: "Invalid field for social link visibility" });
+      }
+      profile.socialLinksVisibility[field] = value;
+    } else {
+      return res.status(400).json({ message: "Invalid type" });
+    }
+
+    await profile.save();
+    return res.json({ success: true, message: "Visibility updated", profile });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+
+
+
+// Get visibility settings for logged-in user
+exports.getVisibilitySettings = async (req, res) => {
+  try {
+    const userId = req.user._id;   // From token middleware
+    const role = req.user.role;    // From token middleware
+
+    let profileQuery = {};
+    if (role === "Admin") profileQuery = { adminId: userId, userId: userId };
+    else if (role === "Child_Admin") profileQuery = { childAdminId: userId, userId: userId };
+    else return res.status(403).json({ message: "Unauthorized role" });
+
+    const profile = await ProfileSettings.findOne(profileQuery).select("visibility socialLinksVisibility");
+    if (!profile) return res.status(404).json({ message: "ProfileSettings not found" });
+
+    return res.json({
+      success: true,
+      visibility: profile.visibility,
+      socialLinksVisibility: profile.socialLinksVisibility,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+
+
 
 
 

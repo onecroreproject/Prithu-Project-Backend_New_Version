@@ -100,8 +100,9 @@ const {
   adminProfileDetailUpdate,
   getAdminProfileDetail,
   getChildAdminProfileDetail,
-  
-} = require('../controllers/profileControllers/profileController');
+  toggleFieldVisibility,
+  getVisibilitySettings,
+  } = require('../controllers/profileControllers/profileController');
 
 const {
   getUsersStatus,
@@ -364,7 +365,7 @@ router.post("/report-post", auth,createFeedReport);
 // router.get('/user/user/subscriptions', auth, getUserSubscriptionPlanWithId);
 
 /*---------------------- User Feed API -------------------------*/
-router.get('/get/all/feeds/user',getAllFeedsByUserId);
+router.get('/get/all/feeds/user',auth,getAllFeedsByUserId);
 router.post('/user/watching/vidoes',auth,userVideoViewCount);
 router.post('/user/image/view/count',auth,userImageViewCount);
 
@@ -546,6 +547,17 @@ router.post('/account/add', auth, addAccount);
 router.post('/account/switch/creator',auth,switchToCreator);
 router.post('/account/switch/user',auth, switchToUserAccount);
 router.post('/account/status',auth, checkAccountStatus);
+
+
+/*----------------------ProfileUpdate-------------------*/
+router.put("/profile/toggle-visibility",auth,
+  toggleFieldVisibility
+);
+
+router.get(
+  "/profile/visibility",auth,
+  getVisibilitySettings
+);
 
 
 

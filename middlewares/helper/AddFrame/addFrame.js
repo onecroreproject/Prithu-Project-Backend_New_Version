@@ -19,7 +19,7 @@ const TEMP_DIR = path.join(__dirname, "../temp");
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 // Frame options
-const frames = ["frame1.png", "frame2.png"]; // Add your frame PNGs here
+const frames = ["./frame/frame1.png"]; // Add your frame PNGs here
 const getRandomFrame = () => frames[Math.floor(Math.random() * frames.length)];
 
 /**
@@ -35,7 +35,6 @@ const applyFrame = async (avatarUrl) => {
     const outputFileName = `frame_${Date.now()}.png`;
     const outputPath = path.join(TEMP_DIR, outputFileName);
 
-    // Download avatar if URL is remote
     let inputBuffer;
     if (avatarUrl.startsWith("http")) {
       const response = await fetch(avatarUrl);
@@ -44,27 +43,28 @@ const applyFrame = async (avatarUrl) => {
       inputBuffer = fs.readFileSync(avatarUrl);
     }
 
-    // Apply frame using sharp
+    const rotationDegrees = Math.floor(Math.random() * 360);
+
     await sharp(inputBuffer)
       .resize(200, 200)
       .composite([{ input: framePath, gravity: "center" }])
+      .rotate(rotationDegrees, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png({ background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .toFile(outputPath);
 
-    // Upload to Cloudinary
     const result = await cloudinary.uploader.upload(outputPath, {
       folder: "framed_avatars",
       use_filename: true,
       unique_filename: true,
     });
 
-    // Delete local temp file
     fs.unlinkSync(outputPath);
-
     return result.secure_url;
   } catch (err) {
     console.error("Error applying frame:", err);
-    return avatarUrl; // fallback to original avatar
+    return avatarUrl;
   }
 };
+
 
 module.exports = { applyFrame };
