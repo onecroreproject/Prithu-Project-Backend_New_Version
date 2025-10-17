@@ -37,6 +37,7 @@ exports.getAnalytics = async (req, res) => {
         acc.totalWithdrawalInvoices += curr.totalWithdrawalInvoices || 0;
         acc.totalSubscribers += curr.totalSubscribers || 0;
         acc.totalTrialUsers += curr.totalTrialUsers || 0;
+        acc.byReferralUsers +=curr.byReferralUsers || 0;
         return acc;
       },
       {
@@ -47,6 +48,7 @@ exports.getAnalytics = async (req, res) => {
         totalWithdrawalInvoices: 0,
         totalSubscribers: 0,
         totalTrialUsers: 0,
+        byReferralUsers:0,
       }
     );
 

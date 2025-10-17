@@ -408,8 +408,6 @@ exports.getUsersStatus = async (req, res) => {
   }
 };
 
-
-
 exports.getUserDetailWithIdForAdmin = async (req, res) => {
   try {
     const userId = req.params.id;
@@ -428,10 +426,10 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // ✅ Profile settings
+    // ✅ Profile settings (includes social links)
     const profile = await ProfileSettings.findOne({ userId })
       .select(
-        "gender bio dateOfBirth maritalStatus maritalDate phoneNumber profileAvatar timezone"
+        "gender bio dateOfBirth maritalStatus maritalDate phoneNumber profileAvatar timezone socialLinks"
       )
       .lean();
 
@@ -452,39 +450,60 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
       .lean();
 
     // ✅ Referral details (get all child users)
- // ✅ Referral details (get all child users)
-const referralData = await UserReferral.findOne({ parentId: userId })
-  .populate({
-    path: "childIds",
-    select: "_id userName email createdAt", 
-  })
-  .lean();
+    const referralData = await UserReferral.findOne({ parentId: userId })
+      .populate({
+        path: "childIds",
+        select: "_id userName email createdAt",
+      })
+      .lean();
 
-let childDetails = [];
+    let childDetails = [];
+    if (referralData && referralData.childIds.length > 0) {
+      const childIds = referralData.childIds.map((child) => child._id);
 
-if (referralData && referralData.childIds.length > 0) {
-  const childIds = referralData.childIds.map((child) => child._id);
+      // ✅ Fetch profile avatars for all referred users
+      const profiles = await ProfileSettings.find({
+        userId: { $in: childIds },
+      })
+        .select("userId profileAvatar userName")
+        .lean();
 
-  // ✅ Fetch profile avatars for all referred users
-  const profiles = await ProfileSettings.find({ userId: { $in: childIds } })
-    .select("userId profileAvatar userName")
-    .lean();
+      // ✅ Merge child user info + profile avatar + join date
+      childDetails = referralData.childIds.map((child) => {
+        const profile = profiles.find(
+          (p) => p.userId.toString() === child._id.toString()
+        );
+        return {
+          _id: child._id,
+          userName: child.userName,
+          email: child.email,
+          profileAvatar: profile?.profileAvatar || null,
+          joinDate: child.createdAt,
+        };
+      });
+    }
 
-  // ✅ Merge child user info + profile avatar + join date
-  childDetails = referralData.childIds.map((child) => {
-    const profile = profiles.find(
-      (p) => p.userId.toString() === child._id.toString()
-    );
-    return {
-      _id: child._id,
-      userName: child.userName,
-      email: child.email,
-      profileAvatar: profile?.profileAvatar || null,
-      joinDate: child.createdAt, // ✅ joining date
+    // ✅ Helper function to calculate age
+    const calculateAge = (dob) => {
+      if (!dob) return null;
+      const birthDate = new Date(dob);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      return age;
     };
-  });
-}
 
+    // ✅ Extract social media links
+    const socialLinks = {
+      facebook: profile?.socialLinks?.facebook || null,
+      instagram: profile?.socialLinks?.instagram || null,
+      linkedin: profile?.socialLinks?.linkedin || null,
+      twitter: profile?.socialLinks?.twitter || null,
+      youtube: profile?.socialLinks?.youtube || null,
+    };
 
     // ✅ Merge all details
     const userDetails = {
@@ -493,16 +512,28 @@ if (referralData && referralData.childIds.length > 0) {
       role: user.role,
       referralCode: user.referralCode,
       referredByUserId: user.referredByUserId,
-      directReferrals: childDetails, // ✅ Updated with referral details
+      directReferrals: childDetails,
       currentLevel: user.currentLevel,
       currentTier: user.currentTier,
       totalEarnings: user.totalEarnings || 0,
       withdrawableEarnings: user.withdrawableEarnings || 0,
       isActive: user.isActive,
-      isActiveAt: user.lastActiveAt,
-      lastLoginAt: user.lastLoginAt,
+      lastActiveAt: user.lastActiveAt || null,
+      lastLoginAt: user.lastLoginAt || null,
 
-      profile: profile || {},
+      profile: {
+        bio: profile?.bio || null,
+        gender: profile?.gender || null,
+        phoneNumber: profile?.phoneNumber || null,
+        dateOfBirth: profile?.dateOfBirth || null,
+        age: calculateAge(profile?.dateOfBirth),
+        maritalStatus: profile?.maritalStatus || null,
+        maritalDate: profile?.maritalDate || null,
+        profileAvatar: profile?.profileAvatar || null,
+        timezone: profile?.timezone || null,
+        socialLinks, // ✅ Included social media links
+      },
+
       subscription:
         subscription || {
           subscriptionActive: false,
@@ -510,11 +541,18 @@ if (referralData && referralData.childIds.length > 0) {
           endDate: null,
           subscriptionActiveDate: null,
         },
-      language: language || { feedLanguageCode: "en", appLanguageCode: "en" },
+
+      language:
+        language || { feedLanguageCode: "en", appLanguageCode: "en" },
+
       device: device || {},
     };
 
-    return res.status(200).json({ success: true, user: userDetails });
+    return res.status(200).json({
+      success: true,
+      message: "User details fetched successfully",
+      user: userDetails,
+    });
   } catch (err) {
     console.error("Error fetching user details:", err);
     return res.status(500).json({
@@ -524,6 +562,7 @@ if (referralData && referralData.childIds.length > 0) {
     });
   }
 };
+
 
 
 

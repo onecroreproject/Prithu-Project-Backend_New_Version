@@ -15,14 +15,8 @@ exports.updateDailyAnalytics = async () => {
     const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
     // ✅ Active subscriptions
-const activeSubscriptions = await UserSubscription.find()
-  .populate({
-    path: "planId",
-    select: "planType price name", // include name if you want
-    model: "SubscriptionPlan", // explicitly specify model
-  })
-  .lean();
-
+    const activeSubscriptions = await UserSubscription.find()
+      .populate("planId", "planType price");
 
     // ✅ Total users
     const totalUsers = await User.countDocuments();
@@ -35,7 +29,7 @@ const activeSubscriptions = await UserSubscription.find()
     const totalSubscribers = activeSubscriptions.filter(
       (sub) => sub.planId?.planType !== "trial"
     ).length;
-console.log(activeSubscriptions)
+
     // ✅ Total revenue from active & successful subscriptions
     const totalRevenue = activeSubscriptions.reduce((sum, sub) => {
       if (sub.isActive && sub.paymentStatus === "success") {
