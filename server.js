@@ -5,7 +5,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const path = require("path");
 const http = require("http");
-const startCrons = require("./corn/index");
+ const startCrons = require("./corn/index");
 
 const root = require("./roots/root");
 const { initWebSocket } = require("./middlewares/webSocket");

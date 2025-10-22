@@ -285,6 +285,16 @@ const{
   getUserAndSubscriptionCountsDaily,
 }=require("../controllers/adminControllers/SalesDashboard/salesDashboardMetricksController");
 
+const {
+uploadFrames,
+getAllFrames,
+deleteFrame,
+}=require("../controllers/adminControllers/frameController");
+
+const {applyFrame}=require("../middlewares/helper/AddFrame/addFrame")
+
+const {upload} =require("../middlewares/helper/frameUpload")
+
 const computeTrendingCreators =require('../middlewares/computeTreandingCreators')
 
 
@@ -509,6 +519,12 @@ router.get("/top/referral/users",getTopReferralUsers);
 router.get("/dashboard/user-subscription-counts",getUserAndSubscriptionCountsDaily);
 
 
+/*---------------------Admin Frame Management-----------------*/
+router.post("/upload/frame", upload.array("frame"), uploadFrames);
+router.get("/get/allframe", getAllFrames);
+router.delete("/delete/frame/:id",deleteFrame)
+
+
 /*---------------------Admin Notification API-------------------*/
 // router.post("/admin/post/notification",adminSentNotification);
 
@@ -558,8 +574,11 @@ router.get(
   "/profile/visibility",auth,
   getVisibilitySettings
 );
+const result=async()=>{
+console.log(await applyFrame("profile/images/wmluedjgtkeamhhdtphx"))
+}
 
-
+result()
 
 router.post("/trigger-trending-creators", async (req, res) => {
   try {
