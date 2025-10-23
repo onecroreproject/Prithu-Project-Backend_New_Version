@@ -92,11 +92,14 @@ exports.userProfileDetailUpdate = async (req, res) => {
 
       // Remove background and save to modifyAvatar
       try {
-        const bgRemovedUrl = await removeImageBackground(req.cloudinaryFile.url);
-        updateData.modifyAvatar = bgRemovedUrl;
-      } catch (err) {
-        console.error("Error removing background:", err);
-      }
+  const { secure_url, public_id } = await removeImageBackground(req.cloudinaryFile.url);
+
+  updateData.modifyAvatar = secure_url;
+  updateData.modifyAvatarPublicId = public_id; 
+} catch (err) {
+  console.error("Error removing background:", err);
+}
+
     }
 
     // ✅ Handle username update
@@ -173,36 +176,51 @@ exports.adminProfileDetailUpdate = async (req, res) => {
     });
 
     // ✅ Handle social media links safely
- if (req.body.socialLinks) {
-  let links;
-console.log(req.body.socialLinks)
-  if (Array.isArray(req.body.socialLinks)) {
-    // If multiple entries, pick the last valid JSON string
-    const lastValid = req.body.socialLinks.reverse().find((item) => {
-      try {
-        JSON.parse(item);
-        return true;
-      } catch {
-        return false;
-      }
-    });
-    links = JSON.parse(lastValid);
-  } else if (typeof req.body.socialLinks === "string") {
-    links = JSON.parse(req.body.socialLinks);
-  } else {
-    links = req.body.socialLinks;
-  }
+if (req.body.socialLinks) {
+  let links = {};
 
-  updateData.socialLinks = {
-    facebook: links.facebook || "",
-    instagram: links.instagram || "",
-    twitter: links.twitter || "",
-    linkedin: links.linkedin || "",
-    github: links.github || "",
-    youtube: links.youtube || "",
-    website: links.website || "",
-  };
+  try {
+    if (Array.isArray(req.body.socialLinks)) {
+      // Handle array input (e.g., multiple form entries)
+      const lastValid = req.body.socialLinks
+        .slice() // copy to avoid mutating original
+        .reverse()
+        .find((item) => {
+          if (!item || item === "undefined" || item === "null") return false;
+          try {
+            JSON.parse(item);
+            return true;
+          } catch {
+            return false;
+          }
+        });
+
+      if (lastValid) links = JSON.parse(lastValid);
+    } else if (typeof req.body.socialLinks === "string") {
+      if (req.body.socialLinks && req.body.socialLinks !== "undefined" && req.body.socialLinks !== "null") {
+        links = JSON.parse(req.body.socialLinks);
+      }
+    } else if (typeof req.body.socialLinks === "object") {
+      links = req.body.socialLinks;
+    }
+
+    // Assign only if we have valid links
+    if (Object.keys(links).length > 0) {
+      updateData.socialLinks = {
+        facebook: links.facebook || "",
+        instagram: links.instagram || "",
+        twitter: links.twitter || "",
+        linkedin: links.linkedin || "",
+        github: links.github || "",
+        youtube: links.youtube || "",
+        website: links.website || "",
+      };
+    }
+  } catch (err) {
+    console.warn("Invalid socialLinks data, skipping:", err.message);
+  }
 }
+
 
 
     // ✅ Handle Cloudinary avatar upload
@@ -216,11 +234,13 @@ console.log(req.body.socialLinks)
         updateData.profileAvatarId = public_id;
 
         try {
-          const bgRemovedUrl = await removeImageBackground(url);
-          updateData.modifyAvatar = bgRemovedUrl;
-        } catch (err) {
-          console.error("Error removing background:", err);
-        }
+  const { secure_url, public_id } = await removeImageBackground(req.cloudinaryFile.url);
+
+  updateData.modifyAvatar = secure_url;
+  updateData.modifyAvatarPublicId = public_id; 
+} catch (err) {
+  console.error("Error removing background:", err);
+}
       }
     }
 
@@ -417,23 +437,24 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
 
 exports.toggleFieldVisibility = async (req, res) => {
   try {
-    const userId = req.user._id;       // From token middleware
-    const role = req.user.role;        // From token middleware
+    const userId = req.Id;       // From token middleware
+    const role = req.role;        // From token middleware
     const { field, value, type = "general" } = req.body;
 
     if (!field || typeof value !== "boolean") {
       return res.status(400).json({ message: "Field and value are required" });
     }
-
+ 
     // Determine which profile to update based on role
     let profileQuery = {};
-    if (role === "Admin") profileQuery = { adminId: userId, userId: userId };
-    else if (role === "Child_Admin") profileQuery = { childAdminId: userId, userId: userId };
+    if (role === "Admin") profileQuery = { adminId: userId, };
+    else if (role === "Child_Admin") profileQuery = { childAdminId: userId,};
+    else if (role === "User") profileQuery = { userId: userId,};
     else return res.status(403).json({ message: "Unauthorized role" });
-
-    const profile = await ProfileSettings.findOne(profileQuery);
+ 
+    const profile = await Profile.findOne(profileQuery);
     if (!profile) return res.status(404).json({ message: "ProfileSettings not found" });
-
+ 
     // Toggle fields
     if (type === "general") {
       if (!(field in profile.visibility)) {
@@ -448,7 +469,7 @@ exports.toggleFieldVisibility = async (req, res) => {
     } else {
       return res.status(400).json({ message: "Invalid type" });
     }
-
+ 
     await profile.save();
     return res.json({ success: true, message: "Visibility updated", profile });
   } catch (err) {
@@ -456,24 +477,25 @@ exports.toggleFieldVisibility = async (req, res) => {
     return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
-
-
-
-
+ 
+ 
+ 
 // Get visibility settings for logged-in user
 exports.getVisibilitySettings = async (req, res) => {
   try {
-    const userId = req.user._id;   // From token middleware
-    const role = req.user.role;    // From token middleware
-
+    const userId = req.Id;   // From token middleware
+    const role = req.role;    // From token middleware
+  
+ 
     let profileQuery = {};
-    if (role === "Admin") profileQuery = { adminId: userId, userId: userId };
-    else if (role === "Child_Admin") profileQuery = { childAdminId: userId, userId: userId };
+    if (role === "Admin") profileQuery = { adminId: userId};
+    else if (role === "Child_Admin") profileQuery = { childAdminId: userId};
+     else if (role === "User") profileQuery = { userId: userId,};
     else return res.status(403).json({ message: "Unauthorized role" });
-
-    const profile = await ProfileSettings.findOne(profileQuery).select("visibility socialLinksVisibility");
+ 
+    const profile = await Profile.findOne(profileQuery).select("visibility socialLinksVisibility");
     if (!profile) return res.status(404).json({ message: "ProfileSettings not found" });
-
+ 
     return res.json({
       success: true,
       visibility: profile.visibility,
@@ -484,7 +506,8 @@ exports.getVisibilitySettings = async (req, res) => {
     return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
-
+ 
+ 
 
 
 

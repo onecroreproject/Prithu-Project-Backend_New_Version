@@ -20,7 +20,8 @@ const ProfileSettingsSchema = new mongoose.Schema(
     // Avatar Fields
     profileAvatar: { type: String },   // Original Cloudinary URL
     profileAvatarId: { type: String }, // Cloudinary public_id
-    modifyAvatar: { type: String },    // Background removed or modified avatar URL
+    modifyAvatar: { type: String }, 
+    modifyAvatarPublicId:{type:String},   // Background removed or modified avatar URL
 
     // Social Media Links
     socialLinks: {

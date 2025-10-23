@@ -232,6 +232,7 @@ fetchUserShared,
 fetchUserDownloaded,
 getUserAnalyticsSummary,
 fetchUserNonInterested,
+getUserdetailWithinTheFeed,
 }=require('../controllers/userControllers/userFeedController');
 
 const{
@@ -295,7 +296,7 @@ const {applyFrame}=require("../middlewares/helper/AddFrame/addFrame")
 
 const {upload} =require("../middlewares/helper/frameUpload")
 
-const computeTrendingCreators =require('../middlewares/computeTreandingCreators')
+
 
 
 // /* --------------------- User Authentication --------------------- */
@@ -347,6 +348,7 @@ router.post('/get/comments/for/feed',auth,getCommentsByFeed);
 router.post('/get/comments/relpy/for/feed',auth,getRepliesByComment);
 router.post('/user/hide/feed',auth,userHideFeed);
 router.get("/user/notintrested/category",auth,getUserCategory);
+router.get("/get/user/detail/at/feed/icon",getUserdetailWithinTheFeed);
 
 // /* --------------------- User Subscription --------------------- */
 router.post('/user/plan/subscription',subscribePlan);
@@ -409,17 +411,17 @@ router.get('/creator/get/feed/category',getAllCategories);
 router.get('/get/all/feed/for/Creator',auth,getFeedsByAccountId);
 
 /* --------------------- Cretor Feed Actions --------------------- */
-router.post('/creator/feed/like', auth,likeFeed);
-router.post('/creator/comment/like',auth,commentLike);
-router.post('/creator/feed/save', auth, toggleSaveFeed);
-router.post('/creator/feed/download', auth, downloadFeed);
-router.post('/creator/feed/comment', auth,postComment);
-router.post('/creator/feed/share', auth, shareFeed);
+// router.post('/creator/feed/like', auth,likeFeed);
+// router.post('/creator/comment/like',auth,commentLike);
+// router.post('/creator/feed/save', auth, toggleSaveFeed);
+// router.post('/creator/feed/download', auth, downloadFeed);
+// router.post('/creator/feed/comment', auth,postComment);
+// router.post('/creator/feed/share', auth, shareFeed);
 // router.post('/user/not/intrested')
 // router.post('/user/interested')
 
 /* --------------------- Creator Follower API --------------------- */
-router.get('/creator/get/followers',auth,getCreatorFollowers);
+// router.get('/creator/get/followers',auth,getCreatorFollowers);
 
 
 /* --------------------- Admin Authentication --------------------- */
@@ -559,10 +561,10 @@ router.get("/get/feed/category",getCategoriesWithFeeds);
 
 
 /* --------------------- Account API --------------------- */
-router.post('/account/add', auth, addAccount);
-router.post('/account/switch/creator',auth,switchToCreator);
-router.post('/account/switch/user',auth, switchToUserAccount);
-router.post('/account/status',auth, checkAccountStatus);
+// router.post('/account/add', auth, addAccount);
+// router.post('/account/switch/creator',auth,switchToCreator);
+// router.post('/account/switch/user',auth, switchToUserAccount);
+// router.post('/account/status',auth, checkAccountStatus);
 
 
 /*----------------------ProfileUpdate-------------------*/
@@ -574,20 +576,21 @@ router.get(
   "/profile/visibility",auth,
   getVisibilitySettings
 );
-const result=async()=>{
-console.log(await applyFrame("profile/images/wmluedjgtkeamhhdtphx"))
-}
 
-result()
 
-router.post("/trigger-trending-creators", async (req, res) => {
-  try {
-    await computeTrendingCreators();
-    return res.status(200).json({ success: true, message: "Trending creators computation triggered!" });
-  } catch (err) {
-    console.error("Error triggering trending creators:", err);
-    return res.status(500).json({ success: false, message: "Error computing trending creators", error: err.message });
-  }
-});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 module.exports = router;

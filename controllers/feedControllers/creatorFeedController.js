@@ -12,46 +12,34 @@ const { getLanguageCode, getLanguageName } = require("../../middlewares/helper/l
 const CreatorFollowing=require('../../models/creatorFollowerModel');
 
 
- 
 exports.creatorFeedUpload = async (req, res) => {
   try {
-    const accountId = req.accountId || req.body.accountId;
+   
     const userId = req.Id || req.body.userId;
-
-    if (!accountId) return res.status(400).json({ message: "User ID is required" });
-
-    // ✅ Ensure Creator
-    const userRole = await Account.findById(accountId).select("type").lean();
-    if (!userRole || userRole.type !== "Creator") {
-      return res.status(403).json({ message: "Only Creators can upload feeds" });
-    }
-
-    // ✅ Ensure active account
-    const activeAccount = await getActiveCreatorAccount(userId);
-    if (!activeAccount) {
-      return res.status(403).json({ message: "Active Creator account required to upload feed" });
-    }
-
+    const userRole=req.role;
+    if (!userId) return res.status(400).json({ message: "User ID is required" });
+ 
+ 
     // ✅ Ensure file uploaded to Cloudinary
     if (!req.cloudinaryFile) return res.status(400).json({ message: "No file uploaded to Cloudinary" });
-
+ 
     const { language, categoryId, type, scheduleDate } = req.body;
     if (!language || !categoryId || !type) {
       return res.status(400).json({ message: "Language, categoryId, and type are required" });
     }
-
+ 
     // ✅ Normalize language
     const normalizedLang = getLanguageCode(language);
     if (!normalizedLang) return res.status(400).json({ message: "Invalid language" });
-
+ 
     // ✅ Validate category
     const categoryDoc = await Categories.findById(categoryId).lean();
     if (!categoryDoc) return res.status(400).json({ message: "Invalid categoryId" });
-
+ 
     const { url, public_id } = req.cloudinaryFile;
     const fileHash = req.fileHash || null;
     const videoDuration = req.videoDuration || null; // duration from middleware if video
-
+ 
     // ✅ Check duplicate by fileHash or URL
     if (fileHash) {
       const existingByHash = await Feed.findOne({ fileHash }).lean();
@@ -59,26 +47,27 @@ exports.creatorFeedUpload = async (req, res) => {
     }
     const existingByUrl = await Feed.findOne({ contentUrl: url }).lean();
     if (existingByUrl) return res.status(409).json({ message: "This file already exists", feedId: existingByUrl._id });
-
+ 
     // ✅ Create feed
     const newFeed = new Feed({
       type,
       language: normalizedLang,
       category: categoryId,
-      createdByAccount: accountId,
+      createdByAccount: userId,
       contentUrl: url,
       cloudinaryId: public_id,
+      roleRef:userRole,
       fileHash,
       duration: videoDuration, // optional for videos
       scheduledAt: scheduleDate ? new Date(scheduleDate) : null,
       isPosted: scheduleDate ? false : true,
     });
-
+ 
     await newFeed.save();
-
+ 
     // ✅ Update category
     await Categories.findByIdAndUpdate(categoryId, { $addToSet: { feedIds: newFeed._id } });
-
+ 
     return res.status(201).json({
       message: scheduleDate ? "Feed scheduled successfully" : "Feed uploaded successfully",
       feed: {
@@ -94,6 +83,9 @@ exports.creatorFeedUpload = async (req, res) => {
     return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
+ 
+ 
+ 
 
 
 
@@ -318,18 +310,19 @@ exports.getCreatorFeeds = async (req, res) => {
 
 exports.creatorFeedScheduleUpload = async (req, res) => {
   try {
-    const accountId = req.Id || req.body.accountId;
-    if (!accountId) {
+    const userId = req.Id || req.body.accountId;
+
+    if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
     }
 
-    const activeAccount = await getActiveCreatorAccount(accountId);
-    if (!activeAccount) {
-      return res
-        .status(403)
-        .json({ message: "Only active Creator account can upload feeds" });
-    }
-    const creatorId = activeAccount._id;
+    // const activeAccount = await getActiveCreatorAccount(userId);
+    // if (!activeAccount) {
+    //   return res
+    //     .status(403)
+    //     .json({ message: "Only active Creator account can upload feeds" });
+    // }
+    const creatorId = userId;
 
     if (!req.cloudinaryFile) {
       return res.status(400).json({ message: "No file uploaded to Cloudinary" });
@@ -369,6 +362,7 @@ exports.creatorFeedScheduleUpload = async (req, res) => {
       language,
       category: formattedCategory,
       duration: videoDuration,
+      roleRef:req.role,
       createdByAccount: creatorId,
       contentUrl: req.cloudinaryFile.url,     // Cloudinary URL
       cloudinaryId: req.cloudinaryFile.public_id, // Cloudinary public_id
@@ -379,16 +373,16 @@ exports.creatorFeedScheduleUpload = async (req, res) => {
     await newFeed.save();
 
     // Handle Category collection
-    let categoryDoc = await Category.findOne({
+    let categoryDoc = await Categories.findOne({
       name: { $regex: new RegExp(`^${formattedCategory}$`, "i") },
     });
 
     if (categoryDoc) {
-      await Category.findByIdAndUpdate(categoryDoc._id, {
+      await Categories.findByIdAndUpdate(categoryDoc._id, {
         $addToSet: { feedIds: newFeed._id },
       });
     } else {
-      categoryDoc = new Category({
+      categoryDoc = new Categories({
         name: formattedCategory,
         feedIds: [newFeed._id],
       });

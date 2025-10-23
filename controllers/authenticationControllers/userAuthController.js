@@ -90,10 +90,11 @@ exports.createNewUser = async (req, res) => {
 
 
 
+ 
 exports.userLogin = async (req, res) => {
   try {
     const { identifier, password, role, roleRef, deviceId, deviceType } = req.body;
-
+ 
     // 1️⃣ Find user
     const user = await User.findOne({
       $or: [{ userName: identifier }, { email: identifier }],
@@ -101,42 +102,42 @@ exports.userLogin = async (req, res) => {
     if (!user) {
       return res.status(400).json({ error: "Invalid username/email or password" });
     }
-
+ 
     // 2️⃣ Validate password
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       return res.status(400).json({ error: "Invalid username/email or password" });
     }
-
+ 
     if(user.isBlocked){
       return res.status(403).json ({error:"User credentials are blocked. Please contact admin."});
     }
-
+ 
     // 3️⃣ Run startup checks
     const userStart = await startUpProcessCheck(user._id);
-
+ 
     // 4️⃣ Generate tokens
     const accessToken = jwt.sign(
       {
         userName: user.userName,
         userId: user._id,
-        role: user.role,
+        role: "User",
         referralCode: user.referralCode,
       },
       process.env.JWT_SECRET,
       { expiresIn: "1h" }
     );
-
+ 
     const refreshToken = jwt.sign(
       { userId: user._id },
       process.env.JWT_REFRESH_SECRET,
       { expiresIn: "30d" }
     );
-
+ 
     // 5️⃣ Handle device
     const deviceIdentifier = deviceId || uuidv4();
     let device = await Device.findOne({ deviceId: deviceIdentifier, userId: user._id });
-
+ 
     if (!device) {
       device = await Device.create({
         userId: user._id,
@@ -150,10 +151,10 @@ exports.userLogin = async (req, res) => {
       device.lastActiveAt = new Date();
       await device.save();
     }
-
+ 
     // 6️⃣ Create or update session
     let session = await Session.findOne({ userId: user._id, deviceId: device._id });
-
+ 
     if (!session) {
       session = await Session.create({
         userId: user._id,
@@ -169,27 +170,27 @@ exports.userLogin = async (req, res) => {
       session.lastSeenAt = null;
       await session.save();
     }
-
+ 
     // 7️⃣ Update user global online status
     user.isOnline = true;
     user.lastSeenAt = null;
     await user.save();
-
+ 
     // 8️⃣ Send "Welcome Back" email
     const emailTemplatePath = path.join(__dirname, "../../utils/templates/login.html");
     let emailHtml = fs.readFileSync(emailTemplatePath, "utf-8");
-
+ 
     // Replace placeholders
     emailHtml = emailHtml.replace("{username}", user.userName);
     emailHtml = emailHtml.replace("[Insert Dashboard Link]", `${process.env.FRONTEND_URL}/dashboard`);
-
+ 
     // Send mail
     sendMailSafeSafe({
       to: user.email,
       subject: "Welcome Back to Prithu!",
       html: emailHtml
     });
-
+ 
     // 9️⃣ Return tokens + session info
     res.json({
       accessToken,
@@ -202,12 +203,14 @@ exports.userLogin = async (req, res) => {
       category: userStart.hasInterestedCategory,
       role:"user",
     });
-
+ 
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ error: error.message });
   }
 };
+ 
+ 
 
 
 
@@ -363,7 +366,7 @@ exports.userPasswordReset = async (req, res) => {
 
     // Send password reset success email
     await sendTemplateEmail({
-      templateName: "password-reset-successful.html",
+      templateName: "password-reset-sucessfull.html",
       to: user.email,
       subject: "Your Prithu Password Has Been Reset",
       placeholders: { username: user.userName || "User" },

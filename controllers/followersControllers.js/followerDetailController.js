@@ -1,4 +1,4 @@
-const Follower = require("../../models/userFollowingModel");
+const UserFollower = require("../../models/userFollowingModel");
 const Account=require('../../models/accountSchemaModel')
 const mongoose = require("mongoose");
 const CreatorFollower=require('../../models/creatorFollowerModel');
@@ -9,20 +9,16 @@ const User =require("../../models/userModels/userModel");
 
 exports.followAccount = async (req, res) => {
   try {
-    const currentUserId = req.Id || req.body.userId; // logged-in user
-    const accountId = req.body.accountId; // account to follow
+    const currentUserId = req.Id || req.body.userId; 
+    const userId = req.body.userId; 
 
-    if (!currentUserId || !accountId) {
+    if (!currentUserId || !userId) {
       return res.status(400).json({ message: "Follower and Target account IDs are required" });
     }
 
-    // 1️⃣ Get the target account
-    const targetAccount = await Account.findById(accountId).lean();
-    if (!targetAccount || targetAccount.type !== "Creator") {
-      return res.status(404).json({ message: "Creator account not found" });
-    }
+   
 
-    const targetUserId = targetAccount.userId.toString();
+    const targetUserId = userId.toString();
 
     // 2️⃣ Prevent self-follow
     if (currentUserId.toString() === targetUserId) {
@@ -54,7 +50,7 @@ exports.followAccount = async (req, res) => {
 
     // 🔹 7️⃣ Also update CreatorFollower schema
     await CreatorFollower.findOneAndUpdate(
-      { creatorId: accountId },
+      { creatorId: userId },
       { $addToSet: { followerIds: currentUserId } }, // avoid duplicates
       { upsert: true, new: true }
     );
@@ -70,20 +66,14 @@ exports.followAccount = async (req, res) => {
 // Unfollow an account
 exports.unFollowAccount = async (req, res) => {
   try {
-    const currentUserId = req.Id || req.body.userId // logged-in user
-    const accountId = req.body.accountId; // account to unfollow
+    const currentUserId = req.Id || req.body.userId 
+    const userId = req.body.userId; 
 
-    if (!currentUserId || !accountId) {
+    if (!currentUserId || !userId) {
       return res.status(400).json({ message: "Follower and Target account IDs are required" });
     }
 
-    // 1️⃣ Get the target account
-    const targetAccount = await Account.findById(accountId).lean();
-    if (!targetAccount) {
-      return res.status(404).json({ message: "Target account not found" });
-    }
-
-    const targetUserId = targetAccount.userId.toString();
+    const targetUserId = userId.toString();
 
     // 2️⃣ Find or create Follower document for target user
     let followerDoc = await Follower.findOne({ userId: targetUserId });
@@ -111,7 +101,7 @@ exports.unFollowAccount = async (req, res) => {
 
       // 🔹 Also make sure user is removed from CreatorFollower
       await CreatorFollower.updateOne(
-        { creatorId: accountId },
+        { creatorId: userId },
         { $pull: { followerIds: currentUserId } }
       );
 
@@ -129,7 +119,7 @@ exports.unFollowAccount = async (req, res) => {
 
     // 🔹 Also update CreatorFollower schema → remove current user
     await CreatorFollower.updateOne(
-      { creatorId: accountId },
+      { creatorId:userId },
       { $pull: { followerIds: currentUserId } }
     );
 
@@ -141,55 +131,6 @@ exports.unFollowAccount = async (req, res) => {
 };
 
 
-exports.getCreatorFollowers = async (req, res) => {
-  const creatorId = req.accountId||req.body.accountId // creator's userId from token
-
-  if (!creatorId) {
-    return res.status(400).json({ message: "Creator ID is required" });
-  }
-
-  if (!mongoose.Types.ObjectId.isValid(creatorId)) {
-    return res.status(400).json({ message: "Invalid Creator ID" });
-  }
-
-  try {
-    // 1️⃣ Fetch all followers of this creator
-    const creatorFollowers = await CreatorFollower.findOne({ creatorId }).lean();
-
-    const followerIds = creatorFollowers?.followerIds || [];
-
-    if (followerIds.length === 0) {
-      return res.status(200).json({
-        count: 0,
-        followers: [],
-      });
-    }
-
-    // 2️⃣ Fetch user info + profile avatar for all followerIds
-    const followers = await User.find({ _id: { $in: followerIds } })
-      .select("userName profileSettings")
-      .populate({
-        path: "profileSettings",
-        select: "profileAvatar",
-      })
-      .lean();
-
-    // 3️⃣ Format response
-    const formattedFollowers = followers.map(f => ({
-      userName: f.userName || "Unavailable",
-      profileAvatar: f.profileSettings?.profileAvatar || "Unavailable",
-    }));
-
-    return res.status(200).json({
-      count: formattedFollowers.length,
-      followers: formattedFollowers,
-    });
-  } catch (error) {
-    console.error("❌ Error fetching followers:", error);
-    return res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
-
 
 
 
@@ -197,78 +138,38 @@ exports.getCreatorFollowers = async (req, res) => {
 exports.getUserFollowersData = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
-    console.log("hi")
+
     if (!userId) {
       return res.status(400).json({ message: "userId is required" });
     }
 
-    const followersData = await mongoose.connection
-      .collection("UserFollowings")
-      .aggregate([
-        // 1️⃣ Match by userId
-        { $match: { userId: new mongoose.Types.ObjectId(userId) } },
-
-        // 2️⃣ Lookup all followers in one go
-        {
-          $lookup: {
-            from: "ProfileSettings", // ensure this matches your actual collection name
-            let: {
-              followerIds: {
-                $map: {
-                  input: "$followerIds",
-                  as: "f",
-                  in: "$$f.userId",
-                },
-              },
-            },
-            pipeline: [
-              {
-                $match: {
-                  $expr: { $in: ["$userId", "$$followerIds"] },
-                },
-              },
-              {
-                $project: {
-                  _id: 0,
-                  userId: 1,
-                  userName: 1,
-                  profileAvatar: 1,
-                },
-              },
-            ],
-            as: "followers",
-          },
-        },
-
-        // 3️⃣ Add followersCount
-        {
-          $addFields: {
-            followersCount: { $size: "$followers" },
-          },
-        },
-
-        // 4️⃣ Shape final response
-        {
-          $project: {
-            _id: 0,
-            creatorId: "$userId",
-            followersCount: 1,
-            followers: 1,
-          },
-        },
-      ])
-      .toArray();
-
-    if (!followersData || followersData.length === 0) {
-      return res.status(200).json({
-        message: "No followers found",
-        data: { creatorId: userId, followersCount: 0, followers: [] },
+    // 1️⃣ Get follower details from CreatorFollowers
+    const creatorFollowerDoc = await CreatorFollower.findOne({ creatorId:userId })
+      .populate({
+        path: "followerIds",
+        select: "userName profileAvatar",
+        model: "User", // or your actual user model
       });
-    }
+
+    const followers = creatorFollowerDoc?.followerIds || [];
+    const followersCount = followers.length;
+
+    // 2️⃣ Get following count from UserFollowings
+    const userFollowingDoc = await UserFollower.findOne({ userId:userId });
+    const followingCount = userFollowingDoc?.followerIds?.length || 0;
 
     res.status(200).json({
       message: "Followers fetched successfully",
-      data: followersData[0],
+      data: {
+        userId,
+        followersCount,
+        followingCount,
+        followers: followers.map(f => ({
+          userId: f._id,
+          userName: f.userName,
+          profileAvatar: f.profileAvatar,
+        })),
+      },
     });
   } catch (err) {
     console.error("Error fetching followers data:", err);

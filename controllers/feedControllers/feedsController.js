@@ -11,6 +11,7 @@ const UserLanguage=require('../../models/userModels/userLanguageModel.js');
 const  UserCategory=require('../../models/userModels/userCategotyModel.js');
 const ProfileSettings=require('../../models/profileSettingModel');
 const { applyFrame } = require("../../middlewares/helper/AddFrame/addFrame.js");
+const {extractThemeColor}=require("../../middlewares/helper/extractThemeColor.js");
 
 
 exports.getAllFeedsByUserId = async (req, res) => {
@@ -89,14 +90,11 @@ exports.getAllFeedsByUserId = async (req, res) => {
             adminId: {
               $cond: [{ $eq: ["$roleRef", "Admin"] }, "$createdByAccount", null],
             },
-            accountId: {
-              $cond: [{ $eq: ["$roleRef", "Account"] }, "$createdByAccount", null],
+            userId: {
+              $cond: [{ $eq: ["$roleRef", "User"] }, "$createdByAccount", null],
             },
             childAdminId: {
               $cond: [{ $eq: ["$roleRef", "Child_Admin"] }, "$createdByAccount", null],
-            },
-            userId: {
-              $cond: [{ $eq: ["$roleRef", "Creator"] }, "$createdByAccount", null],
             },
           },
           pipeline: [
@@ -105,7 +103,6 @@ exports.getAllFeedsByUserId = async (req, res) => {
                 $expr: {
                   $or: [
                     { $eq: ["$adminId", "$$adminId"] },
-                    { $eq: ["$accountId", "$$accountId"] },
                     { $eq: ["$childAdminId", "$$childAdminId"] },
                     { $eq: ["$userId", "$$userId"] },
                   ],
@@ -265,21 +262,39 @@ exports.getAllFeedsByUserId = async (req, res) => {
     // Format response with timeAgo
 const enrichedFeeds = await Promise.all(
   feeds.map(async (feed) => {
-    // Check ProfileSettings for modifyAvatar
-    const profileSetting = await ProfileSettings.findOne({userId:userId})
-      
+    // Determine which avatar to use
+    const profileSetting = await ProfileSettings.findOne({ userId: userId });
+    const avatarToUse = profileSetting?.modifyAvatarPublicId;
 
-    const avatarToUse = profileSetting?.modifyAvatar || feed.profileAvatar;
-
+    // Apply frame to avatar if exists
     const framedAvatar = await applyFrame(avatarToUse);
+
+    // Determine content type
+    const feedType = feed.type === "video" ? "video" : "image";
+
+    // Extract theme colors
+    let themeColor = {
+      primary: "#ffffff",
+      secondary: "#cccccc",
+      accent: "#999999",
+      text: "#000000",
+      gradient: "linear-gradient(135deg, #ffffff, #cccccc, #999999)",
+    };
+    try {
+      themeColor = await extractThemeColor(feed.contentUrl, feedType);
+    } catch (err) {
+      console.warn(`Theme extraction failed for feed ${feed.feedId}:`, err.message);
+    }
 
     return {
       ...feed,
-      profileAvatar: framedAvatar || avatarToUse, // override with framed avatar
+      framedAvatar: framedAvatar || avatarToUse,
+      themeColor,
       timeAgo: feedTimeCalculator(feed.createdAt),
     };
   })
 );
+
 
     res.status(200).json({
       message: "Feeds retrieved successfully",

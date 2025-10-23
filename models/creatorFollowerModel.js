@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 
 const creatorFollowerSchema = new mongoose.Schema({
-  creatorId: { type: mongoose.Schema.Types.ObjectId, ref: "Account", required: true },
+  creatorId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   
   followerIds: [
     { 

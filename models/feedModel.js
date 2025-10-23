@@ -19,15 +19,15 @@ const feedSchema = new mongoose.Schema({
   // Reference to Creator or Admin account
   createdByAccount: {
     type: mongoose.Schema.Types.ObjectId,
-    refPath: "roleRef",  // dynamically reference model based on roleRef
+    refPath: "roleRef",  
     required: true,
   },
 
   roleRef: {
     type: String,
-    enum: [ "Admin","Account","Child_Admin","Creator"],
+    enum: [ "Admin","Child_Admin","User"],
     required: true,
-    default: "Account"
+    default: "User"
   },
 
   createdAt: { type: Date, default: Date.now },

@@ -12,19 +12,22 @@ cloudinary.config({
 /**
  * removeImageBackground
  * @param {string} imageUrl - Original image URL
- * @returns {string} - Cloudinary URL of the background-removed image
+ * @returns {{ secure_url: string, public_id: string }} - Cloudinary response with URL and public ID
  */
 async function removeImageBackground(imageUrl) {
   try {
     // Upload image to Cloudinary with background removal
     const result = await cloudinary.uploader.upload(imageUrl, {
-      upload_preset: "ml_default", // Optional preset
+      upload_preset: "ml_default", // optional preset
       background_removal: "cloudinary_ai", // AI background removal
-      format: "png", // Keep transparency
+      format: "png", // keep transparency
     });
 
-    // Returns the new image URL
-    return result.secure_url;
+    // Return both URL and public ID
+    return {
+      secure_url: result.secure_url,
+      public_id: result.public_id,
+    };
   } catch (error) {
     console.error("Error removing image background:", error);
     throw error;

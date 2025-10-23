@@ -12,7 +12,8 @@ const UserCategory = require("../../models/userModels/userCategotyModel");
 const {buildDateFilter} =require("../../middlewares/helper/buildDateFilter");
 const Hidden =require("../../models/userModels/hiddenPostSchema");
 const ProfileSettings=require('../../models/profileSettingModel');
-const UserComment=require ('../../models/userCommentModel')
+const UserComment=require ('../../models/userCommentModel');
+const CreatorFollower=require("../../models/creatorFollowerModel");
 
 
 
@@ -593,3 +594,57 @@ exports.getUserAnalyticsSummary = async (req, res) => {
   }
 };
 
+
+
+
+// Assuming you have a middleware that sets req.userId from the token
+exports.getUserdetailWithinTheFeed = async (req, res) => {
+  try {
+    const currentUserId = req.Id; // from token middleware
+    const { profileUserId, roleRef } = req.query;
+
+    if (!profileUserId || !roleRef) {
+      return res.status(400).json({ message: "profileUserId and roleRef are required" });
+    }
+
+    // Determine the field to query based on roleRef
+    let query = {};
+    if (roleRef === "Admin") query.adminId = profileUserId;
+    else if (roleRef === "User") query.userId = profileUserId;
+    else if (roleRef === "Child_Admin") query.childAdminId = profileUserId;
+    else return res.status(400).json({ message: "Invalid roleRef" });
+
+    // Find the profile
+    const profile = await ProfileSettings.findOne(query).select("userName profileAvatar bio");
+    if (!profile) return res.status(404).json({ message: "Profile not found" });
+
+    // Get following info from Follower collection
+    const followerDoc = await Follower.findOne({ userId: profileUserId });
+    const followingCount = followerDoc ? followerDoc.followerIds.length : 0;
+
+    // Get creator follower count
+    const creatorFollowerDoc = await CreatorFollower.findOne({ creatorId: profileUserId });
+    const creatorFollowerCount = creatorFollowerDoc ? creatorFollowerDoc.followerIds.length : 0;
+
+    // Check if current user is following this profile
+    const isFollowing = followerDoc 
+      ? followerDoc.followerIds.some(f => f.userId.toString() === currentUserId) 
+      : false;
+
+    return res.json({
+      success: true,
+      profile: {
+        userName: profile.userName,
+        profileAvatar: profile.profileAvatar,
+        bio: profile.bio,
+        followingCount,
+        creatorFollowerCount,
+        isFollowing,
+      }
+    });
+
+  } catch (error) {
+    console.error("Error in getUserdetailWithinTheFeed:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
