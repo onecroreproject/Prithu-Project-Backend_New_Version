@@ -1,7 +1,5 @@
 const Categories= require('../models/categorySchema');
 const Feed = require('../models/feedModel');
-const Accounts=require('../models/accountSchemaModel');
-const ProfileSettings=require('../models/profileSettingModel');
 const mongoose=require('mongoose')
 const {feedTimeCalculator}=require("../middlewares/feedTimeCalculator");
 const UserLanguage=require('../models/userModels/userLanguageModel');
@@ -465,6 +463,79 @@ exports.searchCategories = async (req, res) => {
   } catch (error) {
     console.error("Error searching categories:", error);
     return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+
+
+
+
+
+exports.getFeedLanguageCategories = async (req, res) => {
+  try {
+    const userId = req.Id;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized: user not found in token" });
+    }
+
+    // 1️⃣ Find user's preferred feed language
+    const userLangDoc = await UserLanguage.findOne({ userId }).lean();
+    const feedLanguageCode = userLangDoc?.feedLanguageCode;
+
+    if (!feedLanguageCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Feed language not set for this user",
+      });
+    }
+
+    // 2️⃣ Find all feeds in the user's preferred language
+    const feeds = await Feed.find({ language: feedLanguageCode }).select("category").lean();
+
+    if (!feeds.length) {
+      return res.status(404).json({
+        success: false,
+        message: `No categories available for feeds in selected language (${getLanguageCode(feedLanguageCode)})`,
+        categories: [],
+      });
+    }
+
+    // 3️⃣ Extract unique category IDs
+    const categoryIds = [...new Set(feeds.map(f => f.category?.toString()).filter(Boolean))];
+
+    // 4️⃣ Fetch matching category details
+    const categories = await Categories.find({ _id: { $in: categoryIds } })
+      .select("_id name")
+      .sort({ name: 1 })
+      .lean();
+
+    if (!categories.length) {
+      return res.status(404).json({
+        success: false,
+        message: `No category details found for selected language (${getLanguageCode(feedLanguageCode)})`,
+        categories: [],
+      });
+    }
+
+    // ✅ 5️⃣ Send success response
+    res.status(200).json({
+      success: true,
+      message: "Feed language categories fetched successfully",
+      language: {
+        code: feedLanguageCode,
+        name: getLanguageCode(feedLanguageCode),
+      },
+      categories,
+    });
+
+  } catch (error) {
+    console.error("Error fetching feed language categories:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching feed language categories",
+      error: error.message,
+    });
   }
 };
 

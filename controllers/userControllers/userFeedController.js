@@ -620,7 +620,7 @@ exports.getUserdetailWithinTheFeed = async (req, res) => {
 
     // Get following info from Follower collection
     const followerDoc = await Follower.findOne({ userId: profileUserId });
-    const followingCount = followerDoc ? followerDoc.followerIds.length : 0;
+    const followingCount = followerDoc ? followerDoc.followingIds.length : 0;
 
     // Get creator follower count
     const creatorFollowerDoc = await CreatorFollower.findOne({ creatorId: profileUserId });
@@ -628,7 +628,7 @@ exports.getUserdetailWithinTheFeed = async (req, res) => {
 
     // Check if current user is following this profile
     const isFollowing = followerDoc 
-      ? followerDoc.followerIds.some(f => f.userId.toString() === currentUserId) 
+      ? followerDoc.followingIds.some(f => f.userId.toString() === currentUserId) 
       : false;
 
     return res.json({
@@ -648,3 +648,61 @@ exports.getUserdetailWithinTheFeed = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+
+
+
+
+exports.getUserPost = async (req, res) => {
+  try {
+    
+    const userId =  req.body.profileUserId || req.body.currentUserId;
+ 
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+ 
+
+    const creatorId = userId
+ 
+    // ✅ Run queries in parallel (feeds + count)
+    const [feeds, feedCount] = await Promise.all([
+      Feed.find(
+        { createdByAccount: creatorId },
+        { contentUrl: 1, createdAt: 1 }
+      )
+        .sort({ createdAt: -1 })
+        .lean(),
+      Feed.countDocuments({ createdByAccount: creatorId })
+    ]);
+ 
+    if (!feeds || feeds.length === 0) {
+      return res.status(404).json({
+        message: "No feeds found for this creator",
+        feedCount: 0,
+        feeds: [],
+      });
+    }
+ 
+   
+    const feedsFormatted = feeds.map(feed => ({
+      feedId: feed._id,
+      contentUrl:feed.contentUrl,
+      timeAgo: feedTimeCalculator(feed.createdAt),
+    }));
+ 
+    return res.status(200).json({
+      message: "Creator feeds retrieved successfully",
+      feedCount, 
+      feeds: feedsFormatted,
+    });
+ 
+  } catch (error) {
+    console.error("Error fetching creator feeds:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+
+
+ 

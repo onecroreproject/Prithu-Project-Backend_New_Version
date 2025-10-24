@@ -44,7 +44,7 @@ const {
   creatorFeedDelete,
   getCreatorFeeds,
   creatorFeedScheduleUpload,
-  getCreatorPost,
+
 } = require('../controllers/feedControllers/creatorFeedController');
 
 const {
@@ -91,6 +91,7 @@ const {
   searchCategories,
   getCategoriesWithFeeds,
   saveInterestedCategory,
+  getFeedLanguageCategories,
 } = require('../controllers/categoriesController');
 
 const {
@@ -233,6 +234,7 @@ fetchUserDownloaded,
 getUserAnalyticsSummary,
 fetchUserNonInterested,
 getUserdetailWithinTheFeed,
+  getUserPost ,
 }=require('../controllers/userControllers/userFeedController');
 
 const{
@@ -348,7 +350,7 @@ router.post('/get/comments/for/feed',auth,getCommentsByFeed);
 router.post('/get/comments/relpy/for/feed',auth,getRepliesByComment);
 router.post('/user/hide/feed',auth,userHideFeed);
 router.get("/user/notintrested/category",auth,getUserCategory);
-router.get("/get/user/detail/at/feed/icon",getUserdetailWithinTheFeed);
+router.get("/get/user/detail/at/feed/icon",auth,getUserdetailWithinTheFeed);
 
 // /* --------------------- User Subscription --------------------- */
 router.post('/user/plan/subscription',subscribePlan);
@@ -368,18 +370,20 @@ router.post("/report-post", auth,createFeedReport);
 /*-------------------------User Session API ---------------------*/
 
  router.post("/refresh-token", refreshAccessToken);
-
- // Heartbeat / mark active (requires auth)
  router.post("/heartbeat",auth, heartbeat);
 
-
-// /* --------------------- User Subscription --------------------- */
-// router.get('/user/user/subscriptions', auth, getUserSubscriptionPlanWithId);
+ /* --------------------- User Subscription --------------------- */
+router.get('/user/user/subscriptions', auth, getUserSubscriptionPlanWithId);
 
 /*---------------------- User Feed API -------------------------*/
 router.get('/get/all/feeds/user',auth,getAllFeedsByUserId);
 router.post('/user/watching/vidoes',auth,userVideoViewCount);
 router.post('/user/image/view/count',auth,userImageViewCount);
+
+router.delete('/user/delete/feeds', auth, creatorFeedDelete);
+router.post('/user/get/post',getUserPost);
+router.get('/user/get/feed/category',auth,getFeedLanguageCategories);
+router.get('/get/all/feed/for/Creator',auth,getFeedsByAccountId);
 
 /* --------------------- User Follower API --------------------- */
  router.post('/user/follow/creator',auth, followAccount);
@@ -404,11 +408,7 @@ router.post("/creator/feed/upload",auth,userUpload.single("file"),(req, res, nex
   creatorFeedUpload
 );
 
-router.delete('/creator/delete/feeds', auth, creatorFeedDelete);
-router.get('/creator/getall/feeds',auth,getCreatorFeeds);
-router.post('/creator/get/post',auth,getCreatorPost);
-router.get('/creator/get/feed/category',getAllCategories);
-router.get('/get/all/feed/for/Creator',auth,getFeedsByAccountId);
+
 
 /* --------------------- Cretor Feed Actions --------------------- */
 // router.post('/creator/feed/like', auth,likeFeed);
@@ -577,6 +577,9 @@ router.get(
   getVisibilitySettings
 );
 
+
+
+// router.get("/trending/feeds,")
 
 
 

@@ -12,7 +12,8 @@ const  UserCategory=require('../../models/userModels/userCategotyModel.js');
 const ProfileSettings=require('../../models/profileSettingModel');
 const { applyFrame } = require("../../middlewares/helper/AddFrame/addFrame.js");
 const {extractThemeColor}=require("../../middlewares/helper/extractThemeColor.js");
-
+const ImageStats = require("../../models/userModels/MediaSchema/imageViewModel.js");
+const VideoStats = require("../../models/userModels/MediaSchema/videoViewStatusModel");
 
 exports.getAllFeedsByUserId = async (req, res) => {
   try {
@@ -681,6 +682,107 @@ exports.getUserInfoAssociatedFeed = async (req, res) => {
     });
   }
 };
+
+
+
+
+
+
+
+
+exports.getTrendingFeeds = async (req, res) => {
+  try {
+    // 1️⃣ Get all feeds
+    const feeds = await Feed.find({})
+      .populate("createdByAccount", "userName profileAvatar") // populate creator info
+      .lean(); // lean() for plain JS objects
+
+    // 2️⃣ Prepare trending score for each feed
+    const feedScores = await Promise.all(feeds.map(async (feed) => {
+      const feedId = feed._id;
+
+      // Get likes and shares from UserFeedActions
+      const userActions = await UserFeedActions.aggregate([
+        { $project: {
+            likedFeeds: 1,
+            sharedFeeds: 1
+          }
+        },
+        {
+          $project: {
+            likes: {
+              $size: {
+                $filter: {
+                  input: "$likedFeeds",
+                  cond: { $eq: ["$$this.feedId", feedId] }
+                }
+              }
+            },
+            shares: {
+              $size: {
+                $filter: {
+                  input: "$sharedFeeds",
+                  cond: { $eq: ["$$this.feedId", feedId] }
+                }
+              }
+            }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalLikes: { $sum: "$likes" },
+            totalShares: { $sum: "$shares" }
+          }
+        }
+      ]);
+
+      const totalLikes = userActions[0]?.totalLikes || 0;
+      const totalShares = userActions[0]?.totalShares || 0;
+
+      // Get views from stats
+      let totalViews = 0;
+      if (feed.type === "image") {
+        const imgStats = await ImageStats.findOne({ imageId: feedId });
+        totalViews = imgStats?.totalViews || 0;
+      } else if (feed.type === "video") {
+        const vidStats = await VideoStats.findOne({ videoId: feedId });
+        totalViews = vidStats?.totalViews || 0;
+      }
+
+      // Recency factor (hours since post)
+      const hoursSincePost = (Date.now() - new Date(feed.createdAt)) / (1000 * 60 * 60);
+
+      // Simple trending score formula
+      const trendingScore = (totalLikes * 2) + (totalShares * 5) + (totalViews * 1) - hoursSincePost;
+
+      return {
+        ...feed,
+        totalLikes,
+        totalShares,
+        totalViews,
+        trendingScore
+      };
+    }));
+
+    // 3️⃣ Sort by trendingScore descending
+    const trendingFeeds = feedScores.sort((a, b) => b.trendingScore - a.trendingScore);
+
+    // 4️⃣ Return top feeds (limit optional)
+    res.status(200).json({
+      message: "Trending feeds fetched successfully",
+      data: trendingFeeds.slice(0, 20) // top 20
+    });
+
+  } catch (err) {
+    console.error("Error fetching trending feeds:", err);
+    res.status(500).json({
+      message: "Error fetching trending feeds",
+      error: err.message
+    });
+  }
+};
+
 
 
 

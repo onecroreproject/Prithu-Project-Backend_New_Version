@@ -195,6 +195,7 @@ exports.userLogin = async (req, res) => {
     res.json({
       accessToken,
       refreshToken,
+      userId: user._id,
       sessionId: session._id,
       deviceId: device.deviceId,
       appLanguage: userStart.appLanguage,

@@ -1,139 +1,124 @@
-const UserFollower = require("../../models/userFollowingModel");
-const Account=require('../../models/accountSchemaModel')
+const Follower = require("../../models/userFollowingModel");
 const mongoose = require("mongoose");
 const CreatorFollower=require('../../models/creatorFollowerModel');
-const User =require("../../models/userModels/userModel");
+const Feed =require("../../models/feedModel");
 
-
-
-
+ 
+ 
+ 
+ 
 exports.followAccount = async (req, res) => {
   try {
-    const currentUserId = req.Id || req.body.userId; 
-    const userId = req.body.userId; 
+    const currentUserId = req.Id || req.body.currentUserId;
+    const userId = req.body.userId;
 
     if (!currentUserId || !userId) {
       return res.status(400).json({ message: "Follower and Target account IDs are required" });
     }
 
-   
-
-    const targetUserId = userId.toString();
-
-    // 2️⃣ Prevent self-follow
-    if (currentUserId.toString() === targetUserId) {
+    if (currentUserId.toString() === userId.toString()) {
       return res.status(400).json({ message: "You cannot follow your own account" });
     }
 
-    // 3️⃣ Check if Follower document exists
-    let followerDoc = await Follower.findOne({ userId: targetUserId });
+    // 🔹 1️⃣ Update or create entry in UserFollowing schema
+    let followingDoc = await Follower.findOne({ userId: currentUserId });
 
-    // 4️⃣ If document exists, check if user already followed
-    if (followerDoc) {
-      const alreadyFollowed = followerDoc.followerIds.some(
-        (f) => f.userId.toString() === currentUserId.toString()
+    if (followingDoc) {
+      const alreadyFollowing = followingDoc.followingIds.some(
+        (f) => f.userId.toString() === userId.toString()
       );
-      if (alreadyFollowed) {
-        return res.status(400).json({ message: "You already followed this Creator" });
+
+      if (alreadyFollowing) {
+        return res.status(400).json({ message: "You are already following this user" });
       }
 
-      // 5️⃣ Add current user to followerIds
-      followerDoc.followerIds.push({ userId: currentUserId, createdAt: new Date() });
-      await followerDoc.save();
+      followingDoc.followingIds.push({ userId, createdAt: new Date() });
+      // Remove from nonFollowingIds if exists
+      followingDoc.nonFollowingIds = followingDoc.nonFollowingIds.filter(
+        (nf) => nf.userId.toString() !== userId.toString()
+      );
+      await followingDoc.save();
     } else {
-      // 6️⃣ Create new follower document if not exists
-      followerDoc = await Follower.create({
-        userId: targetUserId,
-        followerIds: [{ userId: currentUserId, createdAt: new Date() }],
+      followingDoc = await Follower.create({
+        userId: currentUserId,
+        followingIds: [{ userId, createdAt: new Date() }],
       });
     }
 
-    // 🔹 7️⃣ Also update CreatorFollower schema
+    // 🔹 2️⃣ Update or create entry in CreatorFollower schema
     await CreatorFollower.findOneAndUpdate(
       { creatorId: userId },
       { $addToSet: { followerIds: currentUserId } }, // avoid duplicates
       { upsert: true, new: true }
     );
 
-    res.status(200).json({ message: "Followed successfully", followerDoc });
+    res.status(200).json({
+      message: "Followed successfully",
+      followingDoc,
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: err.message });
+    console.error("Follow error:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };
-
-
+ 
+ 
 // Unfollow an account
+
 exports.unFollowAccount = async (req, res) => {
   try {
-    const currentUserId = req.Id || req.body.userId 
-    const userId = req.body.userId; 
+    const currentUserId = req.Id || req.body.currentUserId;
+    const userId = req.body.userId;
 
     if (!currentUserId || !userId) {
       return res.status(400).json({ message: "Follower and Target account IDs are required" });
     }
 
-    const targetUserId = userId.toString();
+    // 🔹 1️⃣ Find current user's following document
+    const followingDoc = await Follower.findOne({ userId: currentUserId });
 
-    // 2️⃣ Find or create Follower document for target user
-    let followerDoc = await Follower.findOne({ userId: targetUserId });
-    if (!followerDoc) {
-      return res.status(400).json({ message: "You are not following this account" });
+    if (!followingDoc) {
+      return res.status(400).json({ message: "You are not following this user" });
     }
 
-    // 3️⃣ Check if user is in followerIds
-    const isFollowing = followerDoc.followerIds.some(
-      (f) => f.userId.toString() === currentUserId.toString()
+    // 🔹 2️⃣ Check if actually following
+    const isFollowing = followingDoc.followingIds.some(
+      (f) => f.userId.toString() === userId.toString()
     );
 
     if (!isFollowing) {
-      // Check if already in nonFollowerIds
-      const alreadyUnfollowed = followerDoc.nonFollowerIds.some(
-        (nf) => nf.userId.toString() === currentUserId.toString()
-      );
-      if (alreadyUnfollowed) {
-        return res.status(400).json({ message: "You already unfollowed this account" });
-      }
-
-      // Not following, but add to nonFollowerIds
-      followerDoc.nonFollowerIds.push({ userId: currentUserId, createdAt: new Date() });
-      await followerDoc.save();
-
-      // 🔹 Also make sure user is removed from CreatorFollower
-      await CreatorFollower.updateOne(
-        { creatorId: userId },
-        { $pull: { followerIds: currentUserId } }
-      );
-
-      return res.status(200).json({ message: "You are now in non-followers list", followerDoc });
+      return res.status(400).json({ message: "You are not following this user" });
     }
 
-    // 4️⃣ Pull from followerIds and push to nonFollowerIds
-    followerDoc.followerIds = followerDoc.followerIds.filter(
-      (f) => f.userId.toString() !== currentUserId.toString()
+    // 🔹 3️⃣ Remove from followingIds and add to nonFollowingIds
+    followingDoc.followingIds = followingDoc.followingIds.filter(
+      (f) => f.userId.toString() !== userId.toString()
     );
 
-    followerDoc.nonFollowerIds.push({ userId: currentUserId, createdAt: new Date() });
+    followingDoc.nonFollowingIds.push({ userId, createdAt: new Date() });
 
-    await followerDoc.save();
+    await followingDoc.save();
 
-    // 🔹 Also update CreatorFollower schema → remove current user
+    // 🔹 4️⃣ Remove from CreatorFollower’s followerIds
     await CreatorFollower.updateOne(
-      { creatorId:userId },
+      { creatorId: userId },
       { $pull: { followerIds: currentUserId } }
     );
 
-    res.status(200).json({ message: "Unfollowed successfully", followerDoc });
+    res.status(200).json({
+      message: "Unfollowed successfully",
+      followingDoc,
+    });
   } catch (err) {
-    console.error(err);
+    console.error("Unfollow error:", err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
-
-
-
-
-
+ 
+ 
+ 
+ 
+ 
 
 exports.getUserFollowersData = async (req, res) => {
   try {
@@ -143,43 +128,40 @@ exports.getUserFollowersData = async (req, res) => {
       return res.status(400).json({ message: "userId is required" });
     }
 
-    // 1️⃣ Get follower details from CreatorFollowers
-    const creatorFollowerDoc = await CreatorFollower.findOne({ creatorId:userId })
-      .populate({
-        path: "followerIds",
-        select: "userName profileAvatar",
-        model: "User", // or your actual user model
-      });
+    // 1️⃣ Get follower count (users who follow this user)
+    const creatorFollowerDoc = await CreatorFollower.findOne({ creatorId: userId }).select("followerIds");
+    const followersCount = creatorFollowerDoc?.followerIds?.length || 0;
 
-    const followers = creatorFollowerDoc?.followerIds || [];
-    const followersCount = followers.length;
+    // 2️⃣ Get following count (users this user follows)
+    const userFollowingDoc = await Follower.findOne({ userId }).select("followingIds");
+    const followingCount = userFollowingDoc?.followingIds?.length || 0;
 
-    // 2️⃣ Get following count from UserFollowings
-    const userFollowingDoc = await UserFollower.findOne({ userId:userId });
-    const followingCount = userFollowingDoc?.followerIds?.length || 0;
+    // 3️⃣ Get total feed count (feeds created by this user)
+    const feedCount = await Feed.countDocuments({ createdByAccount: userId });
 
+    // ✅ 4️⃣ Return all counts
     res.status(200).json({
-      message: "Followers fetched successfully",
+      success: true,
+      message: "Follower, following, and feed counts fetched successfully",
       data: {
         userId,
         followersCount,
         followingCount,
-        followers: followers.map(f => ({
-          userId: f._id,
-          userName: f.userName,
-          profileAvatar: f.profileAvatar,
-        })),
+        feedCount,
       },
     });
   } catch (err) {
     console.error("Error fetching followers data:", err);
     res.status(500).json({
-      message: "Error fetching followers data",
+      success: false,
+      message: "Error fetching follower/following/feed data",
       error: err.message,
     });
   }
 };
-
-
-
-
+ 
+ 
+ 
+ 
+ 
+ 

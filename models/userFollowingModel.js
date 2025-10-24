@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const followerSchema = new mongoose.Schema({
+const followingSchema = new mongoose.Schema({
   userId: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: "User", 
@@ -8,14 +8,14 @@ const followerSchema = new mongoose.Schema({
   }, // the user who owns this list
 
   // Arrays of objects to track actions with timestamps
-  followerIds: [
+  followingIds: [
     {
       userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
       createdAt: { type: Date, default: Date.now }
     }
   ],
 
-  nonFollowerIds: [
+  nonFollowingIds: [
     {
       userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
       createdAt: { type: Date, default: Date.now }
@@ -33,6 +33,6 @@ const followerSchema = new mongoose.Schema({
 });
 
 // Ensure one document per user
-followerSchema.index({ userId: 1 }, { unique: true });
+followingSchema.index({ userId: 1 }, { unique: true });
 
-module.exports = mongoose.model("Follower", followerSchema, "UserFollowings");
+module.exports = mongoose.model("Follower", followingSchema, "UserFollowings");
