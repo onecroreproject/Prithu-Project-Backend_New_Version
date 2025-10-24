@@ -14,6 +14,7 @@ const Hidden =require("../../models/userModels/hiddenPostSchema");
 const ProfileSettings=require('../../models/profileSettingModel');
 const UserComment=require ('../../models/userCommentModel');
 const CreatorFollower=require("../../models/creatorFollowerModel");
+const {feedTimeCalculator}=require("../../middlewares/feedTimeCalculator")
 
 
 
@@ -655,17 +656,15 @@ exports.getUserdetailWithinTheFeed = async (req, res) => {
 
 exports.getUserPost = async (req, res) => {
   try {
-    
-    const userId =  req.body.profileUserId || req.body.currentUserId;
- 
+    const userId = req.body.profileUserId || req.body.currentUserId;
+
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
     }
- 
 
-    const creatorId = userId
- 
-    // ✅ Run queries in parallel (feeds + count)
+    const creatorId = userId;
+
+    // ✅ Run feed fetching and count in parallel
     const [feeds, feedCount] = await Promise.all([
       Feed.find(
         { createdByAccount: creatorId },
@@ -675,7 +674,7 @@ exports.getUserPost = async (req, res) => {
         .lean(),
       Feed.countDocuments({ createdByAccount: creatorId })
     ]);
- 
+
     if (!feeds || feeds.length === 0) {
       return res.status(404).json({
         message: "No feeds found for this creator",
@@ -683,23 +682,48 @@ exports.getUserPost = async (req, res) => {
         feeds: [],
       });
     }
- 
-   
+
+    // ✅ Get feedIds for like count lookup
+    const feedIds = feeds.map(feed => feed._id);
+
+    // ✅ Aggregate like counts for each feed
+    const likeCounts = await UserFeedActions.aggregate([
+      { $unwind: "$likedFeeds" },
+      { $match: { "likedFeeds.feedId": { $in: feedIds } } },
+      {
+        $group: {
+          _id: "$likedFeeds.feedId",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // Convert to a lookup map for faster access
+    const likeCountMap = {};
+    likeCounts.forEach(item => {
+      likeCountMap[item._id.toString()] = item.count;
+    });
+
+    // ✅ Format feeds with like count + time ago
     const feedsFormatted = feeds.map(feed => ({
       feedId: feed._id,
-      contentUrl:feed.contentUrl,
+      contentUrl: feed.contentUrl,
       timeAgo: feedTimeCalculator(feed.createdAt),
+      likeCount: likeCountMap[feed._id.toString()] || 0,
     }));
- 
+
     return res.status(200).json({
       message: "Creator feeds retrieved successfully",
-      feedCount, 
+      feedCount,
       feeds: feedsFormatted,
     });
- 
+
   } catch (error) {
     console.error("Error fetching creator feeds:", error);
-    return res.status(500).json({ message: "Server error", error: error.message });
+    return res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
   }
 };
 
