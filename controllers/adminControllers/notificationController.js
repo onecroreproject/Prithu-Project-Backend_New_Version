@@ -29,40 +29,7 @@ exports.notificationRegister= async (req, res) => {
   }
 };
 
-// 2) Subscribe/unsubscribe token to topics (called on mode switch)
-exports.switchNotification=async (req, res) => {
-  try {
-    const { token, subscribeTo = [], unsubscribeFrom = [] } = req.body;
-    if (!token) return res.status(400).json({ message: 'token required' });
 
-    // perform subscribe
-    for (const topic of subscribeTo) {
-      await admin.messaging().subscribeToTopic(token, topic);
-    }
-    for (const topic of unsubscribeFrom) {
-      await admin.messaging().unsubscribeFromTopic(token, topic);
-    }
-
-    // persist new topic list in DB for that token
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    const t = user.fcmTokens.find(x => x.token === token);
-    if (t) {
-      // recompute t.topics: add subscribeTo, remove unsubscribeFrom
-      const set = new Set(t.topics || []);
-      subscribeTo.forEach(s => set.add(s));
-      unsubscribeFrom.forEach(s => set.delete(s));
-      t.topics = Array.from(set);
-      t.lastSeenAt = new Date();
-      await user.save();
-    }
-    res.json({ ok: true, subscribed: subscribeTo, unsubscribed: unsubscribeFrom });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'subscribe error', err: err.message });
-  }
-}
 
 
 exports.adminSentNotification = async (req, res) => {

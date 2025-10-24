@@ -85,7 +85,7 @@ const{
 }=require('../controllers/userControllers/userCategoryController')
 
 const {
-  getCategoryWithId,
+  getfeedWithCategoryWithId,
   getAllCategories,
   getUserContentCategories,
   searchCategories,
@@ -209,9 +209,6 @@ const{
   creatorUnSelectCategory,
 }=require('../controllers/creatorControllers/creatorCategoryController')
 
-const{
-  applyReferralCode,
-}=require('../controllers/userControllers/userReferralController')
 
 const{
   getCommentsByFeed,
@@ -311,8 +308,6 @@ router.post('/auth/user/reset-password', userPasswordReset);
 router.post('/auth/user/logout',auth, userLogOut);
 
 // /* --------------------- User Referral API Actions --------------------- */
-// router.post('/user/later/referral',applyReferralCode);
-// router.post('/user/later/referral',applyReferralCode);
 router.get('/user/referal/code',auth,getUserReferalCode);
 router.get ('/user/earning/card/data',getUserEarnings);
 router.get('/user/both/tree/referals',getUserTreeWithProfiles);
@@ -368,7 +363,6 @@ router.post("/report-post", auth,createFeedReport);
 
 
 /*-------------------------User Session API ---------------------*/
-
  router.post("/refresh-token", refreshAccessToken);
  router.post("/heartbeat",auth, heartbeat);
 
@@ -379,6 +373,7 @@ router.get('/user/user/subscriptions', auth, getUserSubscriptionPlanWithId);
 router.get('/get/all/feeds/user',auth,getAllFeedsByUserId);
 router.post('/user/watching/vidoes',auth,userVideoViewCount);
 router.post('/user/image/view/count',auth,userImageViewCount);
+router.get('/user/get/feed/with/cat/:id',auth,getfeedWithCategoryWithId);
 
 router.delete('/user/delete/feeds', auth, creatorFeedDelete);
 router.post('/user/get/post',getUserPost);
@@ -392,7 +387,6 @@ router.get('/get/all/feed/for/Creator',auth,getFeedsByAccountId);
 
  /* --------------------- User Notifiction API --------------------- */
   router.post("/user/notification/register",notificationRegister);
-//  router.post('/switch/notification',auth,switchNotification);
 
 /* --------------------- User Profile API --------------------- */
 router.post("/user/profile/detail/update",auth,userUpload.single("file"),(req, res, next) => { req.baseUrl = "/profile"; next(); },
@@ -416,7 +410,7 @@ router.post("/creator/feed/upload",auth,userUpload.single("file"),(req, res, nex
 // router.post('/creator/feed/save', auth, toggleSaveFeed);
 // router.post('/creator/feed/download', auth, downloadFeed);
 // router.post('/creator/feed/comment', auth,postComment);
-// router.post('/creator/feed/share', auth, shareFeed);
+//  router.post('/creator/feed/share', auth, shareFeed);
 // router.post('/user/not/intrested')
 // router.post('/user/interested')
 
@@ -555,7 +549,6 @@ router.delete("/delete/child/admin/:id", deleteChildAdmin);
 
 /* --------------------- Tags API --------------------- */
 router.post('/search/all/category',searchCategories)
-router.get('/all/catagories/:id', getCategoryWithId);
 router.get("/get/feed/category",getCategoriesWithFeeds);
 
 

@@ -183,10 +183,13 @@ exports.saveInterestedCategory = async (req, res) => {
 
 
 
-exports.getCategoryWithId = async (req, res) => {
+exports.getfeedWithCategoryWithId = async (req, res) => {
   try {
     const categoryId = req.params.id;
-  if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+    const userId = req.Id; // assuming middleware adds req.Id
+    const hiddenPostIds = req.hiddenPostIds || []; // optional hidden posts from user preferences
+
+    if (!mongoose.Types.ObjectId.isValid(categoryId)) {
       return res.status(400).json({ message: "Invalid category ID" });
     }
 
@@ -200,116 +203,251 @@ exports.getCategoryWithId = async (req, res) => {
       return res.status(404).json({ message: "Category not found" });
     }
 
-    // 2️⃣ Aggregate feeds with account and profile info (with pagination)
-  const feeds = await Feed.aggregate([
-  { $match: { category: new mongoose.Types.ObjectId(categoryId) } },
-  { $sort: { createdAt: -1 } },
-  { $skip: skip },
-  { $limit: limit },
-
-  // Lookup for Admin profile
-  {
-    $lookup: {
-      from: "ProfileSettings",
-      localField: "createdByAccount",
-      foreignField: "adminId",
-      as: "adminProfile",
-    },
-  },
-
-  // Lookup for Account profile
-  {
-    $lookup: {
-      from: "ProfileSettings",
-      localField: "createdByAccount",
-      foreignField: "accountId",
-      as: "accountProfile",
-    },
-  },
-
-  // Lookup for Child Admin profile
-  {
-    $lookup: {
-      from: "ProfileSettings",
-      localField: "createdByAccount",
-      foreignField: "childAdminId",
-      as: "childAdminProfile",
-    },
-  },
-
-  // Lookup for Creator profile
-  {
-    $lookup: {
-      from: "ProfileSettings",
-      localField: "createdByAccount",
-      foreignField: "userId",
-      as: "creatorProfile",
-    },
-  },
-
-  // Pick the correct profile based on roleRef
-  {
-    $addFields: {
-      profile: {
-        $switch: {
-          branches: [
-            { case: { $eq: ["$roleRef", "Admin"] }, then: { $arrayElemAt: ["$adminProfile", 0] } },
-            { case: { $eq: ["$roleRef", "Account"] }, then: { $arrayElemAt: ["$accountProfile", 0] } },
-            { case: { $eq: ["$roleRef", "Child_Admin"] }, then: { $arrayElemAt: ["$childAdminProfile", 0] } },
-            { case: { $eq: ["$roleRef", "Creator"] }, then: { $arrayElemAt: ["$creatorProfile", 0] } },
-          ],
-          default: null,
+    // 2️⃣ Aggregate feeds in this category with dynamic lookups and analytics
+    const feeds = await Feed.aggregate([
+      {
+        $match: {
+          category: new mongoose.Types.ObjectId(categoryId),
+          _id: { $nin: hiddenPostIds },
         },
       },
-    },
-  },
+      { $sort: { createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
 
-  // Project only the needed fields
-  {
-    $project: {
-      type: 1,
-      language: 1,
-      category: 1,
-      duration: 1,
-      contentUrl: 1,
-      roleRef: 1,
-      createdAt: 1,
-      updatedAt: 1,
-      userName: "$profile.userName",
-      profileAvatar: "$profile.profileAvatar",
-    },
-  },
-]);
+      // 🔹 Lookup based on roleRef
+      { $lookup: { from: "Accounts", localField: "createdByAccount", foreignField: "_id", as: "account" } },
+      { $lookup: { from: "Admins", localField: "createdByAccount", foreignField: "_id", as: "admin" } },
+      { $lookup: { from: "Child_Admins", localField: "createdByAccount", foreignField: "_id", as: "childAdmin" } },
+      { $lookup: { from: "Creators", localField: "createdByAccount", foreignField: "_id", as: "creator" } },
 
+      // 🔹 Merge correct reference based on roleRef
+      {
+        $addFields: {
+          accountData: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$roleRef", "Admin"] }, then: { $arrayElemAt: ["$admin", 0] } },
+                { case: { $eq: ["$roleRef", "Account"] }, then: { $arrayElemAt: ["$account", 0] } },
+                { case: { $eq: ["$roleRef", "Child_Admin"] }, then: { $arrayElemAt: ["$childAdmin", 0] } },
+                { case: { $eq: ["$roleRef", "Creator"] }, then: { $arrayElemAt: ["$creator", 0] } },
+              ],
+              default: null,
+            },
+          },
+        },
+      },
 
+      // 🔹 Lookup ProfileSettings based on roleRef
+      {
+        $lookup: {
+          from: "ProfileSettings",
+          let: {
+            adminId: { $cond: [{ $eq: ["$roleRef", "Admin"] }, "$createdByAccount", null] },
+            userId: { $cond: [{ $eq: ["$roleRef", "User"] }, "$createdByAccount", null] },
+            childAdminId: { $cond: [{ $eq: ["$roleRef", "Child_Admin"] }, "$createdByAccount", null] },
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $eq: ["$adminId", "$$adminId"] },
+                    { $eq: ["$childAdminId", "$$childAdminId"] },
+                    { $eq: ["$userId", "$$userId"] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+            { $project: { userName: 1, profileAvatar: 1 } },
+          ],
+          as: "profile",
+        },
+      },
+      { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
 
-    // 3️⃣ Get total feeds count for this category
-    const totalFeeds = await Feed.countDocuments({ category: categoryId });
+      // 🔹 Analytics lookups
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: "$likedFeeds" },
+            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" },
+          ],
+          as: "likesCount",
+        },
+      },
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: "$disLikeFeeds" },
+            { $match: { $expr: { $eq: ["$disLikeFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" },
+          ],
+          as: "dislikesCount",
+        },
+      },
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: "$downloadedFeeds" },
+            { $match: { $expr: { $eq: ["$downloadedFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" },
+          ],
+          as: "downloadsCount",
+        },
+      },
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: "$sharedFeeds" },
+            { $match: { $expr: { $eq: ["$sharedFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" },
+          ],
+          as: "sharesCount",
+        },
+      },
+      {
+        $lookup: {
+          from: "UserViews",
+          let: { feedId: "$_id" },
+          pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } }, { $count: "count" }],
+          as: "viewsCount",
+        },
+      },
+      {
+        $lookup: {
+          from: "UserComments",
+          let: { feedId: "$_id" },
+          pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } }, { $count: "count" }],
+          as: "commentsCount",
+        },
+      },
 
-    // 4️⃣ Format feeds with timeAgo
-    const formattedFeeds = feeds.map((f) => ({
-      ...f,
-      timeAgo: feedTimeCalculator(new Date(f.createdAt)),
-    }));
+      // 🔹 Current user actions
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$userId", userId] } } },
+            {
+              $project: {
+                isLiked: {
+                  $in: [
+                    "$$feedId",
+                    { $map: { input: { $ifNull: ["$likedFeeds", []] }, as: "f", in: "$$f.feedId" } },
+                  ],
+                },
+                isSaved: {
+                  $in: [
+                    "$$feedId",
+                    { $map: { input: { $ifNull: ["$savedFeeds", []] }, as: "f", in: "$$f.feedId" } },
+                  ],
+                },
+                isDisliked: {
+                  $in: [
+                    "$$feedId",
+                    { $map: { input: { $ifNull: ["$disLikeFeeds", []] }, as: "f", in: "$$f.feedId" } },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "userActions",
+        },
+      },
+
+      // 🔹 Final projection
+      {
+        $project: {
+          feedId: "$_id",
+          type: 1,
+          language: 1,
+          category: 1,
+          contentUrl: 1,
+          roleRef: 1,
+          createdByAccount: 1,
+          createdAt: 1,
+          userName: "$profile.userName",
+          profileAvatar: "$profile.profileAvatar",
+          likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCount.count", 0] }, 0] },
+          dislikesCount: { $ifNull: [{ $arrayElemAt: ["$dislikesCount.count", 0] }, 0] },
+          downloadsCount: { $ifNull: [{ $arrayElemAt: ["$downloadsCount.count", 0] }, 0] },
+          shareCount: { $ifNull: [{ $arrayElemAt: ["$sharesCount.count", 0] }, 0] },
+          viewsCount: { $ifNull: [{ $arrayElemAt: ["$viewsCount.count", 0] }, 0] },
+          commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCount.count", 0] }, 0] },
+          isLiked: { $arrayElemAt: ["$userActions.isLiked", 0] },
+          isSaved: { $arrayElemAt: ["$userActions.isSaved", 0] },
+          isDisliked: { $arrayElemAt: ["$userActions.isDisliked", 0] },
+        },
+      },
+    ]);
+
+    // 3️⃣ Enrich feeds with theme colors and avatar frames
+    const enrichedFeeds = await Promise.all(
+      feeds.map(async (feed) => {
+        const profileSetting = await ProfileSettings.findOne({ userId });
+        const avatarToUse = profileSetting?.modifyAvatarPublicId;
+        const framedAvatar = await applyFrame(avatarToUse);
+
+        let themeColor = {
+          primary: "#ffffff",
+          secondary: "#cccccc",
+          accent: "#999999",
+          text: "#000000",
+          gradient: "linear-gradient(135deg, #ffffff, #cccccc, #999999)",
+        };
+        try {
+          const feedType = feed.type === "video" ? "video" : "image";
+          themeColor = await extractThemeColor(feed.contentUrl, feedType);
+        } catch (err) {
+          console.warn(`Theme extraction failed for feed ${feed.feedId}:`, err.message);
+        }
+
+        return {
+          ...feed,
+          framedAvatar: framedAvatar || avatarToUse,
+          themeColor,
+          timeAgo: feedTimeCalculator(feed.createdAt),
+        };
+      })
+    );
+
+    // 4️⃣ Pagination
+    const totalFeeds = await Feed.countDocuments({
+      category: categoryId,
+      _id: { $nin: hiddenPostIds },
+    });
 
     res.status(200).json({
       category: {
         categoryId: category._id,
         categoryName: category.name,
-        feeds: formattedFeeds,
-        pagination: {
-          total: totalFeeds,
-          page,
-          limit,
-          hasMore: skip + feeds.length < totalFeeds,
-        },
+      },
+      feeds: enrichedFeeds,
+      pagination: {
+        total: totalFeeds,
+        page,
+        limit,
+        hasMore: skip + feeds.length < totalFeeds,
       },
     });
   } catch (error) {
     console.error("Error fetching category feeds:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
 
 
 
