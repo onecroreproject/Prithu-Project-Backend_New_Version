@@ -2,7 +2,6 @@ const Feed = require('../../models/feedModel');
 const User = require('../../models/userModels/userModel');
 const { feedTimeCalculator } = require('../../middlewares/feedTimeCalculator');
 const UserFeedActions =require('../../models/userFeedInterSectionModel.js');
-const fs = require('fs');
 const Account =require("../../models/accountSchemaModel.js");
 const mongoose = require("mongoose");
 const UserComment = require("../../models/userCommentModel.js");
@@ -694,9 +693,8 @@ exports.getTrendingFeeds = async (req, res) => {
   try {
     // 1️⃣ Get all feeds
     const feeds = await Feed.find({})
-      .populate("createdByAccount", "userName profileAvatar") // populate creator info
-      .lean(); // lean() for plain JS objects
-
+      .populate("createdByAccount", "userName profileAvatar") 
+      .lean(); 
     // 2️⃣ Prepare trending score for each feed
     const feedScores = await Promise.all(feeds.map(async (feed) => {
       const feedId = feed._id;
@@ -754,7 +752,7 @@ exports.getTrendingFeeds = async (req, res) => {
       const hoursSincePost = (Date.now() - new Date(feed.createdAt)) / (1000 * 60 * 60);
 
       // Simple trending score formula
-      const trendingScore = (totalLikes * 2) + (totalShares * 5) + (totalViews * 1) - hoursSincePost;
+      const trendingScore =hoursSincePost- (totalLikes * 2) + (totalShares * 5) + (totalViews * 1) ;
 
       return {
         ...feed,

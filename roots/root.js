@@ -21,23 +21,6 @@ const {
   userLogOut,
 } = require('../controllers/authenticationControllers/userAuthController');
 
-const {
-  createNewCreator,
-  creatorLogin,
-  creatorSendOtp,
-  existCreatorVerifyOtp,
-  newCreatorVerifyOtp,
-  creatorPasswordReset,
-} = require('../controllers/authenticationControllers/creatorAuthController');
-
-const {
-  createNewBusinessUser,
-  businessLogin,
-  businessSendOtp,
-  businessPasswordReset,
-  existBusinessVerifyOtp,
-  newBusinessVerifyOtp,
-} = require('../controllers/authenticationControllers/businessAuthController');
 
 const {
   creatorFeedUpload,
@@ -54,6 +37,8 @@ const {
   getFeedsByAccountId,
   getUserInfoAssociatedFeed,
   getUserHidePost,
+  getTrendingFeeds,
+  
 } = require('../controllers/feedControllers/feedsController');
 
 const {
@@ -143,16 +128,6 @@ const{
 
 
 const {
-creatorlikeFeed,
-creatorsaveFeed,
-creatordownloadFeed,
-creatorshareFeed,
-creatorpostComment,
-creatorpostView,
-creatorcommentLike,
-}=require('../controllers/creatorActionController')
-
-const {
   createPlan,
   updatePlan,
   deletePlan,
@@ -240,10 +215,7 @@ const{
   getDashUserSubscriptionRatio,
 }=require('../controllers/adminControllers/dashboardController');
 
-const{
-  getUserTreeWithProfiles,
-  getUserEarnings,
-}=require("../controllers/userControllers/userReferralControllers/referralControllers")
+
 
 const{
 addReportQuestion,
@@ -259,8 +231,6 @@ adminTakeActionOnReport,
 
 const{
   notificationRegister,
-  switchNotification,
-  adminSentNotification,
 }=require('../controllers/adminControllers/notificationController');
 
 const{
@@ -291,9 +261,9 @@ getAllFrames,
 deleteFrame,
 }=require("../controllers/adminControllers/frameController");
 
-const {applyFrame}=require("../middlewares/helper/AddFrame/addFrame")
+const {upload} =require("../middlewares/helper/frameUpload");
 
-const {upload} =require("../middlewares/helper/frameUpload")
+const {getUserEarnings}=require("../controllers/userControllers/userEarningsController");
 
 
 
@@ -309,8 +279,7 @@ router.post('/auth/user/logout',auth, userLogOut);
 
 // /* --------------------- User Referral API Actions --------------------- */
 router.get('/user/referal/code',auth,getUserReferalCode);
-router.get ('/user/earning/card/data',getUserEarnings);
-router.get('/user/both/tree/referals',getUserTreeWithProfiles);
+
 
 // /* --------------------- Fresh Users API --------------------- */
 router.post('/user/app/language',auth, setAppLanguage );
@@ -370,6 +339,12 @@ router.post("/report-post", auth,createFeedReport);
 router.get('/user/user/subscriptions', auth, getUserSubscriptionPlanWithId);
 
 /*---------------------- User Feed API -------------------------*/
+router.post("/creator/feed/upload",auth,userUpload.single("file"),(req, res, next) => { req.baseUrl = "/feed"; next(); },
+   userProcessFeedFile,
+  userUploadToCloudinary,
+  creatorFeedUpload
+);
+router.get("/get/trending/feed",getTrendingFeeds);
 router.get('/get/all/feeds/user',auth,getAllFeedsByUserId);
 router.post('/user/watching/vidoes',auth,userVideoViewCount);
 router.post('/user/image/view/count',auth,userImageViewCount);
@@ -395,13 +370,9 @@ router.post("/user/profile/detail/update",auth,userUpload.single("file"),(req, r
 );
 router.get('/get/profile/detail',auth,getUserProfileDetail);
 
-/* --------------------- Creator Feed API --------------------- */
-router.post("/creator/feed/upload",auth,userUpload.single("file"),(req, res, next) => { req.baseUrl = "/feed"; next(); },
-   userProcessFeedFile,
-  userUploadToCloudinary,
-  creatorFeedUpload
-);
+/* --------------------- User Earnings API --------------------- */
 
+router.get('/get/userearnigs/referrals',getUserEarnings);
 
 
 /* --------------------- Cretor Feed Actions --------------------- */
