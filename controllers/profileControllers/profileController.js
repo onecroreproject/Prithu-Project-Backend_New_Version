@@ -32,6 +32,7 @@ exports.validateUserProfileUpdate = [
 
 
 // ------------------- User Profile Update -------------------
+
 exports.userProfileDetailUpdate = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
@@ -53,7 +54,8 @@ exports.userProfileDetailUpdate = async (req, res) => {
       "gender",
       "details",
       "notifications",
-      "privacy"
+      "privacy",
+      "maritalDate",
     ];
 
     const updateData = {};
@@ -64,42 +66,68 @@ exports.userProfileDetailUpdate = async (req, res) => {
       if (value !== undefined) updateData[field] = value;
     });
 
-    // ✅ Handle social media links
-    if (req.body.socialLinks && typeof req.body.socialLinks === "object") {
-      updateData.socialLinks = {
-        facebook: req.body.socialLinks.facebook || "",
-        instagram: req.body.socialLinks.instagram || "",
-        twitter: req.body.socialLinks.twitter || "",
-        linkedin: req.body.socialLinks.linkedin || "",
-        github: req.body.socialLinks.github || "",
-        youtube: req.body.socialLinks.youtube || "",
-        website: req.body.socialLinks.website || ""
-      };
+    // ✅ Handle social media links safely (from admin controller)
+    if (req.body.socialLinks) {
+      let links = {};
+
+      try {
+        if (Array.isArray(req.body.socialLinks)) {
+          const lastValid = req.body.socialLinks
+            .slice()
+            .reverse()
+            .find((item) => {
+              if (!item || item === "undefined" || item === "null") return false;
+              try {
+                JSON.parse(item);
+                return true;
+              } catch {
+                return false;
+              }
+            });
+
+          if (lastValid) links = JSON.parse(lastValid);
+        } else if (typeof req.body.socialLinks === "string") {
+          if (req.body.socialLinks && req.body.socialLinks !== "undefined" && req.body.socialLinks !== "null") {
+            links = JSON.parse(req.body.socialLinks);
+          }
+        } else if (typeof req.body.socialLinks === "object") {
+          links = req.body.socialLinks;
+        }
+
+        if (Object.keys(links).length > 0) {
+          updateData.socialLinks = {
+            facebook: links.facebook || "",
+            instagram: links.instagram || "",
+            twitter: links.twitter || "",
+            linkedin: links.linkedin || "",
+            github: links.github || "",
+            youtube: links.youtube || "",
+            website: links.website || "",
+          };
+        }
+      } catch (err) {
+        console.warn("Invalid socialLinks data, skipping:", err.message);
+      }
     }
 
     const profile = await Profile.findOne({ userId });
 
     // ✅ Handle Cloudinary avatar
     if (req.cloudinaryFile) {
-      // Delete old avatar if exists
       if (profile?.profileAvatarId && profile.profileAvatarId !== req.cloudinaryFile.public_id) {
         await userDeleteFromCloudinary(profile.profileAvatarId);
       }
 
-      // Set new avatar
       updateData.profileAvatar = req.cloudinaryFile.url;
       updateData.profileAvatarId = req.cloudinaryFile.public_id;
 
-      // Remove background and save to modifyAvatar
       try {
-  const { secure_url, public_id } = await removeImageBackground(req.cloudinaryFile.url);
-
-  updateData.modifyAvatar = secure_url;
-  updateData.modifyAvatarPublicId = public_id; 
-} catch (err) {
-  console.error("Error removing background:", err);
-}
-
+        const { secure_url, public_id } = await removeImageBackground(req.cloudinaryFile.url);
+        updateData.modifyAvatar = secure_url;
+        updateData.modifyAvatarPublicId = public_id;
+      } catch (err) {
+        console.error("Error removing background:", err);
+      }
     }
 
     // ✅ Handle username update
@@ -302,9 +330,7 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
 
     const errors = validationResult(req);
     if (!errors.isEmpty())
-      return res
-        .status(400)
-        .json({ message: "Validation failed", errors: errors.array() });
+      return res.status(400).json({ message: "Validation failed", errors: errors.array() });
 
     const childAdmin = await ChildAdmin.findById(childAdminId).lean();
     if (!childAdmin)
@@ -329,25 +355,52 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
     const updateData = {};
     allowedFields.forEach((field) => {
       let value = req.body[field];
-      if (
-        (field === "dateOfBirth" || field === "maritalDate") &&
-        (!value || value === "null")
-      )
+      if ((field === "dateOfBirth" || field === "maritalDate") && (!value || value === "null"))
         value = null;
       if (value !== undefined) updateData[field] = value;
     });
 
-    // ✅ Handle social media links
-    if (req.body.socialLinks && typeof req.body.socialLinks === "object") {
-      updateData.socialLinks = {
-        facebook: req.body.socialLinks.facebook || "",
-        instagram: req.body.socialLinks.instagram || "",
-        twitter: req.body.socialLinks.twitter || "",
-        linkedin: req.body.socialLinks.linkedin || "",
-        github: req.body.socialLinks.github || "",
-        youtube: req.body.socialLinks.youtube || "",
-        website: req.body.socialLinks.website || "",
-      };
+    // ✅ Handle social media links safely
+    if (req.body.socialLinks) {
+      let links = {};
+
+      try {
+        if (Array.isArray(req.body.socialLinks)) {
+          const lastValid = req.body.socialLinks
+            .slice()
+            .reverse()
+            .find((item) => {
+              if (!item || item === "undefined" || item === "null") return false;
+              try {
+                JSON.parse(item);
+                return true;
+              } catch {
+                return false;
+              }
+            });
+          if (lastValid) links = JSON.parse(lastValid);
+        } else if (typeof req.body.socialLinks === "string") {
+          if (req.body.socialLinks && req.body.socialLinks !== "undefined" && req.body.socialLinks !== "null") {
+            links = JSON.parse(req.body.socialLinks);
+          }
+        } else if (typeof req.body.socialLinks === "object") {
+          links = req.body.socialLinks;
+        }
+
+        if (Object.keys(links).length > 0) {
+          updateData.socialLinks = {
+            facebook: links.facebook || "",
+            instagram: links.instagram || "",
+            twitter: links.twitter || "",
+            linkedin: links.linkedin || "",
+            github: links.github || "",
+            youtube: links.youtube || "",
+            website: links.website || "",
+          };
+        }
+      } catch (err) {
+        console.warn("Invalid socialLinks data, skipping:", err.message);
+      }
     }
 
     // ✅ Handle Cloudinary avatar
@@ -362,10 +415,10 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
         updateData.profileAvatar = url;
         updateData.profileAvatarId = public_id;
 
-        // Optional: Remove background for modified avatar
         try {
-          const bgRemovedUrl = await removeImageBackground(url);
-          updateData.modifyAvatar = bgRemovedUrl;
+          const { secure_url, public_id: bgRemovedId } = await removeImageBackground(url);
+          updateData.modifyAvatar = secure_url;
+          updateData.modifyAvatarPublicId = bgRemovedId;
         } catch (err) {
           console.error("Error removing background:", err);
         }
@@ -375,9 +428,7 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
     // ✅ Handle username update
     const userName = req.body.userName?.trim();
     if (Object.keys(updateData).length === 0 && !userName)
-      return res
-        .status(400)
-        .json({ message: "No fields provided for update" });
+      return res.status(400).json({ message: "No fields provided for update" });
 
     const profile = await Profile.findOneAndUpdate(
       { childAdminId },
@@ -389,9 +440,7 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
     if (userName) {
       const existing = await ChildAdmin.findOne({ userName }).lean();
       if (existing && existing._id.toString() !== childAdminId.toString())
-        return res
-          .status(400)
-          .json({ message: "Username already exists" });
+        return res.status(400).json({ message: "Username already exists" });
 
       await ChildAdmin.findByIdAndUpdate(
         childAdminId,
@@ -413,9 +462,7 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
 
     let parentAdmin = null;
     if (populatedProfile?.childAdminId?.parentAdminId) {
-      parentAdmin = await Admin.findById(
-        populatedProfile.childAdminId.parentAdminId
-      )
+      parentAdmin = await Admin.findById(populatedProfile.childAdminId.parentAdminId)
         .select("userName email adminType")
         .lean();
     }
@@ -424,11 +471,10 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
       message: "Child Admin profile updated successfully",
       profile: { ...populatedProfile, parentAdmin },
     });
+
   } catch (error) {
     console.error("Error in childAdminProfileDetailUpdate:", error);
-    return res
-      .status(500)
-      .json({ message: "Internal Server Error", error: error.message });
+    return res.status(500).json({ message: "Internal Server Error", error: error.message });
   }
 };
 

@@ -65,6 +65,36 @@ exports.getAllCategories = async (req, res) => {
 };
 
 
+exports.getUserPostCategories = async (req, res) => {
+  try {
+    // Fetch only category _id and name
+    const categories = await Categories.find({}, { _id: 1, name: 1 })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (!categories.length) {
+      return res.status(404).json({ message: "No categories found" });
+    }
+
+    // Format response (optional renaming for clarity)
+    const formattedCategories = categories.map(cat => ({
+      categoryId: cat._id,
+      categoryName: cat.name,
+    }));
+
+    // Send response
+    return res.status(200).json({
+      message: "Categories retrieved successfully",
+      categories: formattedCategories,
+    });
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    return res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
 
 
 
@@ -679,6 +709,75 @@ exports.getFeedLanguageCategories = async (req, res) => {
     });
   }
 };
+
+
+
+
+
+exports.getFeedWithCategoryId = async (req, res) => {
+  try {
+    const { categoryId } = req.params;
+
+    if (!categoryId) {
+      return res.status(400).json({ message: "Category ID is required" });
+    }
+
+    // 1️⃣ Fetch all feeds in the given category
+    const feeds = await Feed.find({ category: categoryId })
+      .populate("category", "name") // optional: get category name
+      .sort({ createdAt: -1 }) // latest first
+      .lean();
+
+    if (!feeds.length) {
+      return res.status(404).json({ message: "No feeds found for this category" });
+    }
+
+    // 2️⃣ Get like counts for each feed
+    const feedIds = feeds.map((f) => f._id);
+
+    const actions = await UserFeedActions.aggregate([
+      { $match: { "likedFeeds.feedId": { $in: feedIds } } },
+      { $unwind: "$likedFeeds" },
+      { $match: { "likedFeeds.feedId": { $in: feedIds } } },
+      {
+        $group: {
+          _id: "$likedFeeds.feedId",
+          likeCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // 3️⃣ Map like counts to feeds
+    const likeMap = {};
+    actions.forEach((a) => {
+      likeMap[a._id.toString()] = a.likeCount;
+    });
+
+    const feedsWithLikes = feeds.map((f) => ({
+      ...f,
+      likeCount: likeMap[f._id.toString()] || 0,
+    }));
+
+    res.status(200).json({
+      message: "Feeds fetched successfully",
+      categoryId,
+      feeds: feedsWithLikes,
+    });
+  } catch (error) {
+    console.error("Error fetching feeds:", error);
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
+
+
+
+
+
+
 
 
 

@@ -1,11 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
-const app = express();
-const path = require('path');
 const { auth } = require('../middlewares/jwtAuthentication');
-const cloudinary = require('cloudinary').v2;
-const fs = require('fs');
 const{ userUpload, userUploadToCloudinary,userProcessFeedFile}=require('../middlewares/services/userCloudnaryUpload');
 const {adminUploadToCloudinary,adminProcessFeedFile,adminUpload}=require('../middlewares/services/adminCloudnaryUpload');
 
@@ -25,14 +20,11 @@ const {
 const {
   creatorFeedUpload,
   creatorFeedDelete,
-  getCreatorFeeds,
   creatorFeedScheduleUpload,
 
 } = require('../controllers/feedControllers/creatorFeedController');
 
 const {
-  feedsWatchByUser,
-  mostWatchedFeeds,
   getAllFeedsByUserId,
   getFeedsByAccountId,
   getUserInfoAssociatedFeed,
@@ -77,6 +69,8 @@ const {
   getCategoriesWithFeeds,
   saveInterestedCategory,
   getFeedLanguageCategories,
+  getUserPostCategories,
+  getFeedWithCategoryId,
 } = require('../controllers/categoriesController');
 
 const {
@@ -120,11 +114,7 @@ const {
   toggleDislikeFeed,
 } = require('../controllers/feedControllers/userActionsFeedController');
 
-const{
-  getLeftReferrals,
-  getRightReferrals,
-  getUserReferralTree,
-}=require('../controllers/userControllers/userRefferalController')
+
 
 
 const {
@@ -159,7 +149,6 @@ const {
   followAccount,
   unFollowAccount,
   getAccountFollowers,
-  getCreatorFollowers,
   getUserFollowersData,
 } = require('../controllers/followersControllers.js/followerDetailController');
 
@@ -169,14 +158,6 @@ const {
   updateCategory,
 } = require('../controllers/adminControllers/adminCatagoryController');
 
-const {
-  addAccount,
-  switchToCreator,
-  switchToBusiness,
-  switchToUserAccount,
-  checkAccountStatus,
-  getAllAccounts
-} = require('../controllers/accountController');
 
 
 const{
@@ -349,11 +330,15 @@ router.get('/get/all/feeds/user',auth,getAllFeedsByUserId);
 router.post('/user/watching/vidoes',auth,userVideoViewCount);
 router.post('/user/image/view/count',auth,userImageViewCount);
 router.get('/user/get/feed/with/cat/:id',auth,getfeedWithCategoryWithId);
+router.get('/user/get/feed/with/search/cat/:categoryId',getFeedWithCategoryId);
+ router.get('/get/creator/detail/feed/:feedId',auth,getUserInfoAssociatedFeed);
+ router.get('/get/user/hide/post',auth,getUserHidePost);
 
 router.delete('/user/delete/feeds', auth, creatorFeedDelete);
 router.post('/user/get/post',getUserPost);
 router.get('/user/get/feed/category',auth,getFeedLanguageCategories);
 router.get('/get/all/feed/for/Creator',auth,getFeedsByAccountId);
+router.get('/user/get/all/category', getUserPostCategories);
 
 /* --------------------- User Follower API --------------------- */
  router.post('/user/follow/creator',auth, followAccount);
@@ -375,18 +360,14 @@ router.get('/get/profile/detail',auth,getUserProfileDetail);
 router.get('/get/userearnigs/referrals',getUserEarnings);
 
 
-/* --------------------- Cretor Feed Actions --------------------- */
-// router.post('/creator/feed/like', auth,likeFeed);
-// router.post('/creator/comment/like',auth,commentLike);
-// router.post('/creator/feed/save', auth, toggleSaveFeed);
-// router.post('/creator/feed/download', auth, downloadFeed);
-// router.post('/creator/feed/comment', auth,postComment);
-//  router.post('/creator/feed/share', auth, shareFeed);
-// router.post('/user/not/intrested')
-// router.post('/user/interested')
 
-/* --------------------- Creator Follower API --------------------- */
-// router.get('/creator/get/followers',auth,getCreatorFollowers);
+
+
+
+
+
+
+
 
 
 /* --------------------- Admin Authentication --------------------- */
@@ -504,31 +485,10 @@ router.get("/child/admin/:id", getChildAdminById);
 router.patch("/block/child/admin/:id", blockChildAdmin);
 router.delete("/delete/child/admin/:id", deleteChildAdmin);
 
-/* --------------------- Child Admin Feed API --------------------- */
 
-// router.post('/child/admin/feed', adminUpload.array('file'),auth,childAdminFeedUpload);
-
-
-/* --------------------- Feeds API --------------------- */
- router.get('/get/creator/detail/feed/:feedId',auth,getUserInfoAssociatedFeed);
- router.get('/get/user/hide/post',auth,getUserHidePost);
-// router.post('/feeds/watchedbyuser', feedsWatchByUser);
-
-/* --------------------- Feed For Comments API --------------------- */
-
-
-
-/* --------------------- Tags API --------------------- */
+/* --------------------- Category API --------------------- */
 router.post('/search/all/category',searchCategories)
 router.get("/get/feed/category",getCategoriesWithFeeds);
-
-
-
-/* --------------------- Account API --------------------- */
-// router.post('/account/add', auth, addAccount);
-// router.post('/account/switch/creator',auth,switchToCreator);
-// router.post('/account/switch/user',auth, switchToUserAccount);
-// router.post('/account/status',auth, checkAccountStatus);
 
 
 /*----------------------ProfileUpdate-------------------*/

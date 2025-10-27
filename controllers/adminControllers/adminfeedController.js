@@ -11,59 +11,59 @@ exports.adminFeedUpload = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
     if (!userId) return res.status(400).json({ message: "User ID is required" });
-    console.log(userId)
-    const { language, categoryId, type } = req.body;
 
-    // Validate inputs
+    const { language, categoryId, type } = req.body;
     if (!language || !categoryId || !type || !["image", "video"].includes(type)) {
       return res.status(400).json({ message: "Invalid language, categoryId or type" });
     }
 
-    // Ensure files
     const originalFiles = req.files || [];
-    if (originalFiles.length === 0) return res.status(400).json({ message: "No files uploaded" });
+    if (originalFiles.length === 0)
+      return res.status(400).json({ message: "No files uploaded" });
 
     const cloudFiles = req.cloudinaryFiles || [];
-    if (cloudFiles.length !== originalFiles.length) {
+    if (cloudFiles.length !== originalFiles.length)
       return res.status(400).json({ message: "Mismatch between uploaded files and Cloudinary files" });
-    }
 
-    // ✅ Track already uploaded files to prevent duplicates
     const uploadedFilesSet = new Set();
 
     const feedResults = await Promise.all(
       cloudFiles.map((cloudFile, index) => {
         const fileKey = cloudFile.url || cloudFile.secure_url || originalFiles[index].originalname;
-        if (uploadedFilesSet.has(fileKey)) return null; // skip duplicate
+        if (uploadedFilesSet.has(fileKey)) return null;
         uploadedFilesSet.add(fileKey);
 
+        // ✅ Pass duration to service
         return FeedService.uploadFeed(
           { language, categoryId, type },
           {
             ...cloudFile,
-            originalname: originalFiles[index].originalname,
-            mimetype: originalFiles[index].mimetype,
+            duration: originalFiles[index].videoDuration || cloudFile.duration || null,
           },
           userId
         );
       })
     );
 
-    const filteredResults = feedResults.filter(Boolean); // remove nulls
+    const filteredResults = feedResults.filter(Boolean);
 
     return res.status(201).json({
-      message: filteredResults.length > 1 ? "All feeds uploaded successfully" : "Feed uploaded successfully",
-      feeds: filteredResults.map(r => r.feed),
-      categories: filteredResults.map(r => r.categoryId),
-      languages: filteredResults.map(r => r.language),
-      roleTypes: filteredResults.map(r => r.roleType),
-      types: filteredResults.map(r => r.type),
+      message:
+        filteredResults.length > 1
+          ? "All feeds uploaded successfully"
+          : "Feed uploaded successfully",
+      feeds: filteredResults.map((r) => r.feed),
+      categories: filteredResults.map((r) => r.categoryId),
+      languages: filteredResults.map((r) => r.language),
+      roleTypes: filteredResults.map((r) => r.roleType),
+      types: filteredResults.map((r) => r.type),
     });
   } catch (error) {
     console.error("Error uploading feed:", error);
     return res.status(500).json({ message: error.message || "Server error" });
   }
 };
+
 
 
 

@@ -2,15 +2,35 @@ const mongoose = require("mongoose");
 const UserEarning = require("../../models/userModels/referralEarnings");
 const ProfileSettings = require("../../models/profileSettingModel");
 const Withdrawal = require("../../models/userModels/withdrawal");
+const UserSubscription=require("../../models/subcriptionModels/userSubscreptionModel");
+
+
+
 
 
 
 exports.getUserEarnings = async (req, res) => {
   try {
-    const userId = req.params.userId || req.body.userId || req.user?.id;
+    const userId = req.Id;
 
     if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({ message: "Valid userId is required" });
+    }
+
+    // ✅ Check if the user has an active "basic" subscription
+    const basicPlan = await SubscriptionPlan.findOne({ name: "basic" }).lean();
+    if (!basicPlan) return res.status(500).json({ message: "Basic plan not found" });
+
+    const activeSubscription = await UserSubscription.findOne({
+      userId,
+      planId: basicPlan._id,
+      isActive: true,
+      paymentStatus: "success",
+      endDate: { $gte: new Date() },
+    }).lean();
+
+    if (!activeSubscription) {
+      return res.status(403).json({ message: "Please subscribe to the basic plan first" });
     }
 
     // 1️⃣ Fetch all earnings for this user
@@ -28,10 +48,10 @@ exports.getUserEarnings = async (req, res) => {
       });
     }
 
-    // 2️⃣ Collect all unique fromUserIds
+    //  Collect all unique fromUserIds
     const fromUserIds = [...new Set(earnings.map(e => e.fromUserId.toString()))];
 
-    // 3️⃣ Fetch profile info for fromUserIds
+    //  Fetch profile info for fromUserIds
     const profiles = await ProfileSettings.find({ userId: { $in: fromUserIds } })
       .select("userId userName profileAvatar modifyAvatarPublicId")
       .lean();
@@ -53,26 +73,38 @@ exports.getUserEarnings = async (req, res) => {
       .filter(w => w.status === "completed")
       .reduce((sum, w) => sum + (w.withdrawalAmount || 0), 0);
 
-    // 5️⃣ Calculate total earnings and balance
+    // Calculate total earnings and balance
     const totalEarnings = earnings.reduce((sum, e) => sum + (e.amount || 0), 0);
     const balance = totalEarnings - totalWithdrawn;
 
-    // 6️⃣ Format earnings with from-user profile info
+    //  Check subscription for all fromUserIds
+    const activeSubscriptions = await UserSubscription.find({
+      userId: { $in: fromUserIds },
+      isActive: true,
+      paymentStatus: "success",
+      endDate: { $gte: new Date() },
+    }).lean();
+
+    const subscriptionMap = {};
+    activeSubscriptions.forEach(sub => {
+      subscriptionMap[sub.userId.toString()] = true;
+    });
+
+    //  Format earnings with from-user profile info + subscription status
     const formattedEarnings = earnings.map(e => ({
       earningId: e._id,
       fromUserId: e.fromUserId,
       fromUserName: profileMap[e.fromUserId.toString()]?.userName || "Unknown",
       fromUserAvatar: profileMap[e.fromUserId.toString()]?.profileAvatar || null,
+      fromUserSubscribed: !!subscriptionMap[e.fromUserId.toString()] || false,
       amount: e.amount,
-      level: e.level,
-      tier: e.tier,
-      isPartial: e.isPartial,
       createdAt: e.createdAt,
     }));
 
-    // 7️⃣ Return final structured response
+    // Return final structured response
     res.status(200).json({
       message: "User earnings fetched successfully",
+      userSubscription: activeSubscription, // Include user's active basic subscription details
       totalEarnings,
       totalWithdrawn,
       balance,
@@ -84,3 +116,6 @@ exports.getUserEarnings = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+
+

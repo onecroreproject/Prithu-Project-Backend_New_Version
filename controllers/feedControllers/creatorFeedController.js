@@ -6,10 +6,9 @@ const Account=require("../../models/accountSchemaModel");
 const {feedTimeCalculator}=require("../../middlewares/feedTimeCalculator");
 const {getActiveCreatorAccount}=require("../../middlewares/creatorAccountactiveStatus");
 const Categories=require('../../models/categorySchema');
-const User=require('../../models/userModels/userModel');
 const mongoose=require("mongoose");
 const { getLanguageCode, getLanguageName } = require("../../middlewares/helper/languageHelper");
-const CreatorFollowing=require('../../models/creatorFollowerModel');
+
 
 
 exports.creatorFeedUpload = async (req, res) => {

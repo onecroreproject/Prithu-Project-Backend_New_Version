@@ -1,5 +1,3 @@
-const path = require("path");
-const { getVideoDurationInSeconds } = require("get-video-duration");
 const Feed = require("../../../models/feedModel");
 const Categories = require("../../../models/categorySchema");
 const Admin = require("../../../models/adminModels/adminModel");
@@ -8,9 +6,11 @@ const ChildAdmin = require("../../../models/childAdminModel");
 exports.uploadFeed = async ({ language, categoryId, type }, file, userId) => {
   if (!userId) throw new Error("User ID is required");
 
+
+
   // Determine role
   let userRole = await Admin.findById(userId).select("adminType role");
-  console.log(userRole)
+
   let roleType = "Admin";
 
   if (!userRole) {
@@ -51,7 +51,7 @@ exports.uploadFeed = async ({ language, categoryId, type }, file, userId) => {
     type,
     language,
     category: cat._id,
-    duration: type === "video" ? file.duration || null : null,
+    duration:file.duration || null ,
     createdByAccount: userId,
     contentUrl: fileUrl,
     originalName,

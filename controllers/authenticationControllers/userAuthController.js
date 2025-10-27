@@ -1,14 +1,13 @@
 const User = require('../../models/userModels/userModel');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
 require('dotenv').config();
 const bcrypt = require('bcrypt');
-const crypto = require("crypto"); 
 if (!global.otpStore) global.otpStore = new Map();
 const {startUpProcessCheck}=require('../../middlewares/services/User Services/userStartUpProcessHelper');
 const Device = require("../../models/userModels/userSession-Device/deviceModel");
 const Session = require("../../models/userModels/userSession-Device/sessionModel");
 const UserReferral=require('../../models/userModels/userReferralModel');
+const ProfileSettings=require("../../models/profileSettingModel");
 const { v4: uuidv4 } = require("uuid");
 const {sendMailSafeSafe} = require('../../utils/sendMail');
 const fs = require("fs");
@@ -18,61 +17,99 @@ const { sendTemplateEmail } = require("../../utils/templateMailer");
 
 
 
+
 exports.createNewUser = async (req, res) => {
   try {
     const { username, email, password, referralCode } = req.body;
 
+    // Validate inputs
     if (!username || !email || !password) {
       return res.status(400).json({ message: "All fields required" });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
-    const base = username.replace(/\s+/g, "").slice(0, 3).toUpperCase() || "XXX";
-    const generatedCode = `${base}${crypto.randomBytes(2).toString("hex")}`;
+    // Check for existing user
+    const existingUser = await User.findOne({
+      $or: [{ email }, { userName: username }],
+    }).lean();
 
+    if (existingUser) {
+      return res.status(400).json({
+        message:
+          existingUser.email === email
+            ? "Email already registered"
+            : "Username already taken",
+      });
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    //  Generate referral code like ARU234 (3 letters + 3 digits)
+    const letters =
+      username.replace(/\s+/g, "").slice(0, 3).toUpperCase() || "USR";
+    const digits = Math.floor(100 + Math.random() * 900); 
+    const generatedCode = `${letters}${digits}`;
+
+    // Create user instance
     const user = new User({
       userName: username,
       email,
       passwordHash,
       referralCode: generatedCode,
-      referralCodeIsValid: false,
+      referralCodeIsValid: true,
     });
 
+    // If user signed up with a referral
     if (referralCode) {
-      const parent = await User.findOne({ referralCode, referralCodeIsValid: true });
-      if (!parent) return res.status(400).json({ message: "Referral code invalid or used up" });
+      const parent = await User.findOne({
+        referralCode,
+        referralCodeIsValid: true,
+      });
+
+      if (!parent) {
+        return res
+          .status(400)
+          .json({ message: "Referral code invalid or inactive" });
+      }
 
       user.referredByUserId = parent._id;
-      await user.save();
 
-      await UserReferral.updateOne(
-        { parentId: parent._id },
-        { $addToSet: { childIds: user._id } },
-        { upsert: true }
-      );
+      await Promise.all([
+        user.save(),
+        UserReferral.updateOne(
+          { parentId: parent._id },
+          { $addToSet: { childIds: user._id } },
+          { upsert: true }
+        ),
+      ]);
     } else {
       await user.save();
     }
 
-    // ✅ Send beautiful registration confirmation email
-    try {
-      await sendTemplateEmail({
-        templateName: "registration-confirmation.html",
-        to: email,
-        subject: "🎉 Welcome to Prithu - Registration Confirmed!",
-        placeholders: {
-          username,
-          email,
-          password, 
-          referralCode: generatedCode,
-        },
-         embedLogo: true,
-      });
-      console.log("✅ Registration confirmation email sent to:", email);
-    } catch (err) {
-      console.error("❌ Failed to send registration email:", err);
-    }
+    //Create ProfileSettings for this user
+    ProfileSettings.create({
+      userId: user._id,
+      userName: username,
+      displayName: username,
+    }).catch((err) =>
+      console.error("❌ Failed to create ProfileSettings:", err)
+    );
 
+    // Send confirmation email (non-blocking)
+    sendTemplateEmail({
+      templateName: "registration-confirmation.html",
+      to: email,
+      subject: "🎉 Welcome to Prithu - Registration Confirmed!",
+      placeholders: {
+        username,
+        email,
+        password, 
+        referralCode: generatedCode,
+      },
+      embedLogo: true,
+    }).catch((err) => console.error("❌ Email sending failed:", err));
+
+    // Respond success
     res.status(201).json({
       message: "User registered successfully",
       referralCode: generatedCode,
@@ -310,9 +347,6 @@ exports.newUserVerifyOtp = async (req, res) => {
   }
 };
 
-/**
- * Verify OTP for existing users (Password Reset)
- */
 exports.existUserVerifyOtp = async (req, res) => {
   try {
     const { otp } = req.body;
@@ -340,9 +374,7 @@ exports.existUserVerifyOtp = async (req, res) => {
   }
 };
 
-/**
- * Reset Password after OTP verification
- */
+
 exports.userPasswordReset = async (req, res) => {
   try {
     const { email, newPassword } = req.body;
@@ -391,7 +423,7 @@ exports.userLogOut = async (req, res) => {
 
     let userStatusChanged = false;
 
-    // 1️⃣ If sessionId provided → handle session-based logout
+    // If sessionId provided → handle session-based logout
     if (sessionId) {
       const session = await Session.findById(sessionId);
       if (!session) return res.status(404).json({ error: "Session not found" });
@@ -415,7 +447,7 @@ exports.userLogOut = async (req, res) => {
       }
     }
 
-    // 2️⃣ If deviceId provided → handle device-based logout
+    // If deviceId provided → handle device-based logout
     if (deviceId) {
       await Device.findOneAndUpdate(
         { userId, deviceId },

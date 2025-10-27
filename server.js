@@ -6,6 +6,7 @@ const cookieParser = require("cookie-parser");
 const path = require("path");
 const http = require("http");
  const startCrons = require("./corn/index");
+const jobRoot=require("./roots/jobPostRoot");
 
 const root = require("./roots/root");
 const { initWebSocket } = require("./middlewares/webSocket");
@@ -37,6 +38,7 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/job",jobRoot);
 app.use("/api", root);
 
  startCrons()

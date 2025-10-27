@@ -4,7 +4,8 @@ const nodemailer = require('nodemailer');
 require('dotenv').config();
 const bcrypt = require('bcrypt');
 const otpStore=new Map();
-const ChildAdmin=require('../../models/childAdminModel')
+const ChildAdmin=require('../../models/childAdminModel');
+const ProfileSettings=require("../../models/profileSettingModel");
 
 
 // Create nodemailer transporter
@@ -21,83 +22,89 @@ exports.newAdmin = async (req, res) => {
   try {
     const { username, email, password, adminType } = req.body;
     const parentAdminId = req.Id || null;
-   
 
-    console.log({ username, email, password, adminType })
-    // Check if username or email already exists
-    const existingUser = await Admin.findOne({
-      $or: [{ userName: username }, { email }]
-    });
-    if (existingUser) {
+    if (!username || !email || !password || !adminType) {
+      return res.status(400).json({ error: "All fields are required" });
+    }
+
+    // ✅ 1. Check for existing user (both Admin & ChildAdmin)
+    const [existingAdmin, existingChild] = await Promise.all([
+      Admin.findOne({ $or: [{ userName: username }, { email }] }).lean(),
+      ChildAdmin.findOne({ $or: [{ userName: username }, { email }] }).lean(),
+    ]);
+
+    if (existingAdmin || existingChild) {
+      const duplicate = existingAdmin || existingChild;
       return res.status(400).json({
         error:
-          existingUser.userName === username
+          duplicate.userName === username
             ? "Username already exists"
-            : "Email already registered"
+            : "Email already registered",
       });
     }
 
-    // Hash password
+    // ✅ 2. Hash password once (avoid repeating bcrypt)
     const passwordHash = await bcrypt.hash(password, 10);
 
+    let createdAdmin, profilePayload;
+
+    // ✅ 3. Handle Child_Admin creation
     if (adminType === "Child_Admin") {
-      // Generate unique ChildAdminId
-      const lastChild = await ChildAdmin.findOne().sort({ createdAt: -1 });
-      let newIdNumber = 1;
-      if (lastChild?.childAdminId) {
-        newIdNumber = parseInt(lastChild.childAdminId.replace("CA", "")) + 1;
-      }
-      const childAdminId = "CA" + String(newIdNumber).padStart(4, "0"); // e.g. CA0001
+      const lastChild = await ChildAdmin.findOne({}, { childAdminId: 1 })
+        .sort({ createdAt: -1 })
+        .lean();
 
-       // Save child admin
-   const childAdmin = new ChildAdmin({
-    childAdminId,
-    userName: username, // ⚠️ Must match schema field name
-    email,
-    passwordHash: await bcrypt.hash(password, 10), // ⚠️ Hash password
-    adminType,           // or childAdminType
-    parentAdminId: req.Id, // ⚠️ ObjectId of parent admin
-    inheritedPermissions: null,
-    createdBy: req.Id   
-  });
+      const newIdNumber = lastChild?.childAdminId
+        ? parseInt(lastChild.childAdminId.replace("CA", "")) + 1
+        : 1;
+      const childAdminId = "CA" + String(newIdNumber).padStart(4, "0");
 
-      await childAdmin.save();
-
-      return res.status(201).json({
-        message: "Child Admin registered successfully",
-        admin: {
-          id: childAdmin._id,
-          username: childAdmin.userName,
-          password:password,
-          email: childAdmin.email,
-          adminType: childAdmin.adminType,
-          childAdminId: childAdmin.childAdminId
-        }
+      createdAdmin = await ChildAdmin.create({
+        childAdminId,
+        userName: username,
+        email,
+        passwordHash,
+        adminType,
+        parentAdminId,
+        createdBy: parentAdminId,
       });
+
+      profilePayload = { childAdminId: createdAdmin._id };
+    } else {
+      // ✅ 4. Handle Master/Super Admin creation
+      createdAdmin = await Admin.create({
+        userName: username,
+        email,
+        passwordHash,
+        adminType,
+      });
+
+      profilePayload = { adminId: createdAdmin._id };
     }
 
-    // Handle Master or other admin creation if needed
-    const admin = new Admin({
+    // ✅ 5. Create ProfileSettings (no need for await if not required immediately)
+    ProfileSettings.create({
+      ...profilePayload,
       userName: username,
-      email,
-      passwordHash: passwordHash,
-      adminType:adminType
-    });
-    await admin.save();
+      displayName: username,
+    }).catch((err) => console.error("Profile creation failed:", err));
 
+    // ✅ 6. Return clean response
     return res.status(201).json({
-      message: "Admin registered successfully",
+      message: `${adminType} registered successfully`,
       admin: {
-        id: admin._id,
-        username: admin.userName,
-        email: admin.email,
-        adminType: admin.adminType
-      }
+        id: createdAdmin._id,
+        username: createdAdmin.userName,
+        email: createdAdmin.email,
+        adminType: createdAdmin.adminType,
+        ...(createdAdmin.childAdminId && {
+          childAdminId: createdAdmin.childAdminId,
+        }),
+      },
     });
-
   } catch (error) {
-    console.error("Error creating new admin:", error);
-    return res.status(500).json({ error: error.message });
+    console.error("❌ Error creating new admin:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };
 

@@ -13,10 +13,10 @@ exports.adminAddCategory = async (req, res) => {
 
     // ✅ Convert string into array
     const inputCategories = names
-      .split(",") // split string into array
-      .map((n) => n.trim()) // trim spaces
-      .filter((n) => n.length > 0) // remove empties
-      .map((name) => name.charAt(0).toUpperCase() + name.slice(1)); // capitalize
+      .split(",") 
+      .map((n) => n.trim())
+      .filter((n) => n.length > 0) 
+      .map((name) => name.charAt(0).toUpperCase() + name.slice(1)); 
 
     if (!inputCategories.length) {
       return res.status(400).json({ message: "No valid category names provided" });

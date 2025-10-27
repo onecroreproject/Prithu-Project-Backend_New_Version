@@ -28,38 +28,29 @@ const getVideoDurationFromBuffer = async (buffer) => {
   return await getVideoDurationInSeconds(stream);
 };
 
-// Middleware: check duplicates & video duration in parallel (supports multiple files)
+// ✅ Middleware: process video duration + hash + duplicate check
 const adminProcessFeedFile = async (req, res, next) => {
-  // Handle multiple files
   const files = req.files || (req.file ? [req.file] : []);
   if (files.length === 0) return next();
 
   try {
-    // Process all files in parallel
     await Promise.all(
       files.map(async (file) => {
         const buffer = file.buffer;
-
-        // Hash
         const fileHash = generateFileHash(buffer);
-        file.fileHash = fileHash; // store on file object
+        file.fileHash = fileHash;
 
-        // Video duration
-        let videoDuration = null;
-        if (file.mimetype.startsWith("video/")) {
-          videoDuration = await getVideoDurationFromBuffer(buffer);
-          file.videoDuration = videoDuration;
-        }
-
-        // Check duplicates
+        // Check if duplicate feed exists
         const existingFeed = await Feed.findOne({ fileHash }).lean();
         if (existingFeed) {
           throw { status: 409, message: "This file already exists", feedId: existingFeed._id };
         }
 
-        // Check video duration limit
-        if (videoDuration && videoDuration > 60) {
-          throw { status: 400, message: "Video duration exceeds 60 seconds" };
+        // Check video duration if applicable
+        if (file.mimetype.startsWith("video/")) {
+          const duration = await getVideoDurationFromBuffer(buffer);
+          file.videoDuration = duration;
+          if (duration > 60) throw { status: 400, message: "Video duration exceeds 60 seconds" };
         }
       })
     );
@@ -67,12 +58,11 @@ const adminProcessFeedFile = async (req, res, next) => {
     next();
   } catch (err) {
     const status = err.status || 500;
-    const message = err.message || "Error processing file(s)";
-    return res.status(status).json({ message });
+    return res.status(status).json({ message: err.message || "Error processing file(s)" });
   }
 };
 
-// Upload to Cloudinary (supports multiple files)
+// ✅ Upload to Cloudinary (preserve duration & fileHash)
 const adminUploadToCloudinary = async (req, res, next) => {
   const files = req.files || (req.file ? [req.file] : []);
   if (files.length === 0) return next();
@@ -88,14 +78,13 @@ const adminUploadToCloudinary = async (req, res, next) => {
         if (req.baseUrl.includes("feed")) {
           folder = file.mimetype.startsWith("image/") ? "feeds/images" : "feeds/videos";
         } else if (req.baseUrl.includes("profile")) {
-          
           folder = "profile/images";
         }
 
         const isVideo = file.mimetype.startsWith("video/");
 
         const result = await new Promise((resolve, reject) => {
-          const stream = cloudinary.uploader.upload_stream(
+          const uploadStream = cloudinary.uploader.upload_stream(
             {
               folder,
               resource_type: isVideo ? "video" : "image",
@@ -110,19 +99,23 @@ const adminUploadToCloudinary = async (req, res, next) => {
               resolve(result);
             }
           );
-          bufferStream.pipe(stream);
+          bufferStream.pipe(uploadStream);
         });
 
+        // ✅ Include all details for next step
         file.cloudinary = {
           url: result.secure_url,
           public_id: result.public_id,
+          fileHash: file.fileHash,
+          duration: file.videoDuration || null,
+          mimetype: file.mimetype,
+          originalname: file.originalname,
         };
-         console.log(file.cloudinary)
+
         return file.cloudinary;
       })
     );
 
-    // Attach results to req for controller
     req.cloudinaryFiles = cloudinaryResults;
     next();
   } catch (err) {
@@ -131,9 +124,7 @@ const adminUploadToCloudinary = async (req, res, next) => {
   }
 };
 
-
-
-// Delete from Cloudinary
+// ✅ Delete from Cloudinary
 const adminDeleteFromCloudinary = async (public_id) => {
   try {
     return await cloudinary.uploader.destroy(public_id, { resource_type: "image" });
@@ -144,7 +135,7 @@ const adminDeleteFromCloudinary = async (public_id) => {
 
 module.exports = {
   adminUpload,
-  adminProcessFeedFile, // replaces checkFeedDuplicate + checkVideoDuration
+  adminProcessFeedFile,
   adminUploadToCloudinary,
   adminDeleteFromCloudinary,
 };
