@@ -334,7 +334,7 @@ router.get('/user/get/feed/with/search/cat/:categoryId',getFeedWithCategoryId);
  router.get('/get/creator/detail/feed/:feedId',auth,getUserInfoAssociatedFeed);
  router.get('/get/user/hide/post',auth,getUserHidePost);
 
-router.delete('/user/delete/feeds', auth, creatorFeedDelete);
+
 router.post('/user/get/post',getUserPost);
 router.get('/user/get/feed/category',auth,getFeedLanguageCategories);
 router.get('/get/all/feed/for/Creator',auth,getFeedsByAccountId);
