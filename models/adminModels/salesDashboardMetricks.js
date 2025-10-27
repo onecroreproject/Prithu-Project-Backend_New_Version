@@ -6,7 +6,7 @@ const analyticsMetricSchema = new mongoose.Schema(
     date: {
       type: Date,
       required: true,
-      index: true, // helps for date range queries
+      index: true, 
     },
     totalRevenue: {
       type: Number,
@@ -51,7 +51,7 @@ const analyticsMetricSchema = new mongoose.Schema(
   }
 );
 
-// Optional: Ensure unique date record (one per day)
+// Ensure unique date record (one per day)
 analyticsMetricSchema.index({ date: 1 }, { unique: true });
 
 module.exports = mongoose.model("AnalyticsMetric", analyticsMetricSchema,"AnalyticsMetrics");

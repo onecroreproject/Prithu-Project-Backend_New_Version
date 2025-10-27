@@ -40,8 +40,6 @@ exports.applyFrame = async (avatarPublicId) => {
     const frameMeta = await cloudinary.api.resource(randomFrame.publicId, { resource_type: "image" });
     const avatarMeta = await cloudinary.api.resource(avatarPublicId, { resource_type: "image" });
 
-    console.log("Frame original size:", frameMeta.width, frameMeta.height);
-    console.log("Avatar original size:", avatarMeta.width, avatarMeta.height);
 
     const targetSize = 500; // Standard avatar size
 
@@ -52,7 +50,6 @@ exports.applyFrame = async (avatarPublicId) => {
       `l_${overlayId},c_fill,fl_relative,w_1.0,h_1.0,g_center/fl_layer_apply/` + 
       `${avatarPublicId}`; 
 
-    console.log("Generated framed URL:", framedUrl);
 
     return framedUrl;
 
