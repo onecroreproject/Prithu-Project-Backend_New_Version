@@ -131,29 +131,37 @@ exports.createNewUser = async (req, res) => {
 exports.userLogin = async (req, res) => {
   try {
     const { identifier, password, role, roleRef, deviceId, deviceType } = req.body;
- 
-    // 1️⃣ Find user
+
+    // 1️⃣ Validate inputs
+    if (!identifier || !password) {
+      return res.status(400).json({ error: "Username/Email and password are required" });
+    }
+
+    // 2️⃣ Find user
     const user = await User.findOne({
       $or: [{ userName: identifier }, { email: identifier }],
     });
     if (!user) {
       return res.status(400).json({ error: "Invalid username/email or password" });
     }
- 
-    // 2️⃣ Validate password
+
+    // 3️⃣ Validate password
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       return res.status(400).json({ error: "Invalid username/email or password" });
     }
- 
-    if(user.isBlocked){
-      return res.status(403).json ({error:"User credentials are blocked. Please contact admin."});
+
+    // 4️⃣ Check if blocked
+    if (user.isBlocked) {
+      return res
+        .status(403)
+        .json({ error: "User credentials are blocked. Please contact admin." });
     }
- 
-    // 3️⃣ Run startup checks
+
+    // 5️⃣ Run startup checks
     const userStart = await startUpProcessCheck(user._id);
- 
-    // 4️⃣ Generate tokens
+
+    // 6️⃣ Generate tokens
     const accessToken = jwt.sign(
       {
         userName: user.userName,
@@ -164,17 +172,17 @@ exports.userLogin = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "1h" }
     );
- 
+
     const refreshToken = jwt.sign(
       { userId: user._id },
       process.env.JWT_REFRESH_SECRET,
       { expiresIn: "30d" }
     );
- 
-    // 5️⃣ Handle device
+
+    // 7️⃣ Handle device registration/update
     const deviceIdentifier = deviceId || uuidv4();
     let device = await Device.findOne({ deviceId: deviceIdentifier, userId: user._id });
- 
+
     if (!device) {
       device = await Device.create({
         userId: user._id,
@@ -188,10 +196,10 @@ exports.userLogin = async (req, res) => {
       device.lastActiveAt = new Date();
       await device.save();
     }
- 
-    // 6️⃣ Create or update session
+
+    // 8️⃣ Manage session
     let session = await Session.findOne({ userId: user._id, deviceId: device._id });
- 
+
     if (!session) {
       session = await Session.create({
         userId: user._id,
@@ -207,29 +215,27 @@ exports.userLogin = async (req, res) => {
       session.lastSeenAt = null;
       await session.save();
     }
- 
-    // 7️⃣ Update user global online status
-    user.isOnline = true;
-    user.lastSeenAt = null;
-    await user.save();
- 
-    // 8️⃣ Send "Welcome Back" email
-    const emailTemplatePath = path.join(__dirname, "../../utils/templates/login.html");
-    let emailHtml = fs.readFileSync(emailTemplatePath, "utf-8");
- 
-    // Replace placeholders
-    emailHtml = emailHtml.replace("{username}", user.userName);
-    emailHtml = emailHtml.replace("[Insert Dashboard Link]", `${process.env.FRONTEND_URL}/dashboard`);
- 
-    // Send mail
-    sendMailSafeSafe({
+
+    // 9️⃣ Update user's online status
+    await User.updateOne(
+      { _id: user._id },
+      { $set: { isOnline: true, lastSeenAt: null } }
+    );
+
+    // 🔟 Send "Welcome Back" email (non-blocking)
+    sendTemplateEmail({
+      templateName: "login.html",
       to: user.email,
-      subject: "Welcome Back to Prithu!",
-      html: emailHtml
-    });
- 
-    // 9️⃣ Return tokens + session info
-    res.json({
+      subject: "👋 Welcome Back to Prithu!",
+      placeholders: {
+        username: user.userName,
+        dashboardLink: `${process.env.FRONTEND_URL}/dashboard`,
+      },
+      embedLogo: true,
+    }).catch((err) => console.error("❌ Failed to send login email:", err));
+
+    // 11️⃣ Return response
+    return res.json({
       accessToken,
       refreshToken,
       userId: user._id,
@@ -239,12 +245,11 @@ exports.userLogin = async (req, res) => {
       feedLanguage: userStart.feedLanguage,
       gender: userStart.gender,
       category: userStart.hasInterestedCategory,
-      role:"user",
+      role: "user",
     });
- 
   } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ error: error.message });
+    console.error("❌ Login error:", error);
+    return res.status(500).json({ error: error.message });
   }
 };
  
@@ -305,9 +310,9 @@ exports.userSendOtp = async (req, res) => {
   }
 };
 
-/**
- * Verify OTP for new (unregistered) users
- */
+
+// Verify OTP for new (unregistered) users
+ 
 exports.newUserVerifyOtp = async (req, res) => {
   try {
     const { otp, email } = req.body;
@@ -346,6 +351,7 @@ exports.newUserVerifyOtp = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 exports.existUserVerifyOtp = async (req, res) => {
   try {

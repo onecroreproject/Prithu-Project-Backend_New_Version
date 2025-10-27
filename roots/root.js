@@ -509,6 +509,38 @@ router.get(
 
 
 
+const { extractThemeColor } = require("../middlewares/helper/extractThemeColor"); // adjust path as needed
+
+/**
+ * Test if Vibrant can successfully extract colors from a given image URL
+ */
+let url="https://res.cloudinary.com/dzp2c7ed9/image/upload/v1760421036/feeds/images/bg9ftpckekqot2mipem3.jpg"
+async function checkThemeExtraction() {
+  console.log("🧪 Checking theme extraction for:", url);
+  
+  try {
+    const result = await extractThemeColor(url, type="image");
+    
+    console.log("✅ Theme extraction successful!");
+    console.log("🎨 Extracted colors:");
+    console.log(result);
+    
+    return {
+      success: true,
+      message: "Theme extraction successful",
+      colors: result,
+    };
+  } catch (err) {
+    console.error("❌ Theme extraction failed:", err.message);
+    return {
+      success: false,
+      message: err.message || "Theme extraction failed",
+    };
+  }
+}
+
+
+checkThemeExtraction()
 
 
 
