@@ -53,12 +53,17 @@ exports.heartbeat = async (req, res) => {
     const session = await Session.findById(sessionId);
     if (!session) return res.status(404).json({ error: "Session not found" });
 
-    // Update last activity timestamps
+    // Update session + user activity
     session.lastSeenAt = new Date();
     session.isOnline = true;
     await session.save();
 
     await User.findByIdAndUpdate(session.userId, { isOnline: true });
+
+    // (Optional) emit event to other users if needed
+    const { getIO } = require("../socket");
+    const io = getIO();
+    if (io) io.emit("userOnline", { userId: session.userId });
 
     res.json({ message: "Heartbeat recorded" });
   } catch (error) {
@@ -66,4 +71,5 @@ exports.heartbeat = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
 

@@ -10,35 +10,55 @@ const Account=require("../../models/accountSchemaModel");
 exports.adminFeedUpload = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
-    if (!userId) return res.status(400).json({ message: "User ID is required" });
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
 
-    const { language, categoryId, type } = req.body;
+    const { language, categoryId, type, dec } = req.body;
+
     if (!language || !categoryId || !type || !["image", "video"].includes(type)) {
-      return res.status(400).json({ message: "Invalid language, categoryId or type" });
+      return res.status(400).json({
+        message: "Invalid language, categoryId or type",
+      });
     }
 
     const originalFiles = req.files || [];
-    if (originalFiles.length === 0)
+    if (originalFiles.length === 0) {
       return res.status(400).json({ message: "No files uploaded" });
+    }
 
     const cloudFiles = req.cloudinaryFiles || [];
-    if (cloudFiles.length !== originalFiles.length)
-      return res.status(400).json({ message: "Mismatch between uploaded files and Cloudinary files" });
+    if (cloudFiles.length !== originalFiles.length) {
+      return res.status(400).json({
+        message: "Mismatch between uploaded files and Cloudinary files",
+      });
+    }
 
     const uploadedFilesSet = new Set();
 
     const feedResults = await Promise.all(
       cloudFiles.map((cloudFile, index) => {
-        const fileKey = cloudFile.url || cloudFile.secure_url || originalFiles[index].originalname;
+        const fileKey =
+          cloudFile.url ||
+          cloudFile.secure_url ||
+          originalFiles[index].originalname;
+
         if (uploadedFilesSet.has(fileKey)) return null;
         uploadedFilesSet.add(fileKey);
 
-        // ✅ Pass duration to service
+        // 🆕 Handle description — supports both single and multiple descriptions
+        const description =
+          Array.isArray(dec) && dec[index] ? dec[index] : dec || "";
+
+        // ✅ Pass duration + description to FeedService
         return FeedService.uploadFeed(
-          { language, categoryId, type },
+          { language, categoryId, type, dec: description },
           {
             ...cloudFile,
-            duration: originalFiles[index].videoDuration || cloudFile.duration || null,
+            duration:
+              originalFiles[index].videoDuration ||
+              cloudFile.duration ||
+              null,
           },
           userId
         );
@@ -60,9 +80,12 @@ exports.adminFeedUpload = async (req, res) => {
     });
   } catch (error) {
     console.error("Error uploading feed:", error);
-    return res.status(500).json({ message: error.message || "Server error" });
+    return res
+      .status(500)
+      .json({ message: error.message || "Server error" });
   }
 };
+
 
 
 

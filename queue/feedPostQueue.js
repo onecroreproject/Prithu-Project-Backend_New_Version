@@ -1,27 +1,27 @@
+// feedQueue.js
 const Feed = require("../models/feedModel");
-const createQueue =require("../queue.js")
+const createQueue = require("../queue.js");
 
-
-
-
-const feedQueue = createQueue("feed-posts")
+const feedQueue = createQueue("feed-posts");
 
 feedQueue.process(async (job) => {
-  console.log("🔹 Processing feed-posts job...", job.id);
+  const { feedId } = job.data;
+  console.log(`🚀 Processing scheduled feed job: ${feedId}`);
 
-  const now = new Date();
-  const feedsToPost = await Feed.find({
-    scheduledAt: { $lte: now },
-    isPosted: false,
-  });
-
-  for (const feed of feedsToPost) {
-    console.log("Posting feed:", feed.title);
-    feed.isPosted = true;
-    await feed.save();
+  const feed = await Feed.findById(feedId);
+  if (!feed) {
+    console.log("⚠️ Feed not found:", feedId);
+    return;
   }
 
-  console.log("✅ Feed-posts job done");
+  if (feed.isScheduled && feed.status === "Pending") {
+    feed.isScheduled = false;
+    feed.status = "Published";
+    await feed.save();
+    console.log(`✅ Feed ${feedId} published successfully`);
+  } else {
+    console.log(`ℹ️ Feed ${feedId} already published or not scheduled`);
+  }
 });
 
 feedQueue.on("completed", (job) => console.log(`✅ Job ${job.id} completed`));

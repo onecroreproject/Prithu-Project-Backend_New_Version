@@ -9,7 +9,7 @@ const http = require("http");
 const jobRoot=require("./roots/jobPostRoot");
 
 const root = require("./roots/root");
-const { initWebSocket } = require("./middlewares/webSocket");
+const { initSocket } = require("./middlewares/webSocket");
 
 // Import cron jobs (they schedule automatically)
 
@@ -18,7 +18,7 @@ const app = express();
 const server = http.createServer(app);
 
 // Initialize Socket.IO
-const io = initWebSocket(server);
+const io = initSocket(server);
 
 // CORS
 const allowedOrigins = process.env.CLIENT_URL?.split(",") || ["http://localhost:5173"];

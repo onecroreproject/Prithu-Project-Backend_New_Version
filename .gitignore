@@ -10,7 +10,12 @@ lerna-debug.log*
 
 
 
+
+
 .env
+*.json
+uploads/
+
 
 
 firebase/serviceAccountKey.json
