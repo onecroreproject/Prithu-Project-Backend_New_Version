@@ -9,6 +9,8 @@ const { calculateAge } = require("../../middlewares/helper/calculateAge");
 const { userDeleteFromCloudinary } = require("../../middlewares/services/userCloudnaryUpload");
 const { adminDeleteFromCloudinary } = require("../../middlewares/services/adminCloudnaryUpload");
 const { removeImageBackground } = require("../../middlewares/helper/backgroundRemover"); 
+const DEFAULT_COVER_PHOTO = "https://res.cloudinary.com/demo/image/upload/v1730123456/default-cover.jpg";
+
 
 
 // ------------------- Validation Middleware -------------------
@@ -779,6 +781,92 @@ exports.getAdminProfileDetail = async (req, res) => {
   } catch (error) {
     console.error("Error fetching profile:", error);
     return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Upload or Update Cover Photo
+exports.updateCoverPhoto = async (req, res) => {
+  try {
+    const userId = req.Id || req.body.userId;
+    if (!userId) return res.status(400).json({ message: "userId is required" });
+
+    if (!req.cloudinaryFile)
+      return res.status(400).json({ message: "Cover photo file is missing" });
+
+    const profile = await Profile.findOne({ userId });
+
+    // Delete old photo if exists and not same
+    if (profile?.coverPhotoId && profile.coverPhotoId !== req.cloudinaryFile.public_id) {
+      await userDeleteFromCloudinary(profile.coverPhotoId);
+    }
+
+    // Prepare new data
+    const updateData = {
+      coverPhoto: req.cloudinaryFile.url,
+      coverPhotoId: req.cloudinaryFile.public_id,
+      modifiedCoverPhoto: req.cloudinaryFile.url,
+      modifiedCoverPhotoId: req.cloudinaryFile.public_id,
+    };
+
+    // Create or Update
+    const updatedProfile = await Profile.findOneAndUpdate(
+      { userId },
+      { $set: updateData },
+      { new: true, upsert: true }
+    ).populate("userId", "userName email role");
+
+    return res.status(200).json({
+      message: "Cover photo updated successfully",
+      coverPhoto: updatedProfile.coverPhoto,
+      profile: updatedProfile,
+    });
+  } catch (error) {
+    console.error("Error updating cover photo:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+
+exports.deleteCoverPhoto = async (req, res) => {
+  try {
+    const userId = req.Id || req.body.userId;
+    if (!userId) return res.status(400).json({ message: "userId is required" });
+
+    const profile = await Profile.findOne({ userId });
+    if (!profile)
+      return res.status(404).json({ message: "Profile not found" });
+
+    // Delete from Cloudinary if exists
+    if (profile.coverPhotoId) {
+      await userDeleteFromCloudinary(profile.coverPhotoId);
+    }
+
+    // Replace with default cover photo
+    profile.coverPhoto = DEFAULT_COVER_PHOTO;
+    profile.coverPhotoId = null;
+    profile.modifiedCoverPhoto = DEFAULT_COVER_PHOTO;
+    profile.modifiedCoverPhotoId = null;
+    await profile.save();
+
+    return res.status(200).json({
+      message: "Cover photo deleted successfully, default applied",
+      coverPhoto: DEFAULT_COVER_PHOTO,
+    });
+  } catch (error) {
+    console.error("Error deleting cover photo:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 };
 

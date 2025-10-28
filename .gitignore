@@ -13,8 +13,7 @@ lerna-debug.log*
 
 
 .env
-*.json
-uploads/
+
 
 
 

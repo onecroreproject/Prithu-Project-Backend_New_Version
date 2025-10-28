@@ -18,10 +18,16 @@ const ProfileSettingsSchema = new mongoose.Schema(
     phoneNumber: { type: String },
 
     // Avatar Fields
-    profileAvatar: { type: String },   // Original Cloudinary URL
-    profileAvatarId: { type: String }, // Cloudinary public_id
-    modifyAvatar: { type: String }, 
-    modifyAvatarPublicId:{type:String},   // Background removed or modified avatar URL
+    profileAvatar: { type: String },          // Original Cloudinary URL
+    profileAvatarId: { type: String },        // Cloudinary public_id
+    modifyAvatar: { type: String },           // Background removed / modified version
+    modifyAvatarPublicId: { type: String },
+
+    // ✅ Cover Photo Fields
+    coverPhoto: { type: String },             // Cloudinary URL
+    coverPhotoId: { type: String },           // Cloudinary public_id
+    modifiedCoverPhoto: { type: String },     // Edited / optimized version
+    modifiedCoverPhotoId: { type: String },   // Cloudinary public_id
 
     // Social Media Links
     socialLinks: {
@@ -43,6 +49,7 @@ const ProfileSettingsSchema = new mongoose.Schema(
     privacy: {
       showEmail: { type: Boolean, default: false },
       showProfilePicture: { type: Boolean, default: true },
+      showCoverPhoto: { type: Boolean, default: true }, // ✅ Added
     },
 
     language: { type: String, default: "en" },
@@ -60,6 +67,7 @@ const ProfileSettingsSchema = new mongoose.Schema(
       maritalStatus: { type: Boolean, default: true },
       phoneNumber: { type: Boolean, default: true },
       profileAvatar: { type: Boolean, default: true },
+      coverPhoto: { type: Boolean, default: true }, // ✅ Added
       socialLinks: { type: Boolean, default: true },
     },
 

@@ -82,6 +82,8 @@ const {
   getChildAdminProfileDetail,
   toggleFieldVisibility,
   getVisibilitySettings,
+  updateCoverPhoto,
+  deleteCoverPhoto,
   } = require('../controllers/profileControllers/profileController');
 
 const {
@@ -359,6 +361,12 @@ router.post("/user/profile/detail/update",auth,userUpload.single("file"),(req, r
   userUploadToCloudinary,
   userProfileDetailUpdate
 );
+router.post("/user/profile/cover/update",auth,userUpload.single("file"),(req, res, next) => {req.baseUrl = "/profile"; next();
+  },
+  userUploadToCloudinary,
+  updateCoverPhoto
+);
+router.delete("/user/cover/photo/delete",auth,deleteCoverPhoto);
 router.get('/get/profile/detail',auth,getUserProfileDetail);
 
 /* --------------------- User Earnings API --------------------- */
