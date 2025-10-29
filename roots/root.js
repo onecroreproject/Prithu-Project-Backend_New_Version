@@ -84,6 +84,9 @@ const {
   getVisibilitySettings,
   updateCoverPhoto,
   deleteCoverPhoto,
+  getProfileOverview,
+  getVisibilitySettingsWeb,
+  updateFieldVisibilityWeb,
   } = require('../controllers/profileControllers/profileController');
 
 const {
@@ -361,7 +364,7 @@ router.post("/user/profile/detail/update",auth,userUpload.single("file"),(req, r
   userUploadToCloudinary,
   userProfileDetailUpdate
 );
-router.post("/user/profile/cover/update",auth,userUpload.single("file"),(req, res, next) => {req.baseUrl = "/profile"; next();
+router.post("/user/profile/cover/update",auth,userUpload.single("coverPhoto"),(req, res, next) => {req.baseUrl = "/profile/cover"; next();
   },
   userUploadToCloudinary,
   updateCoverPhoto
@@ -372,6 +375,10 @@ router.get('/get/profile/detail',auth,getUserProfileDetail);
 /* --------------------- User Earnings API --------------------- */
 
 router.get('/get/userearnigs/referrals',getUserEarnings);
+
+
+
+
 
 
 
@@ -520,6 +527,10 @@ router.get(
 
 
 
+/*---------------------Website----------------------------------*/
+router.get("/get/profile/overview",auth,getProfileOverview);
+router.post("/user/update/visibility/settings",auth,updateFieldVisibilityWeb);
+router.get("/user/update/visibility/settings",auth,getVisibilitySettingsWeb);
 
 
 

@@ -10,6 +10,9 @@ const { userDeleteFromCloudinary } = require("../../middlewares/services/userClo
 const { adminDeleteFromCloudinary } = require("../../middlewares/services/adminCloudnaryUpload");
 const { removeImageBackground } = require("../../middlewares/helper/backgroundRemover"); 
 const DEFAULT_COVER_PHOTO = "https://res.cloudinary.com/demo/image/upload/v1730123456/default-cover.jpg";
+const Following =require("../../models/userFollowingModel");
+const CreatorFollower =require("../../models/creatorFollowerModel");
+const Visibility = require("../../models/profileVisibilitySchema");
 
 
 
@@ -30,20 +33,26 @@ exports.validateUserProfileUpdate = [
   body("gender").optional(),
   body("notifications").optional().isObject(),
   body("privacy").optional().isObject(),
+  body("country").optional().isString(), // ✅ Added validation
+  body("city").optional().isString(), // ✅ Added validation
 ];
 
-
 // ------------------- User Profile Update -------------------
-
 exports.userProfileDetailUpdate = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
-    if (!userId) return res.status(400).json({ message: "userId is required" });
+    if (!userId) return res.status(400).json({ message: "User ID is required" });
 
+    // ✅ Validation
     const errors = validationResult(req);
-    if (!errors.isEmpty())
-      return res.status(400).json({ message: "Validation failed", errors: errors.array() });
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: "Validation failed",
+        errors: errors.array(),
+      });
+    }
 
+    // ✅ Allowed fields (added country, city)
     const allowedFields = [
       "phoneNumber",
       "bio",
@@ -58,40 +67,34 @@ exports.userProfileDetailUpdate = async (req, res) => {
       "notifications",
       "privacy",
       "maritalDate",
+      "country", // ✅ Added
+      "city", // ✅ Added
     ];
 
     const updateData = {};
-    allowedFields.forEach((field) => {
+    for (const field of allowedFields) {
       let value = req.body[field];
-      if ((field === "dateOfBirth" || field === "maritalDate") && (!value || value === "null"))
+      if (["dateOfBirth", "maritalDate"].includes(field) && (!value || value === "null"))
         value = null;
       if (value !== undefined) updateData[field] = value;
-    });
+    }
 
-    // ✅ Handle social media links safely (from admin controller)
+    // ✅ Parse & clean social links
     if (req.body.socialLinks) {
-      let links = {};
-
       try {
-        if (Array.isArray(req.body.socialLinks)) {
-          const lastValid = req.body.socialLinks
-            .slice()
-            .reverse()
-            .find((item) => {
-              if (!item || item === "undefined" || item === "null") return false;
-              try {
-                JSON.parse(item);
-                return true;
-              } catch {
-                return false;
-              }
-            });
+        let links = {};
 
-          if (lastValid) links = JSON.parse(lastValid);
-        } else if (typeof req.body.socialLinks === "string") {
-          if (req.body.socialLinks && req.body.socialLinks !== "undefined" && req.body.socialLinks !== "null") {
-            links = JSON.parse(req.body.socialLinks);
-          }
+        if (typeof req.body.socialLinks === "string") {
+          links = JSON.parse(req.body.socialLinks);
+        } else if (Array.isArray(req.body.socialLinks)) {
+          const valid = req.body.socialLinks.find((item) => {
+            try {
+              return item && JSON.parse(item);
+            } catch {
+              return false;
+            }
+          });
+          if (valid) links = JSON.parse(valid);
         } else if (typeof req.body.socialLinks === "object") {
           links = req.body.socialLinks;
         }
@@ -108,10 +111,11 @@ exports.userProfileDetailUpdate = async (req, res) => {
           };
         }
       } catch (err) {
-        console.warn("Invalid socialLinks data, skipping:", err.message);
+        console.warn("⚠️ Invalid socialLinks data:", err.message);
       }
     }
 
+    // ✅ Find or create profile
     const profile = await Profile.findOne({ userId });
 
     // ✅ Handle Cloudinary avatar
@@ -128,38 +132,37 @@ exports.userProfileDetailUpdate = async (req, res) => {
         updateData.modifyAvatar = secure_url;
         updateData.modifyAvatarPublicId = public_id;
       } catch (err) {
-        console.error("Error removing background:", err);
+        console.error("⚠️ Background removal failed:", err.message);
       }
     }
 
-    // ✅ Handle username update
+    // ✅ Handle username
     const userName = req.body.userName?.trim();
     if (userName) updateData.userName = userName;
 
-    // ✅ Upsert profile (create if first-time, update if exists)
+    // ✅ Update or create profile
     const updatedProfile = await Profile.findOneAndUpdate(
       { userId },
       { $set: updateData },
       { new: true, upsert: true }
     );
 
-    // ✅ Update username in User collection
+    // ✅ Sync username in User model
     if (userName) {
       await User.findByIdAndUpdate(userId, { $set: { userName } }, { new: true });
     }
 
-    // ✅ Populate user details
+    // ✅ Populate updated profile
     const populatedProfile = await Profile.findById(updatedProfile._id)
       .populate("userId", "userName email role")
       .lean();
 
     return res.status(200).json({
-      message: "User profile updated successfully",
+      message: "✅ User profile updated successfully",
       profile: populatedProfile,
     });
-
   } catch (error) {
-    console.error("Error in userProfileDetailUpdate:", error);
+    console.error("❌ Error in userProfileDetailUpdate:", error);
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
@@ -563,6 +566,99 @@ exports.getVisibilitySettings = async (req, res) => {
 
 
 
+exports.updateFieldVisibilityWeb = async (req, res) => {
+  try {
+    const userId = req.Id;  // From token middleware
+    const role = req.role;  // From token middleware
+    const { field, value, type = "general" } = req.body;
+
+    // Validate input
+    const allowedValues = ["public", "followers", "private"];
+    if (!field || !allowedValues.includes(value)) {
+      return res.status(400).json({
+        message: "Invalid request. Field and value ('public' | 'followers' | 'private') required.",
+      });
+    }
+
+    // Determine which profile to update
+    let profileQuery = {};
+    if (role === "Admin") profileQuery = { adminId: userId };
+    else if (role === "Child_Admin") profileQuery = { childAdminId: userId };
+    else if (role === "User") profileQuery = { userId: userId };
+    else return res.status(403).json({ message: "Unauthorized role" });
+
+    // Fetch profile
+    const profile = await Profile.findOne(profileQuery).populate("visibility");
+    if (!profile) {
+      return res.status(404).json({ message: "Profile not found" });
+    }
+
+    // Fetch or create visibility doc
+    let visibility = await Visibility.findById(profile.visibility);
+    if (!visibility) {
+      visibility = new Visibility();
+      profile.visibility = visibility._id;
+    }
+
+    // Update field
+    if (!(field in visibility.toObject())) {
+      return res.status(400).json({ message: "Invalid visibility field name" });
+    }
+
+    visibility[field] = value;
+    await visibility.save();
+    await profile.save();
+
+    return res.json({
+      success: true,
+      message: `Visibility for '${field}' updated to '${value}'`,
+      visibility,
+    });
+  } catch (err) {
+    console.error("❌ Visibility Update Error:", err);
+    return res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+
+
+
+
+exports.getVisibilitySettingsWeb = async (req, res) => {
+  try {
+    const userId = req.Id;   // From token middleware
+    const role = req.role;   // From token middleware
+
+    // Determine which profile to fetch
+    let profileQuery = {};
+    if (role === "Admin") profileQuery = { adminId: userId };
+    else if (role === "Child_Admin") profileQuery = { childAdminId: userId };
+    else if (role === "User") profileQuery = { userId: userId };
+    else return res.status(403).json({ message: "Unauthorized role" });
+
+    // Get visibility
+    const profile = await Profile.findOne(profileQuery).populate("visibility");
+    if (!profile || !profile.visibility) {
+      return res.status(404).json({ message: "Visibility settings not found" });
+    }
+
+    return res.json({
+      success: true,
+      visibility: profile.visibility,
+    });
+  } catch (err) {
+    console.error("❌ Get Visibility Error:", err);
+    return res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+
+
+
+
+
+
+
 
 
 
@@ -581,7 +677,7 @@ exports.getUserProfileDetail = async (req, res) => {
       `
         bio displayName maritalStatus phoneNumber dateOfBirth
         profileAvatar modifyAvatar timezone maritalDate gender
-        theme language privacy notifications socialLinks
+        theme language privacy notifications socialLinks country city coverPhoto
       `
     )
       .populate("userId", "userName email")
@@ -611,6 +707,9 @@ exports.getUserProfileDetail = async (req, res) => {
       notifications = {},
       socialLinks = {},
       userId: user = {},
+      country="" ,
+      city="" ,
+      coverPhoto="",
     } = profile;
 
     // ✅ Build response
@@ -622,6 +721,9 @@ exports.getUserProfileDetail = async (req, res) => {
         maritalStatus,
         phoneNumber,
         dateOfBirth,
+        country,
+         city,
+          coverPhoto,
         age: calculateAge(dateOfBirth),
         gender,
         userName: user.userName || null,
@@ -870,6 +972,116 @@ exports.deleteCoverPhoto = async (req, res) => {
   }
 };
 
+
+
+
+exports.getProfileCompletion = async (req, res) => {
+  try {
+    const userId = req.Id || req.params.userId;
+
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+
+    // 🔹 Fetch the user's profile
+    const profile = await ProfileSettings.findOne({ userId }).lean();
+
+    if (!profile) {
+      return res.status(404).json({ message: "Profile not found" });
+    }
+
+    // 🔹 Calculate completion percentage using helper
+    const completionPercentage = calculateProfileCompletion(profile);
+
+    // 🔹 Send back detailed response
+    return res.status(200).json({
+      success: true,
+      userId,
+      completionPercentage,
+      message: `Profile completion is ${completionPercentage}%`,
+    });
+  } catch (error) {
+    console.error("Error fetching profile completion:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while calculating profile completion",
+      error: error.message,
+    });
+  }
+}
+
+
+
+
+
+
+
+exports.getProfileOverview = async (req, res) => {
+  try {
+    // 1️⃣ Get user ID from token (middleware should attach req.Id)
+    const userId = req.Id;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized: user ID not found" });
+    }
+
+    // 2️⃣ Fetch profile details
+    const profile = await Profile.findOne(
+      { userId: new mongoose.Types.ObjectId(userId) },
+      {
+        _id: 0,
+        displayName: 1,
+        userName: 1,
+        profileAvatar: 1,
+        coverPhoto: 1,
+        modifyAvatar: 1,
+        modifiedCoverPhoto: 1,
+        privacy: 1,
+      }
+    ).lean();
+
+    if (!profile) {
+      return res.status(404).json({ message: "Profile not found" });
+    }
+
+    // 3️⃣ Get follower count (people following this user)
+    const creatorData = await CreatorFollower.findOne(
+      { creatorId: userId },
+      { followerIds: 1 }
+    ).lean();
+
+    const followerCount = creatorData?.followerIds?.length || 0;
+
+    // 4️⃣ Get following count (people this user follows)
+    const followingData = await Following.findOne(
+      { userId: userId },
+      { followingIds: 1 }
+    ).lean();
+
+    const followingCount = followingData?.followingIds?.length || 0;
+
+    // 5️⃣ Combine and send
+    return res.status(200).json({
+      message: "Profile overview fetched successfully",
+      data: {
+        userId,
+        displayName: profile.displayName,
+        userName: profile.userName,
+        profileAvatar: profile.profileAvatar,
+        modifyAvatar: profile.modifyAvatar,
+        coverPhoto: profile.coverPhoto,
+        modifiedCoverPhoto: profile.modifiedCoverPhoto,
+        followerCount,
+        followingCount,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching profile overview:", error);
+    return res.status(500).json({
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
 
 
 

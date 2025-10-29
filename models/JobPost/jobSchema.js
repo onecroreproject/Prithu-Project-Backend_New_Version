@@ -7,7 +7,7 @@ const JobPostSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-
+    role:{type:String,required:true,trim:true},
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true },
     companyName: { type: String, required: true },

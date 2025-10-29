@@ -41,7 +41,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/job",jobRoot);
 app.use("/api", root);
 
- startCrons()
+//  startCrons()
 
 // MongoDB connection and server start
 mongoose.connect(process.env.MONGODB_URI)

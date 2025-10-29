@@ -7,7 +7,7 @@ const ProfileSettingsSchema = new mongoose.Schema(
     adminId: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
     childAdminId: { type: mongoose.Schema.Types.ObjectId, ref: "ChildAdmin" },
 
-    // Profile Details
+    // Basic Details
     displayName: { type: String },
     gender: { type: String },
     userName: { type: String },
@@ -17,19 +17,21 @@ const ProfileSettingsSchema = new mongoose.Schema(
     maritalStatus: { type: String },
     phoneNumber: { type: String },
 
-    // Avatar Fields
-    profileAvatar: { type: String },          // Original Cloudinary URL
-    profileAvatarId: { type: String },        // Cloudinary public_id
-    modifyAvatar: { type: String },           // Background removed / modified version
+    // Location
+    country: { type: String },
+    city: { type: String },
+
+    // Avatar & Cover
+    profileAvatar: { type: String },
+    profileAvatarId: { type: String },
+    modifyAvatar: { type: String },
     modifyAvatarPublicId: { type: String },
+    coverPhoto: { type: String },
+    coverPhotoId: { type: String },
+    modifiedCoverPhoto: { type: String },
+    modifiedCoverPhotoId: { type: String },
 
-    // ✅ Cover Photo Fields
-    coverPhoto: { type: String },             // Cloudinary URL
-    coverPhotoId: { type: String },           // Cloudinary public_id
-    modifiedCoverPhoto: { type: String },     // Edited / optimized version
-    modifiedCoverPhotoId: { type: String },   // Cloudinary public_id
-
-    // Social Media Links
+    // Social Links
     socialLinks: {
       facebook: { type: String, default: "" },
       instagram: { type: String, default: "" },
@@ -49,44 +51,19 @@ const ProfileSettingsSchema = new mongoose.Schema(
     privacy: {
       showEmail: { type: Boolean, default: false },
       showProfilePicture: { type: Boolean, default: true },
-      showCoverPhoto: { type: Boolean, default: true }, // ✅ Added
+      showCoverPhoto: { type: Boolean, default: true },
+      showLocation: { type: Boolean, default: true },
+      showPhoneNumber: { type: Boolean, default: true },
     },
 
     language: { type: String, default: "en" },
     timezone: { type: String, default: "Asia/Kolkata" },
     details: { type: mongoose.Schema.Types.Mixed },
 
-    // ✅ Visibility Toggles
-    visibility: {
-      displayName: { type: Boolean, default: true },
-      gender: { type: Boolean, default: true },
-      userName: { type: Boolean, default: true },
-      bio: { type: Boolean, default: true },
-      dateOfBirth: { type: Boolean, default: true },
-      maritalDate: { type: Boolean, default: true },
-      maritalStatus: { type: Boolean, default: true },
-      phoneNumber: { type: Boolean, default: true },
-      profileAvatar: { type: Boolean, default: true },
-      coverPhoto: { type: Boolean, default: true }, // ✅ Added
-      socialLinks: { type: Boolean, default: true },
-    },
-
-    // Optional: Individual social link visibility
-    socialLinksVisibility: {
-      facebook: { type: Boolean, default: true },
-      instagram: { type: Boolean, default: true },
-      twitter: { type: Boolean, default: true },
-      linkedin: { type: Boolean, default: true },
-      github: { type: Boolean, default: true },
-      youtube: { type: Boolean, default: true },
-      website: { type: Boolean, default: true },
-    },
+    // Visibility — now stored as reference
+    visibility: { type: mongoose.Schema.Types.ObjectId, ref: "ProfileVisibility" },
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model(
-  "ProfileSettings",
-  ProfileSettingsSchema,
-  "ProfileSettings"
-);
+module.exports = mongoose.model("ProfileSettings", ProfileSettingsSchema, "ProfileSettings");

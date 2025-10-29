@@ -70,17 +70,25 @@ const userProcessFeedFile = async (req, res, next) => {
   }
 };
 
-// ✅ Upload to Cloudinary (keep hash + duration)
+// ✅ Upload to Cloudinary (extended safely for cover photo)
 const userUploadToCloudinary = async (req, res, next) => {
   if (!req.file) return next();
 
   try {
+    // ✅ Restrict cover uploads to images only
+    if (req.uploadType === "cover" && !req.file.mimetype.startsWith("image/")) {
+      return res.status(400).json({
+        message: "Only image files are allowed for cover photo",
+      });
+    }
+
     const bufferStream = new Readable();
     bufferStream.push(req.file.buffer);
     bufferStream.push(null);
 
-    // Decide folder
+    // ✅ Folder logic (existing + cover support)
     let folder = "others";
+
     if (req.baseUrl.includes("feed")) {
       folder = req.file.mimetype.startsWith("image/")
         ? "feeds/images"
@@ -89,7 +97,24 @@ const userUploadToCloudinary = async (req, res, next) => {
       folder = "profile/images";
     }
 
+    // ✅ If route specifically set uploadType = 'cover'
+    if (req.uploadType === "cover") {
+      folder = "profile/cover";
+    }
+
     const isVideo = req.file.mimetype.startsWith("video/");
+    let transformation = [];
+
+    // ✅ Apply resizing only for images
+    if (!isVideo) {
+      if (req.uploadType === "cover") {
+        transformation = [
+          { width: 1500, height: 500, crop: "fill", gravity: "center" },
+        ];
+      } else {
+        transformation = [{ width: 500, height: 500, crop: "limit" }];
+      }
+    }
 
     const result = await new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
@@ -98,7 +123,7 @@ const userUploadToCloudinary = async (req, res, next) => {
           resource_type: isVideo ? "video" : "image",
           quality: "auto:good",
           fetch_format: "auto",
-          transformation: isVideo ? [] : [{ width: 500, height: 500, crop: "limit" }],
+          transformation,
           eager: isVideo ? [{ format: "mp4", quality: "auto" }] : [],
           eager_async: isVideo,
         },
@@ -130,7 +155,9 @@ const userUploadToCloudinary = async (req, res, next) => {
 // ✅ Delete from Cloudinary
 const userDeleteFromCloudinary = async (public_id) => {
   try {
-    return await cloudinary.uploader.destroy(public_id, { resource_type: "image" });
+    return await cloudinary.uploader.destroy(public_id, {
+      resource_type: "image",
+    });
   } catch (err) {
     throw new Error("Cloudinary delete failed: " + err.message);
   }
