@@ -13,6 +13,9 @@ const UserCategory=require('../../models/userModels/userCategotyModel.js');
 const Category=require('../../models/categorySchema.js');
 const HiddenPost=require("../../models/userModels/hiddenPostSchema.js");
 const Feed =require("../../models/feedModel.js");
+const Notification = require("../../models/notificationModel.js");
+const { createAndSendNotification } = require("../../middlewares/helper/socketNotification.js");
+
 
 
 exports.likeFeed = async (req, res) => {
@@ -24,41 +27,63 @@ exports.likeFeed = async (req, res) => {
   }
 
   try {
-    // Check if feed is already liked by this user
     const existingAction = await UserFeedActions.findOne({
       userId,
-      "likedFeeds.feedId": feedId
+      "likedFeeds.feedId": feedId,
     });
 
-    let updatedDoc, message;
+    let updatedDoc, message, isLike;
 
     if (existingAction) {
-      // Unlike: remove the feed from likedFeeds
       updatedDoc = await UserFeedActions.findOneAndUpdate(
         { userId },
         { $pull: { likedFeeds: { feedId } } },
         { new: true }
       );
       message = "Unliked successfully";
+      isLike = false;
     } else {
-      // Like: add the feed with current timestamp
       updatedDoc = await UserFeedActions.findOneAndUpdate(
         { userId },
         { $push: { likedFeeds: { feedId, likedAt: new Date() } } },
         { upsert: true, new: true }
       );
       message = "Liked successfully";
+      isLike = true;
     }
+
+   // 🔹 Create notification only if liked
+if (isLike) {
+  const feed = await Feeds.findById(feedId)
+    .select("createdByAccount contentUrl roleRef")
+    .lean();
+
+  if (feed && feed.createdByAccount.toString() !== userId.toString()) {
+    await createAndSendNotification({
+      senderId: userId,
+      receiverId: feed.createdByAccount,
+      type: "LIKE_POST",
+      title: "New Like ❤️",
+      message: "Someone liked your post.",
+      entityId: feed._id,
+      entityType: "Feed",
+      image: feed.contentUrl || "",
+      roleRef: feed.roleRef || "User", // optional, for context
+    });
+  }
+}
+
 
     res.status(200).json({
       message,
-      likedFeeds: updatedDoc.likedFeeds
+      likedFeeds: updatedDoc.likedFeeds,
     });
   } catch (err) {
     console.error("Error in likeFeed:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 
 
@@ -288,40 +313,52 @@ exports.postComment = async (req, res) => {
     const userId = req.Id || req.body.userId;
     const { feedId, commentText, parentCommentId } = req.body;
 
-    // 🔹 Validate input
-    if (!userId) return res.status(400).json({ message: "userId is required" });
-    if (!feedId) return res.status(400).json({ message: "feedId is required" });
-    if (!commentText?.trim()) {
-      return res.status(400).json({ message: "commentText is required" });
+    if (!userId || !feedId || !commentText?.trim()) {
+      return res.status(400).json({ message: "Invalid input" });
     }
 
-    // 🔹 Optional: validate parent comment only if reply
     if (parentCommentId && !(await UserComment.exists({ _id: parentCommentId }))) {
       return res.status(400).json({ message: "Parent comment not found" });
     }
 
-    // 🔹 Create new comment
     const newComment = await UserComment.create({
       userId,
       feedId,
       commentText: commentText.trim(),
       parentCommentId: parentCommentId || null,
-      createdAt: new Date(), // keep raw date in DB
+      createdAt: new Date(),
     });
 
-    // 🔹 Fetch user profile (username & avatar)
     const userProfile = await ProfileSettings.findOne({ userId })
       .select("userName profileAvatar")
       .lean();
+// 🔹 Notify feed owner
+const feed = await Feeds.findById(feedId)
+  .select("createdByAccount contentUrl roleRef")
+  .lean();
 
-    // 🔹 Format response
+if (feed && feed.createdByAccount.toString() !== userId.toString()) {
+  await createAndSendNotification({
+    senderId: userId,
+    receiverId: feed.createdByAccount,
+    type: "COMMENT",
+    title: "New Comment 💬",
+    message: `${commentText.slice(0, 50)}...`,
+    entityId: feed._id,
+    entityType: "Feed",
+    image: feed.contentUrl || "",
+    roleRef: feed.roleRef || "User", // optional
+  });
+}
+
+
     res.status(201).json({
-      message: parentCommentId ? "Reply posted successfully" : "Comment posted successfully",
+      message: "Comment posted successfully",
       comment: {
         ...newComment.toObject(),
-        timeAgo: feedTimeCalculator(newComment.createdAt), // format for frontend
+        timeAgo: feedTimeCalculator(newComment.createdAt),
         username: userProfile?.userName || "Unknown User",
-        avatar: userProfile?.profileAvatar ?userProfile.profileAvatar : null,
+        avatar: userProfile?.profileAvatar || null,
       },
     });
   } catch (err) {
@@ -332,6 +369,72 @@ exports.postComment = async (req, res) => {
 
 
 
+exports.commentLike = async (req, res) => {
+  const userId = req.Id || req.body.userId;
+  const { commentId } = req.body;
+
+  if (!userId) return res.status(400).json({ message: "userId is required" });
+  if (!commentId) return res.status(400).json({ message: "commentId is required" });
+
+  try {
+    // Check if user already liked the comment
+    const existingLike = await CommentLike.findOne({ userId, commentId });
+
+    if (existingLike) {
+      // Unlike: remove the like
+      await CommentLike.deleteOne({ _id: existingLike._id });
+      const likeCount = await CommentLike.countDocuments({ commentId });
+      return res.status(200).json({
+        message: "Comment unliked",
+        liked: false,
+        likeCount,
+      });
+    }
+
+    // Like: create new
+    await CommentLike.create({ userId, commentId, likedAt: new Date() });
+
+    const likeCount = await CommentLike.countDocuments({ commentId });
+
+    // 🔹 Find comment to get feedId and text
+    const comment = await UserComment.findById(commentId)
+      .select("feedId commentText userId")
+      .lean();
+
+    if (comment) {
+      const feed = await Feeds.findById(comment.feedId).select("userId contentUrl").lean();
+
+      // 🔹 Get liker info (for better message)
+      const likerProfile = await ProfileSettings.findOne({ userId })
+        .select("userName profileAvatar")
+        .lean();
+
+      // 🔹 Notify comment owner (not self)
+      if (comment.userId.toString() !== userId.toString()) {
+        await createAndSendNotification({
+          senderId: userId,
+          receiverId: comment.userId,
+          type: "COMMENT_LIKE",
+          title: `${likerProfile?.userName || "Someone"} liked your comment 💬`,
+          message: `"${comment.commentText?.slice(0, 80) || "Your comment"}"`,
+          entityId: comment.feedId,
+          entityType: "Comment",
+          image: likerProfile?.profileAvatar || feed?.contentUrl || "",
+        });
+      }
+    }
+
+    res.status(201).json({
+      message: "Comment liked",
+      liked: true,
+      likeCount,
+    });
+  } catch (err) {
+    console.error("❌ Error toggling comment like:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 
 
 
@@ -339,46 +442,54 @@ exports.postComment = async (req, res) => {
 exports.postReplyComment = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
-    const {commentText, parentCommentId } = req.body;
+    const { commentText, parentCommentId } = req.body;
 
-    // 🔹 Validate input
-    if (!userId) return res.status(400).json({ message: "userId is required" });
-    if (!commentText?.trim()) {
-      return res.status(400).json({ message: "commentText is required" });
+    if (!userId || !commentText?.trim()) {
+      return res.status(400).json({ message: "Invalid input" });
     }
 
-    // 🔹 Optional: validate parent comment only if reply
     if (parentCommentId && !(await UserComment.exists({ _id: parentCommentId }))) {
       return res.status(400).json({ message: "Parent comment not found" });
     }
 
-    // 🔹 Create new comment
-    const newComment = await UserReplyComment.create({
+    const newReply = await UserReplyComment.create({
       userId,
       replyText: commentText.trim(),
       parentCommentId: parentCommentId || null,
-      createdAt: new Date(), // keep raw date in DB
+      createdAt: new Date(),
     });
 
-    // 🔹 Fetch user profile (username & avatar)
     const userProfile = await ProfileSettings.findOne({ userId })
       .select("userName profileAvatar")
       .lean();
 
-    
+    // 🔹 Notify parent comment owner
+    const parentComment = await UserComment.findById(parentCommentId).select("userId feedId").lean();
+    if (parentComment && parentComment.userId.toString() !== userId.toString()) {
+      const feed = await Feeds.findById(parentComment.feedId).select("contentUrl").lean();
+      await createAndSendNotification({
+        senderId: userId,
+        receiverId: parentComment.userId,
+        type: "COMMENT",
+        title: "New Reply 💬",
+        message: commentText.slice(0, 50) + "...",
+        entityId: parentComment.feedId,
+        entityType: "Comment",
+        image: feed?.contentUrl || "",
+      });
+    }
 
-    // 🔹 Format response
     res.status(201).json({
-      message: parentCommentId ? "Reply posted successfully" : "Comment posted successfully",
+      message: "Reply posted successfully",
       comment: {
-        ...newComment.toObject(),
-        timeAgo: feedTimeCalculator(newComment.createdAt), // format for frontend
+        ...newReply.toObject(),
+        timeAgo: feedTimeCalculator(newReply.createdAt),
         username: userProfile?.userName || "Unknown User",
-        avatar: userProfile?.profileAvatar ? userProfile.profileAvatar : null,
+        avatar: userProfile?.profileAvatar || null,
       },
     });
   } catch (err) {
-    console.error("Error posting comment:", err);
+    console.error("Error posting reply:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -410,6 +521,8 @@ exports.postView = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+
 
 exports.getUserSavedFeeds = async (req, res) => {
   try {
@@ -606,43 +719,6 @@ exports.getUserLikedFeeds = async (req, res) => {
 
 
 
-exports.commentLike = async (req, res) => {
-  const userId = req.Id || req.body.userId;
-  const { commentId } = req.body;
-
-  if (!userId) return res.status(400).json({ message: "userId is required" });
-  if (!commentId) return res.status(400).json({ message: "commentId is required" });
-
-  try {
-    // Check if user already liked the comment
-    const existingLike = await CommentLike.findOne({ userId, commentId });
-
-    if (existingLike) {
-      // Unlike: remove the like
-      await CommentLike.deleteOne({ _id: existingLike._id });
-      const likeCount = await CommentLike.countDocuments({ commentId });
-      return res.status(200).json({
-        message: "Comment unliked",
-        liked: false,
-        likeCount,
-      });
-    }
-
-    // Like: create new with timestamp
-    await CommentLike.create({ userId, commentId, likedAt: new Date() });
-
-    const likeCount = await CommentLike.countDocuments({ commentId });
-
-    res.status(201).json({
-      message: "Comment liked",
-      liked: true,
-      likeCount,
-    });
-  } catch (err) {
-    console.error("Error toggling comment like:", err);
-    res.status(500).json({ message: "Internal server error" });
-  }
-};
 
 
 

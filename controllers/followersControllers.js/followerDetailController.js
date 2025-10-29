@@ -1,8 +1,12 @@
 const Follower = require("../../models/userFollowingModel");
 const mongoose = require("mongoose");
-const CreatorFollower=require('../../models/creatorFollowerModel');
-const Feed =require("../../models/feedModel");
-
+const CreatorFollower = require("../../models/creatorFollowerModel");
+const Feed = require("../../models/feedModel");
+const ProfileSettings = require("../../models/profileSettingModel");
+const User = require("../../models/userModels/userModel");
+const {
+  createAndSendNotification,
+} = require("../../middlewares/helper/socketNotification");
  
  
  
@@ -13,11 +17,15 @@ exports.followAccount = async (req, res) => {
     const userId = req.body.userId;
 
     if (!currentUserId || !userId) {
-      return res.status(400).json({ message: "Follower and Target account IDs are required" });
+      return res
+        .status(400)
+        .json({ message: "Follower and Target account IDs are required" });
     }
 
     if (currentUserId.toString() === userId.toString()) {
-      return res.status(400).json({ message: "You cannot follow your own account" });
+      return res
+        .status(400)
+        .json({ message: "You cannot follow your own account" });
     }
 
     // 🔹 1️⃣ Update or create entry in UserFollowing schema
@@ -29,10 +37,13 @@ exports.followAccount = async (req, res) => {
       );
 
       if (alreadyFollowing) {
-        return res.status(400).json({ message: "You are already following this user" });
+        return res
+          .status(400)
+          .json({ message: "You are already following this user" });
       }
 
       followingDoc.followingIds.push({ userId, createdAt: new Date() });
+
       // Remove from nonFollowingIds if exists
       followingDoc.nonFollowingIds = followingDoc.nonFollowingIds.filter(
         (nf) => nf.userId.toString() !== userId.toString()
@@ -48,22 +59,43 @@ exports.followAccount = async (req, res) => {
     // 🔹 2️⃣ Update or create entry in CreatorFollower schema
     await CreatorFollower.findOneAndUpdate(
       { creatorId: userId },
-      { $addToSet: { followerIds: currentUserId } }, // avoid duplicates
+      { $addToSet: { followerIds: currentUserId } },
       { upsert: true, new: true }
     );
+
+    // 🔹 3️⃣ Fetch follower profile info
+    const followerProfile = await ProfileSettings.findOne({
+      userId: currentUserId,
+    })
+      .select("userName profileAvatar")
+      .lean();
+
+    // 🔹 4️⃣ Send notification to the followed user
+    await createAndSendNotification({
+      senderId: currentUserId,
+      receiverId: userId,
+      type: "FOLLOW",
+      title: `${followerProfile?.userName || "Someone"} started following you 👥`,
+      message: `${followerProfile?.userName || "A user"} is now following your account.`,
+      entityId: userId,
+      entityType: "Follow",
+      image: followerProfile?.profileAvatar || "",
+    });
 
     res.status(200).json({
       message: "Followed successfully",
       followingDoc,
     });
   } catch (err) {
-    console.error("Follow error:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    console.error("❌ Follow error:", err);
+    res
+      .status(500)
+      .json({ message: "Server error", error: err.message });
   }
 };
- 
- 
-// Unfollow an account
+
+
+
 
 exports.unFollowAccount = async (req, res) => {
   try {
@@ -71,14 +103,18 @@ exports.unFollowAccount = async (req, res) => {
     const userId = req.body.userId;
 
     if (!currentUserId || !userId) {
-      return res.status(400).json({ message: "Follower and Target account IDs are required" });
+      return res
+        .status(400)
+        .json({ message: "Follower and Target account IDs are required" });
     }
 
     // 🔹 1️⃣ Find current user's following document
     const followingDoc = await Follower.findOne({ userId: currentUserId });
 
     if (!followingDoc) {
-      return res.status(400).json({ message: "You are not following this user" });
+      return res
+        .status(400)
+        .json({ message: "You are not following this user" });
     }
 
     // 🔹 2️⃣ Check if actually following
@@ -87,7 +123,9 @@ exports.unFollowAccount = async (req, res) => {
     );
 
     if (!isFollowing) {
-      return res.status(400).json({ message: "You are not following this user" });
+      return res
+        .status(400)
+        .json({ message: "You are not following this user" });
     }
 
     // 🔹 3️⃣ Remove from followingIds and add to nonFollowingIds
@@ -96,7 +134,6 @@ exports.unFollowAccount = async (req, res) => {
     );
 
     followingDoc.nonFollowingIds.push({ userId, createdAt: new Date() });
-
     await followingDoc.save();
 
     // 🔹 4️⃣ Remove from CreatorFollower’s followerIds
@@ -105,13 +142,33 @@ exports.unFollowAccount = async (req, res) => {
       { $pull: { followerIds: currentUserId } }
     );
 
+    // 🔹 5️⃣ Send Unfollow Notification (optional)
+    const followerProfile = await ProfileSettings.findOne({
+      userId: currentUserId,
+    })
+      .select("userName profileAvatar")
+      .lean();
+
+    await createAndSendNotification({
+      senderId: currentUserId,
+      receiverId: userId,
+      type: "UNFOLLOW",
+      title: `${followerProfile?.userName || "Someone"} unfollowed you 🙁`,
+      message: `${followerProfile?.userName || "A user"} has unfollowed your account.`,
+      entityId: userId,
+      entityType: "Unfollow",
+      image: followerProfile?.profileAvatar || "",
+    });
+
     res.status(200).json({
       message: "Unfollowed successfully",
       followingDoc,
     });
   } catch (err) {
-    console.error("Unfollow error:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    console.error("❌ Unfollow error:", err);
+    res
+      .status(500)
+      .json({ message: "Server error", error: err.message });
   }
 };
  

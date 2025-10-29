@@ -216,7 +216,14 @@ adminTakeActionOnReport,
 }=require('../controllers/adminControllers/userReportController');
 
 const{
-  notificationRegister,
+ sendAdminNotification,
+  notifyUserFollow,
+  getNotifications,
+  markNotificationAsRead,
+  saveToken,
+  markAllRead,
+  clearAllNotifications,
+  deleteNotification,
 }=require('../controllers/adminControllers/notificationController');
 
 const{
@@ -352,12 +359,19 @@ router.get('/get/all/feed/for/Creator',auth,getFeedsByAccountId);
 router.get('/user/get/all/category', getUserPostCategories);
 
 /* --------------------- User Follower API --------------------- */
- router.post('/user/follow/creator',auth, followAccount);
+ router.post('/user/follow/creator',auth,followAccount);
  router.post('/user/unfollow/creator',auth,unFollowAccount);
  router.get('/user/following/data',auth,getUserFollowersData);
 
  /* --------------------- User Notifiction API --------------------- */
-  router.post("/user/notification/register",notificationRegister);
+ router.post("/admin/send/notification", sendAdminNotification )
+// router.post("/user/follow", auth, notifyUserFollow);
+router.put("/mark/all/notification/read",auth,markAllRead);
+router.get("/user/all/notification",auth, getNotifications);
+router.delete("/user/delete/notification",auth,deleteNotification);
+router.delete("/user/delete/all/notification",auth,clearAllNotifications);
+router.put("/user/read", auth, markNotificationAsRead);
+router.post("/notifications/save-token",auth,saveToken);
 
 /* --------------------- User Profile API --------------------- */
 router.post("/user/profile/detail/update",auth,userUpload.single("file"),(req, res, next) => { req.baseUrl = "/profile"; next(); },

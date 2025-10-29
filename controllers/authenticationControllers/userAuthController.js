@@ -421,15 +421,16 @@ exports.userPasswordReset = async (req, res) => {
 
 exports.userLogOut = async (req, res) => {
   try {
-    const { userId, deviceId, sessionId } = req.body;
+    const userId = req.Id || req.userId; // 🔹 Extract userId from token
+    const { deviceId, sessionId } = req.body;
 
     if (!userId) {
-      return res.status(400).json({ error: "userId required" });
+      return res.status(401).json({ error: "Unauthorized: Invalid or missing token" });
     }
 
     let userStatusChanged = false;
 
-    // If sessionId provided → handle session-based logout
+    // 🔹 Handle session-based logout
     if (sessionId) {
       const session = await Session.findById(sessionId);
       if (!session) return res.status(404).json({ error: "Session not found" });
@@ -438,7 +439,7 @@ exports.userLogOut = async (req, res) => {
       session.lastSeenAt = new Date();
       await session.save();
 
-      // Check other active sessions
+      // Check if user has any other active sessions
       const activeSessions = await Session.find({
         userId: session.userId,
         isOnline: true,
@@ -453,7 +454,7 @@ exports.userLogOut = async (req, res) => {
       }
     }
 
-    // If deviceId provided → handle device-based logout
+    // 🔹 Handle device-based logout
     if (deviceId) {
       await Device.findOneAndUpdate(
         { userId, deviceId },
@@ -461,17 +462,17 @@ exports.userLogOut = async (req, res) => {
         { new: true }
       );
 
-      // Check other active devices
+      // Check for any recently active devices (within 5 mins)
       const activeDevices = await Device.find({ userId });
       const hasActiveDevice = activeDevices.some(
-        (d) => Date.now() - new Date(d.lastActiveAt).getTime() < 5 * 60 * 1000 // 5 mins
+        (d) => Date.now() - new Date(d.lastActiveAt).getTime() < 5 * 60 * 1000
       );
 
       if (!hasActiveDevice) {
         await User.findByIdAndUpdate(userId, {
           isOnline: false,
           lastSeenAt: new Date(),
-          refreshToken: null, // only clear if no devices left
+          refreshToken: null,
         });
         userStatusChanged = true;
       } else {
@@ -479,11 +480,13 @@ exports.userLogOut = async (req, res) => {
       }
     }
 
+    // 🔹 If neither provided
     if (!sessionId && !deviceId) {
       return res.status(400).json({ error: "Either sessionId or deviceId required" });
     }
 
     res.json({
+      success: true,
       message: "Logged out successfully",
       userStatusChanged,
     });
@@ -492,6 +495,7 @@ exports.userLogOut = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 
 
