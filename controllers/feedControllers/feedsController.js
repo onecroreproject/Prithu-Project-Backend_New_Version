@@ -275,7 +275,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
       feeds.map(async (feed) => {
         const profileSetting = await ProfileSettings.findOne({ userId });
         const avatarToUse = profileSetting?.modifyAvatarPublicId;
-        const framedAvatar = await applyFrame(avatarToUse);
+        // const framedAvatar = await applyFrame(avatarToUse);
 
         let themeColor = {
           primary: "#ffffff",
@@ -293,7 +293,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
 
         return {
           ...feed,
-          framedAvatar: framedAvatar || avatarToUse,
+          framedAvatar: avatarToUse,
           themeColor,
           timeAgo: feedTimeCalculator(feed.createdAt),
         };

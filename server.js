@@ -21,18 +21,15 @@ const server = http.createServer(app);
 const io = initSocket(server);
 
 // CORS
-const allowedOrigins = process.env.CLIENT_URL?.split(",") || ["http://localhost:5173"];
-app.use(cors({
-  origin: function(origin, callback) {
-    console.log(" Incoming Origin:", origin);
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) return callback(new Error("CORS not allowed"), false);
-    return callback(null, true);
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-}));
+app.use(
+  cors({
+    origin: true, // Reflects the request origin
+    credentials: true, // Allow cookies, authorization headers, etc.
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
 
 // Middleware
 app.use(express.json());

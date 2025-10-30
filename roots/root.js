@@ -258,6 +258,10 @@ const {upload} =require("../middlewares/helper/frameUpload");
 
 const {getUserEarnings}=require("../controllers/userControllers/userEarningsController");
 
+const {saveUserLocation,
+  getUserLocation,
+}=require("../controllers/userControllers/userLoactionController");
+
 
 
 
@@ -389,6 +393,10 @@ router.get('/get/profile/detail',auth,getUserProfileDetail);
 /* --------------------- User Earnings API --------------------- */
 
 router.get('/get/userearnigs/referrals',getUserEarnings);
+
+/*-----------------------User Location API ---------------------*/
+router.post("/save/user/location",auth,saveUserLocation);
+router.get("/get/user/location",auth,getUserLocation);
 
 
 

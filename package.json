@@ -36,6 +36,7 @@
     "multer": "^2.0.2",
     "multer-storage-cloudinary": "^4.0.0",
     "node-cron": "^4.2.1",
+    "node-fetch": "^3.3.2",
     "node-vibrant": "^4.0.3",
     "nodemailer": "^7.0.5",
     "nodemon": "^3.1.10",
