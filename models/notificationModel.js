@@ -106,4 +106,4 @@ notificationSchema.virtual("feedInfo", {
   select: "content contentUrl",
 });
 
-module.exports = mongoose.model("Notification", notificationSchema, "Notifications");
+module.exports = mongoose.model("Notification", notificationSchema, "UserNotifications");

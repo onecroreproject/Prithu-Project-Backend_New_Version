@@ -87,6 +87,7 @@ const {
   getProfileOverview,
   getVisibilitySettingsWeb,
   updateFieldVisibilityWeb,
+  getProfileCompletion,
   } = require('../controllers/profileControllers/profileController');
 
 const {
@@ -263,6 +264,17 @@ const {saveUserLocation,
 }=require("../controllers/userControllers/userLoactionController");
 
 
+/*-----------------Web Controller ------------------*/
+const {
+  getUserFeedsWeb,
+}=require("../WebController/UserController/userFeedControllerWeb");
+
+const{
+  getUserFollowing,
+  getUserFollowers,
+}=require("../WebController/UserController/userFolloweController");
+
+
 
 
 // /* --------------------- User Authentication --------------------- */
@@ -371,7 +383,7 @@ router.get('/user/get/all/category', getUserPostCategories);
  router.post("/admin/send/notification", sendAdminNotification )
 // router.post("/user/follow", auth, notifyUserFollow);
 router.put("/mark/all/notification/read",auth,markAllRead);
-router.get("/user/all/notification",auth, getNotifications);
+router.get("/get/user/all/notification",auth,getNotifications);
 router.delete("/user/delete/notification",auth,deleteNotification);
 router.delete("/user/delete/all/notification",auth,clearAllNotifications);
 router.put("/user/read", auth, markNotificationAsRead);
@@ -553,6 +565,14 @@ router.get(
 router.get("/get/profile/overview",auth,getProfileOverview);
 router.post("/user/update/visibility/settings",auth,updateFieldVisibilityWeb);
 router.get("/user/update/visibility/settings",auth,getVisibilitySettingsWeb);
+
+
+
+router.get("/get/user/post",auth,getUserFeedsWeb);
+router.get("/user/following", auth, getUserFollowing);
+router.get("/user/followers", auth, getUserFollowers);
+router.get("/user/profile/completion",auth,getProfileCompletion);
+
 
 
 

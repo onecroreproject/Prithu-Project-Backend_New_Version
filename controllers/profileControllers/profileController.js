@@ -13,6 +13,8 @@ const DEFAULT_COVER_PHOTO = "https://res.cloudinary.com/demo/image/upload/v17301
 const Following =require("../../models/userFollowingModel");
 const CreatorFollower =require("../../models/creatorFollowerModel");
 const Visibility = require("../../models/profileVisibilitySchema");
+const Feed =require("../../models/feedModel");
+const {calculateProfileCompletion} =require("../../middlewares/helper/profileCompletionCalulator");
 
 
 
@@ -983,22 +985,21 @@ exports.getProfileCompletion = async (req, res) => {
       return res.status(400).json({ message: "User ID is required" });
     }
 
-    // 🔹 Fetch the user's profile
-    const profile = await ProfileSettings.findOne({ userId }).lean();
+    const profile = await Profile.findOne({ userId }).lean();
 
     if (!profile) {
       return res.status(404).json({ message: "Profile not found" });
     }
 
-    // 🔹 Calculate completion percentage using helper
-    const completionPercentage = calculateProfileCompletion(profile);
+    // ✅ Get both completion percentage and missing fields
+    const { completion, missingFields } = calculateProfileCompletion(profile);
 
-    // 🔹 Send back detailed response
     return res.status(200).json({
       success: true,
       userId,
-      completionPercentage,
-      message: `Profile completion is ${completionPercentage}%`,
+      completionPercentage: completion,
+      missingFields,
+      message: `Profile completion is ${completion}%`,
     });
   } catch (error) {
     console.error("Error fetching profile completion:", error);
@@ -1008,7 +1009,7 @@ exports.getProfileCompletion = async (req, res) => {
       error: error.message,
     });
   }
-}
+};
 
 
 
@@ -1024,22 +1025,9 @@ exports.getProfileOverview = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized: user ID not found" });
     }
 
-    // 2️⃣ Fetch profile details
-    const profile = await Profile.findOne(
-      { userId: new mongoose.Types.ObjectId(userId) },
-      {
-        _id: 0,
-        displayName: 1,
-        userName: 1,
-        profileAvatar: 1,
-        coverPhoto: 1,
-        modifyAvatar: 1,
-        modifiedCoverPhoto: 1,
-        privacy: 1,
-      }
-    ).lean();
-
-    if (!profile) {
+    // 2️⃣ Check if profile exists (optional validation)
+    const profileExists = await Profile.exists({ userId: new mongoose.Types.ObjectId(userId) });
+    if (!profileExists) {
       return res.status(404).json({ message: "Profile not found" });
     }
 
@@ -1048,7 +1036,6 @@ exports.getProfileOverview = async (req, res) => {
       { creatorId: userId },
       { followerIds: 1 }
     ).lean();
-
     const followerCount = creatorData?.followerIds?.length || 0;
 
     // 4️⃣ Get following count (people this user follows)
@@ -1056,26 +1043,27 @@ exports.getProfileOverview = async (req, res) => {
       { userId: userId },
       { followingIds: 1 }
     ).lean();
-
     const followingCount = followingData?.followingIds?.length || 0;
 
-    // 5️⃣ Combine and send
+    // 5️⃣ Get total posts count (from Feed schema)
+    const postCount = await Feed.countDocuments({
+      createdByAccount: new mongoose.Types.ObjectId(userId),
+      roleRef: "User",
+      status: "Published",
+    });
+
+    // 6️⃣ Send clean overview
     return res.status(200).json({
       message: "Profile overview fetched successfully",
       data: {
         userId,
-        displayName: profile.displayName,
-        userName: profile.userName,
-        profileAvatar: profile.profileAvatar,
-        modifyAvatar: profile.modifyAvatar,
-        coverPhoto: profile.coverPhoto,
-        modifiedCoverPhoto: profile.modifiedCoverPhoto,
         followerCount,
         followingCount,
+        postCount,
       },
     });
   } catch (error) {
-    console.error("Error fetching profile overview:", error);
+    console.error("❌ Error fetching profile overview:", error);
     return res.status(500).json({
       message: "Internal server error",
       error: error.message,

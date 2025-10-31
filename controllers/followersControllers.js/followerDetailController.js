@@ -81,7 +81,8 @@ exports.followAccount = async (req, res) => {
       entityType: "Follow",
       image: followerProfile?.profileAvatar || "",
     });
-
+console.log({senderId: currentUserId,
+      receiverId: userId,})
     res.status(200).json({
       message: "Followed successfully",
       followingDoc,

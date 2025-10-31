@@ -43,7 +43,7 @@ exports.sendAdminNotification = async (req, res) => {
   }
 };
 
-// 🔹 2️⃣ USER → USER / ADMIN
+//USER → USER / ADMIN
 exports.sendUserNotification = async (req, res) => {
   try {
     const { receiverId, type, title, message, image, entityId, entityType } = req.body;
@@ -84,6 +84,7 @@ exports.getNotifications = async (req, res) => {
   try {
     const receiverId = req.Id;
     const receiverRole = req.role; 
+    console.log(receiverId)
 
     if (!receiverId || !receiverRole) {
       return res.status(400).json({ error: "Invalid token or missing role." });
@@ -99,7 +100,7 @@ exports.getNotifications = async (req, res) => {
         path: "senderUserProfile senderAdminProfile senderChildAdminProfile feedInfo",
       });
 
-    // 🧠 Format and unify sender info
+    // Format and unify sender info
     const formatted = notifications.map((n) => {
       const senderProfile =
         n.senderUserProfile ||
