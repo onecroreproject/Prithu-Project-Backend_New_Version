@@ -7,22 +7,32 @@ const JobPostSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    role:{type:String,required:true,trim:true},
-    title: { type: String, required: true, trim: true },
-    description: { type: String, required: true },
-    companyName: { type: String, required: true },
-    location: { type: String, required: true },
-    category: { type: String, required: true }, // e.g., IT, Construction, Design, etc.
-    jobType: { type: String, enum: ["Full-time", "Part-time", "Contract"], default: "Full-time" },
-    salaryRange: { type: String }, // e.g. "30K–50K/month"
 
-    image: { type: String }, // Cloudinary or local URL
+    role: { type: String, trim: true }, // main role field
+    jobRole: { type: String, trim: true }, // added to support separate job role
+    experience:{type:Number,default:0},
+    title: { type: String, trim: true },
+    description: { type: String },
+    companyName: { type: String },
+    location: { type: String},
+    category: { type: String},
+    keyword: { type: String, trim: true }, // additional SEO keyword field
 
-    startDate: { type: Date, required: true },
-    endDate: { type: Date, required: true },
+    jobType: {
+      type: String,
+      enum: ["Full-time", "Part-time", "Contract"],
+      default: "Full-time",
+    },
+
+    salaryRange: { type: String },
+
+    image: { type: String }, // Cloudinary URL
+
+    startDate: { type: Date},
+    endDate: { type: Date },
 
     isPaid: { type: Boolean, default: false },
-    priorityScore: { type: Number, default: 0 }, // Used for sorting feeds (higher = more visibility)
+    priorityScore: { type: Number, default: 0 },
 
     // --- Engagement tracking ---
     stats: {
@@ -31,13 +41,13 @@ const JobPostSchema = new mongoose.Schema(
       shares: { type: Number, default: 0 },
       downloads: { type: Number, default: 0 },
       appliedCount: { type: Number, default: 0 },
-        engagementScore: { type: Number, default: 0 },
+      engagementScore: { type: Number, default: 0 },
     },
 
     // --- Status tracking ---
     status: {
       type: String,
-      enum: ["active", "inactive", "expired", "blocked"],
+      enum: ["active", "inactive", "expired", "blocked", "draft"],
       default: "active",
     },
 
@@ -46,20 +56,26 @@ const JobPostSchema = new mongoose.Schema(
     reasonForBlock: { type: String },
 
     // --- Localization / Language ---
-    language: { type: String, default: "en" }, // For multi-language feeds
+    language: { type: String, default: "en" },
 
-    // --- SEO / Search fields ---
-    tags: [String], // For keyword search
+    // --- SEO / Tags ---
+    tags: [
+      {
+        type: String,
+        trim: true,
+        set: (v) => (v ? v.charAt(0).toUpperCase() + v.slice(1).toLowerCase() : v),
+      },
+    ],
   },
   { timestamps: true }
 );
 
 // Expire job automatically after endDate
 JobPostSchema.pre("save", function (next) {
-  if (this.endDate < new Date()) {
+  if (this.endDate && this.endDate < new Date()) {
     this.status = "expired";
   }
   next();
 });
 
-module.exports = mongoose.model("JobPost", JobPostSchema,"JobPost");
+module.exports = mongoose.model("JobPost", JobPostSchema, "JobPost");

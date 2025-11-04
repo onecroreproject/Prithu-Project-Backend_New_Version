@@ -9,7 +9,6 @@ const Session = require("../../models/userModels/userSession-Device/sessionModel
 const UserReferral=require('../../models/userModels/userReferralModel');
 const ProfileSettings=require("../../models/profileSettingModel");
 const { v4: uuidv4 } = require("uuid");
-const {sendMailSafeSafe} = require('../../utils/sendMail');
 const fs = require("fs");
 const path = require("path");
 const { sendTemplateEmail } = require("../../utils/templateMailer"); 

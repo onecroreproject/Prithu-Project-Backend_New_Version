@@ -37,7 +37,8 @@ const UserSubscriptions=require("../../models/subcriptionModels/userSubscreption
 const CommentLikes=require("../../models/commentsLikeModel.js");
 const CreatorFollowers=require('../../models/creatorFollowerModel.js');
 const Devices=require("../../models/userModels/userSession-Device/deviceModel.js");
-const UserReferral =require("../../models/userModels/userReferralModel")
+const UserReferral =require("../../models/userModels/userReferralModel");
+const JobPost=require("../../models/JobPost/jobSchema.js");
 
 
 
@@ -426,7 +427,7 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // ✅ Profile settings (includes social links)
+    // ✅ Profile info
     const profile = await ProfileSettings.findOne({ userId })
       .select(
         "gender bio dateOfBirth maritalStatus maritalDate phoneNumber profileAvatar timezone socialLinks"
@@ -449,7 +450,7 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    // ✅ Referral details (get all child users)
+    // ✅ Referral details
     const referralData = await UserReferral.findOne({ parentId: userId })
       .populate({
         path: "childIds",
@@ -458,26 +459,23 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
       .lean();
 
     let childDetails = [];
-    if (referralData && referralData.childIds.length > 0) {
+    if (referralData?.childIds?.length) {
       const childIds = referralData.childIds.map((child) => child._id);
-
-      // ✅ Fetch profile avatars for all referred users
       const profiles = await ProfileSettings.find({
         userId: { $in: childIds },
       })
-        .select("userId profileAvatar userName")
+        .select("userId profileAvatar")
         .lean();
 
-      // ✅ Merge child user info + profile avatar + join date
       childDetails = referralData.childIds.map((child) => {
-        const profile = profiles.find(
+        const childProfile = profiles.find(
           (p) => p.userId.toString() === child._id.toString()
         );
         return {
           _id: child._id,
           userName: child.userName,
           email: child.email,
-          profileAvatar: profile?.profileAvatar || null,
+          profileAvatar: childProfile?.profileAvatar || null,
           joinDate: child.createdAt,
         };
       });
@@ -490,13 +488,11 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
       const today = new Date();
       let age = today.getFullYear() - birthDate.getFullYear();
       const m = today.getMonth() - birthDate.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-      }
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
       return age;
     };
 
-    // ✅ Extract social media links
+    // ✅ Extract social links
     const socialLinks = {
       facebook: profile?.socialLinks?.facebook || null,
       instagram: profile?.socialLinks?.instagram || null,
@@ -505,7 +501,15 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
       youtube: profile?.socialLinks?.youtube || null,
     };
 
-    // ✅ Merge all details
+    // ✅ Fetch all job posts by this user
+    const jobPosts = await JobPost.find({ postedBy: userId })
+      .select(
+        "_id title companyName category jobRole experience jobType salaryRange status createdAt updatedAt"
+      )
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // ✅ Merge everything
     const userDetails = {
       userName: user.userName,
       email: user.email,
@@ -531,7 +535,7 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
         maritalDate: profile?.maritalDate || null,
         profileAvatar: profile?.profileAvatar || null,
         timezone: profile?.timezone || null,
-        socialLinks, // ✅ Included social media links
+        socialLinks,
       },
 
       subscription:
@@ -542,10 +546,14 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
           subscriptionActiveDate: null,
         },
 
-      language:
-        language || { feedLanguageCode: "en", appLanguageCode: "en" },
+      language: language || {
+        feedLanguageCode: "en",
+        appLanguageCode: "en",
+      },
 
       device: device || {},
+
+      jobPosts: jobPosts || [], // ✅ include user's job posts
     };
 
     return res.status(200).json({
@@ -561,7 +569,7 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
       error: err.message,
     });
   }
-};
+}
 
 
 
@@ -1062,6 +1070,106 @@ exports.deleteUserAndAllRelated = async (req, res) => {
   });
 };
 
+
+
+
+exports.getUpcomingBirthdays = async (req, res) => {
+  try {
+    const today = new Date();
+
+    // Fetch all users with valid DOB
+    const users = await ProfileSettings.aggregate([
+      {
+        $match: { dateOfBirth: { $ne: null } },
+      },
+      {
+        $addFields: {
+          birthMonth: { $month: "$dateOfBirth" },
+          birthDay: { $dayOfMonth: "$dateOfBirth" },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          userName: 1,
+          displayName: 1,
+          profileAvatar: 1,
+          dateOfBirth: 1,
+          birthMonth: 1,
+          birthDay: 1,
+        },
+      },
+    ]);
+
+    if (!users.length) {
+      return res.status(404).json({
+        success: false,
+        message: "No users with date of birth found.",
+      });
+    }
+
+    // Map each user's next birthday date
+    const upcomingBirthdays = users.map((user) => {
+      const nextBirthday = new Date(
+        today.getFullYear(),
+        user.birthMonth - 1,
+        user.birthDay
+      );
+
+      // If birthday has already passed this year, move to next year
+      if (nextBirthday < today) {
+        nextBirthday.setFullYear(today.getFullYear() + 1);
+      }
+
+      return { ...user, nextBirthday };
+    });
+
+    // Sort birthdays by soonest date
+    upcomingBirthdays.sort((a, b) => a.nextBirthday - b.nextBirthday);
+
+    // Filter birthdays within the next 12 months
+    const oneYearFromNow = new Date(
+      today.getFullYear() + 1,
+      today.getMonth(),
+      today.getDate()
+    );
+    const filteredBirthdays = upcomingBirthdays.filter(
+      (user) => user.nextBirthday <= oneYearFromNow
+    );
+
+    if (!filteredBirthdays.length) {
+      return res.status(404).json({
+        success: false,
+        message: "No upcoming birthdays in the next 12 months.",
+      });
+    }
+
+    // Format the final response
+    const formattedBirthdays = filteredBirthdays.map((user) => ({
+      _id: user._id,
+      userName: user.userName,
+      displayName: user.displayName,
+      profileAvatar: user.profileAvatar,
+      dateOfBirth: user.dateOfBirth,
+      nextBirthday: user.nextBirthday,
+      birthMonth: user.birthMonth,
+      birthDay: user.birthDay,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      total: formattedBirthdays.length,
+      users: formattedBirthdays,
+    });
+  } catch (error) {
+    console.error("Error fetching upcoming birthdays:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching upcoming birthdays.",
+      error: error.message,
+    });
+  }
+};
 
 
 
