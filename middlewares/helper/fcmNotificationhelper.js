@@ -1,22 +1,14 @@
 // utils/fcmHelper.js
-const admin = require("firebase-admin");
-const { readFileSync } = require("fs");
-const path = require("path");
+const admin = require("../../Config/firebaseAdmin"); 
 
-// Use CommonJS __dirname directly
-const serviceAccountPath = path.join(__dirname, "../../firebase/serviceAccountKey.json");
-const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf-8"));
-
-// Initialize Firebase Admin SDK (only once)
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-}
-
-// 🔹 Unified helper for Web + Android FCM
+/**
+ * Send a push notification using Firebase Cloud Messaging (FCM)
+ * Works for Web + Android
+ */
 exports.sendFCMNotification = async (token, title, body, image = "") => {
   try {
+    if (!token) throw new Error("Missing FCM token");
+
     const message = {
       token,
       notification: { title, body, image },
@@ -34,8 +26,9 @@ exports.sendFCMNotification = async (token, title, body, image = "") => {
       apns: { payload: { aps: { sound: "default" } } },
     };
 
-    await admin.messaging().send(message);
-    console.log("📨 Sent notification to FCM token");
+    const response = await admin.messaging().send(message);
+    console.log("📨 Notification sent successfully:", response);
+    return response;
   } catch (err) {
     console.error("❌ FCM Send Error:", err.message);
   }
