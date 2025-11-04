@@ -371,7 +371,6 @@ router.get('/user/get/feed/with/search/cat/:categoryId',getFeedWithCategoryId);
 
 router.post('/user/get/post',getUserPost);
 router.get('/user/get/feed/category',auth,getFeedLanguageCategories);
-router.get('/get/all/feed/for/Creator',auth,getFeedsByAccountId);
 router.get('/user/get/all/category', getUserPostCategories);
 
 /* --------------------- User Follower API --------------------- */

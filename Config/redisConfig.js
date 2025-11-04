@@ -1,13 +1,9 @@
 const Redis = require("ioredis");
-
-// Use REDIS_URL if available (Render style), else fallback to local setup
-const redis = new Redis(process.env.REDIS_URL || {
+const redis = new Redis({
   host: process.env.REDIS_HOST || "127.0.0.1",
   port: process.env.REDIS_PORT || 6379,
-  retryStrategy: (times) => Math.min(times * 50, 2000),
+  password: process.env.REDIS_PASSWORD || undefined,
 });
-
-module.exports = redis;
-
-
-
+redis.on("connect", () => console.log("✅ Redis connected successfully"));
+redis.on("error", (err) => console.error("❌ Redis connection error:", err));
+ 
