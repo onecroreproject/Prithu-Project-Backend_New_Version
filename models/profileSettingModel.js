@@ -15,7 +15,8 @@ const ProfileSettingsSchema = new mongoose.Schema(
     dateOfBirth: { type: Date },
     maritalDate: { type: Date },
     maritalStatus: { type: String },
-    phoneNumber: { type: String },
+    phoneNumber: { type: Number },
+    whatsAppNumber:{type:Number},
 
     // Location
     country: { type: String },
@@ -54,6 +55,7 @@ const ProfileSettingsSchema = new mongoose.Schema(
       showCoverPhoto: { type: Boolean, default: true },
       showLocation: { type: Boolean, default: true },
       showPhoneNumber: { type: Boolean, default: true },
+      showWhatsAppNumber: { type: Boolean, default: true },
     },
 
     language: { type: String, default: "en" },

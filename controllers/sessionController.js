@@ -117,61 +117,118 @@ exports.refreshAccessToken = async (req, res) => {
 // 💓 Heartbeat (called periodically to confirm user is active)
 exports.heartbeat = async (req, res) => {
   try {
-    const { sessionId } = req.body;
-    if (!sessionId)
-      return res.status(400).json({ error: "Session ID required" });
+    const { sessionId, deviceId } = req.body;
 
+    if (!sessionId) {
+      return res.status(400).json({ error: "Session ID is required" });
+    }
+
+    // 1️⃣ Find the active session
     const session = await Session.findById(sessionId);
-    if (!session)
+    if (!session) {
       return res.status(404).json({ error: "Session not found" });
+    }
 
-    // 🕒 Update session + mark as online
-    session.lastSeenAt = new Date();
+    // 2️⃣ Update session (mark as online + refresh timestamp)
+    const now = new Date();
+    const wasOnline = session.isOnline;
+
+    session.lastSeenAt = now;
     session.isOnline = true;
     await session.save();
 
-    // 🟢 Update user online status
-    await User.findByIdAndUpdate(session.userId, { isOnline: true });
+    // 3️⃣ Update device info (optional)
+    if (deviceId) {
+      await Device.findOneAndUpdate(
+        { deviceId, userId: session.userId },
+        { lastActiveAt: now },
+        { new: true }
+      );
+    }
 
-    // 📡 Emit WebSocket event to all connected clients
+    // 4️⃣ Update user status
+    const user = await User.findById(session.userId);
+    if (user && !user.isOnline) {
+      await User.findByIdAndUpdate(session.userId, {
+        isOnline: true,
+        lastSeenAt: now,
+      });
+    }
+
+    // 5️⃣ Notify clients only if user just came online
     const io = getIO();
-    if (io) io.emit("userOnline", { userId: session.userId });
+    if (io && !wasOnline) {
+      io.emit("userOnline", { userId: session.userId });
+    }
 
-    res.json({ message: "Heartbeat recorded" });
+    // 6️⃣ Respond success
+    res.json({
+      success: true,
+      message: "✅ Heartbeat recorded successfully",
+      lastSeenAt: now,
+    });
   } catch (error) {
-    console.error("Heartbeat error:", error);
+    console.error("❌ Heartbeat error:", error);
     res.status(500).json({ error: error.message });
   }
 };
 
 
 
+
 // controllers/sessionController.js
 exports.userPresence = async (req, res) => {
   try {
-   const userId=req.Id;
+    const userId = req.Id || req.body.userId;
     const { sessionId, isOnline } = req.body;
-    if (!userId || !sessionId)
-      return res.status(400).json({ error: "userId and sessionId required" });
+
+    if (!userId || !sessionId) {
+      return res.status(400).json({ error: "userId and sessionId are required" });
+    }
 
     const session = await Session.findById(sessionId);
-    if (!session) return res.status(404).json({ error: "Session not found" });
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
 
-    session.isOnline = isOnline;
-    session.lastSeenAt = new Date();
-    await session.save();
+    const previousStatus = session.isOnline;
+    const now = new Date();
 
-    await User.findByIdAndUpdate(userId, {
+    // 🕒 Update session presence
+    if (previousStatus !== isOnline) {
+      session.isOnline = isOnline;
+      session.lastSeenAt = now;
+      await session.save();
+
+      // 🧠 Update user document only if status changed
+      await User.findByIdAndUpdate(userId, {
+        isOnline,
+        lastSeenAt: now,
+      });
+
+      // 📡 Emit socket presence event
+      const io = getIO();
+      if (io) {
+        const event = isOnline ? "userOnline" : "userOffline";
+        io.emit(event, { userId });
+        console.log(`📡 Emitted ${event} for user ${userId}`);
+      }
+    } else {
+      // No change, just refresh timestamp
+      session.lastSeenAt = now;
+      await session.save();
+    }
+
+    res.json({
+      success: true,
+      message: `User presence updated: ${isOnline ? "Online" : "Offline"}`,
+      userId,
       isOnline,
-      lastSeenAt: new Date(),
+      lastSeenAt: now,
     });
-
-    const io = getIO();
-    io.emit(isOnline ? "userOnline" : "userOffline", { userId });
-
-    res.json({ success: true, isOnline });
   } catch (err) {
-    console.error("userPresence Error:", err);
+    console.error("❌ userPresence Error:", err);
     res.status(500).json({ error: err.message });
   }
 };
+

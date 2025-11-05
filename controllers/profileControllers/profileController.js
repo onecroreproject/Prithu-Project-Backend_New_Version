@@ -21,6 +21,7 @@ const {calculateProfileCompletion} =require("../../middlewares/helper/profileCom
 // ------------------- Validation Middleware -------------------
 exports.validateUserProfileUpdate = [
   body("phoneNumber").optional().isMobilePhone().withMessage("Invalid phone number"),
+  body("whatsAppNumber").optional().isMobilePhone().withMessage("Invalid whatsAppNumber"),
   body("bio").optional().isString(),
   body("maritalStatus").optional().isString(),
   body("maritalDate").optional().isString(),
@@ -70,7 +71,8 @@ exports.userProfileDetailUpdate = async (req, res) => {
       "privacy",
       "maritalDate",
       "country", // ✅ Added
-      "city", // ✅ Added
+      "city", 
+      "whatsAppNumber",// ✅ Added
     ];
 
     const updateData = {};
@@ -679,7 +681,7 @@ exports.getUserProfileDetail = async (req, res) => {
       `
         bio displayName maritalStatus phoneNumber dateOfBirth
         profileAvatar modifyAvatar timezone maritalDate gender
-        theme language privacy notifications socialLinks country city coverPhoto
+        theme language privacy notifications socialLinks country city coverPhoto  whatsAppNumber
       `
     )
       .populate("userId", "userName email")
@@ -699,6 +701,7 @@ exports.getUserProfileDetail = async (req, res) => {
       displayName = null,
       maritalStatus = null,
       phoneNumber = null,
+      whatsAppNumber=null,
       dateOfBirth = null,
       timezone = null,
       maritalDate = null,
@@ -722,6 +725,7 @@ exports.getUserProfileDetail = async (req, res) => {
         displayName,
         maritalStatus,
         phoneNumber,
+        whatsAppNumber,
         dateOfBirth,
         country,
          city,

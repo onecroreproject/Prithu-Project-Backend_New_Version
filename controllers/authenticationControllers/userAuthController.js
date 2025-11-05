@@ -19,7 +19,7 @@ const { sendTemplateEmail } = require("../../utils/templateMailer");
 
 exports.createNewUser = async (req, res) => {
   try {
-    const { username, email, password, referralCode } = req.body;
+    const { username, email, password, referralCode,phone,whatsapp } = req.body;
 
     // Validate inputs
     if (!username || !email || !password) {
@@ -90,6 +90,8 @@ exports.createNewUser = async (req, res) => {
       userId: user._id,
       userName: username,
       displayName: username,
+      phoneNumber:phone,
+      whatsAppNumber:whatsapp,
     }).catch((err) =>
       console.error("❌ Failed to create ProfileSettings:", err)
     );
