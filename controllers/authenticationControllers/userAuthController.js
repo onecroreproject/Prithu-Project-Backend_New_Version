@@ -130,25 +130,38 @@ exports.createNewUser = async (req, res) => {
  
 exports.userLogin = async (req, res) => {
   try {
-    const { identifier, password, role, roleRef, deviceId, deviceType } = req.body;
+    const {
+      identifier,
+      password,
+      deviceId,
+      deviceType,
+      os,
+      browser,
+    } = req.body;
 
     // 1️⃣ Validate inputs
     if (!identifier || !password) {
-      return res.status(400).json({ error: "Username/Email and password are required" });
+      return res
+        .status(400)
+        .json({ error: "Username/Email and password are required" });
     }
 
-    // 2️⃣ Find user
+    // 2️⃣ Find user by username or email
     const user = await User.findOne({
       $or: [{ userName: identifier }, { email: identifier }],
     });
     if (!user) {
-      return res.status(400).json({ error: "Invalid username/email or password" });
+      return res
+        .status(400)
+        .json({ error: "Invalid username/email or password" });
     }
 
     // 3️⃣ Validate password
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
-      return res.status(400).json({ error: "Invalid username/email or password" });
+      return res
+        .status(400)
+        .json({ error: "Invalid username/email or password" });
     }
 
     // 4️⃣ Check if blocked
@@ -158,10 +171,10 @@ exports.userLogin = async (req, res) => {
         .json({ error: "User credentials are blocked. Please contact admin." });
     }
 
-    // 5️⃣ Run startup checks
+    // 5️⃣ Run startup process checks
     const userStart = await startUpProcessCheck(user._id);
 
-    // 6️⃣ Generate tokens
+    // 6️⃣ Generate JWT tokens
     const accessToken = jwt.sign(
       {
         userName: user.userName,
@@ -179,26 +192,44 @@ exports.userLogin = async (req, res) => {
       { expiresIn: "30d" }
     );
 
-    // 7️⃣ Handle device registration/update
+    // 7️⃣ Prepare Device Info
     const deviceIdentifier = deviceId || uuidv4();
-    let device = await Device.findOne({ deviceId: deviceIdentifier, userId: user._id });
+    const deviceName = `${os || "Unknown OS"} - ${browser || "Unknown Browser"}`;
+
+    // 8️⃣ Find or create device entry
+    let device = await Device.findOne({
+      userId: user._id,
+      deviceId: deviceIdentifier,
+    });
 
     if (!device) {
       device = await Device.create({
         userId: user._id,
         deviceId: deviceIdentifier,
         deviceType: deviceType || "web",
+        os: os || "Unknown OS",
+        browser: browser || "Unknown Browser",
+        deviceName,
         ipAddress: req.ip,
+        isOnline: true,
         lastActiveAt: new Date(),
       });
     } else {
+      device.os = os || device.os;
+      device.browser = browser || device.browser;
+      device.deviceName = deviceName;
+      device.deviceType = deviceType || device.deviceType;
       device.ipAddress = req.ip;
       device.lastActiveAt = new Date();
+      device.isOnline = true;
       await device.save();
     }
 
-    // 8️⃣ Manage session
-    let session = await Session.findOne({ userId: user._id, deviceId: device._id });
+    // 9️⃣ Manage user session
+    let session = await Session.findOne({
+      userId: user._id,
+      deviceId: device._id,
+    });
 
     if (!session) {
       session = await Session.create({
@@ -207,22 +238,22 @@ exports.userLogin = async (req, res) => {
         role: "user",
         refreshToken,
         isOnline: true,
-        lastSeenAt: null,
+        lastSeenAt: new Date(),
       });
     } else {
       session.refreshToken = refreshToken;
       session.isOnline = true;
-      session.lastSeenAt = null;
+      session.lastSeenAt = new Date();
       await session.save();
     }
 
-    // 9️⃣ Update user's online status
-    await User.updateOne(
-      { _id: user._id },
-      { $set: { isOnline: true, lastSeenAt: null } }
-    );
+    // 🔟 Update user’s online status
+    await User.findByIdAndUpdate(user._id, {
+      isOnline: true,
+      lastSeenAt: new Date(),
+    });
 
-    // 🔟 Send "Welcome Back" email (non-blocking)
+    // 1️⃣1️⃣ Send “Welcome Back” Email (non-blocking)
     sendTemplateEmail({
       templateName: "login.html",
       to: user.email,
@@ -234,13 +265,19 @@ exports.userLogin = async (req, res) => {
       embedLogo: true,
     }).catch((err) => console.error("❌ Failed to send login email:", err));
 
-    // 11️⃣ Return response
+    // 1️⃣2️⃣ Return login response
     return res.json({
+      success: true,
+      message: "Login successful",
       accessToken,
       refreshToken,
       userId: user._id,
       sessionId: session._id,
       deviceId: device.deviceId,
+      deviceType: device.deviceType,
+      os: device.os,
+      browser: device.browser,
+      deviceName: device.deviceName,
       appLanguage: userStart.appLanguage,
       feedLanguage: userStart.feedLanguage,
       gender: userStart.gender,
@@ -252,6 +289,7 @@ exports.userLogin = async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 };
+
  
  
 

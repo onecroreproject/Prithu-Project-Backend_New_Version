@@ -231,6 +231,7 @@ const{
 const{
   refreshAccessToken,
   heartbeat,
+  userPresence,
 }=require('../controllers/sessionController')
 
 const {
@@ -344,6 +345,7 @@ router.post("/report-post", auth,createFeedReport);
 /*-------------------------User Session API ---------------------*/
  router.post("/refresh-token", refreshAccessToken);
  router.post("/heartbeat",auth, heartbeat);
+ router.post("/user/session/presence",auth,userPresence );
 
  /* --------------------- User Subscription --------------------- */
 router.get('/user/user/subscriptions', auth, getUserSubscriptionPlanWithId);

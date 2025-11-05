@@ -23,7 +23,6 @@ const Followers =require("../../models/creatorFollowerModel.js");
 const HeldReferrals=require("../../models/userModels/userRefferalModels/heldUsers.js");
 const HiddenPost=require("../../models/userModels/hiddenPostSchema.js");
 const UserComments=require("../../models/userCommentModel.js");
-const UserDeviceSchema=require("../../models/devicetrackingModel.js");
 const UserEarnings =require('../../models/userModels/referralEarnings.js');
 const UserFeedCategories=require('../../models/userModels/userCategotyModel.js');
 const UserFollowings=require("../../models/userFollowingModel.js");
@@ -1033,7 +1032,7 @@ exports.deleteUserAndAllRelated = async (req, res) => {
     await Report.deleteMany({ reportedBy: userId }, { session });
     await Session.deleteMany({ userId }, { session });
     await UserComments.deleteMany({ userId }, { session });
-    await UserDeviceSchema.deleteMany({ userId }, { session });
+    await UserDevices.deleteMany({ userId }, { session });
     await UserEarnings.deleteMany({ userId }, { session });
     await UserFeedActions.deleteMany(
       { $or: [{ accountId: { $in: accountIds } }, { userId }] },
