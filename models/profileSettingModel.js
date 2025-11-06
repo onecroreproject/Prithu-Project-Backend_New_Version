@@ -8,9 +8,10 @@ const ProfileSettingsSchema = new mongoose.Schema(
     childAdminId: { type: mongoose.Schema.Types.ObjectId, ref: "ChildAdmin" },
 
     // Basic Details
-    displayName: { type: String },
     gender: { type: String },
     userName: { type: String },
+    name:{ type: String },
+    lastName:{ type: String },
     bio: { type: String },
     dateOfBirth: { type: Date },
     maritalDate: { type: Date },
@@ -19,8 +20,14 @@ const ProfileSettingsSchema = new mongoose.Schema(
     whatsAppNumber:{type:Number},
 
     // Location
+    address:{ type: String },
     country: { type: String },
     city: { type: String },
+
+    //Profile Link 
+    shareableLink: { type: String },
+    isPublished: { type: Boolean, default: false },
+
 
     // Avatar & Cover
     profileAvatar: { type: String },

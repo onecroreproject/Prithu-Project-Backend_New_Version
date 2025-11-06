@@ -28,7 +28,8 @@ exports.validateUserProfileUpdate = [
   body("dateOfBirth").optional().isISO8601().toDate(),
   body("profileAvatar").optional().isString(),
   body("userName").optional().isString(),
-  body("displayName").optional().isString(),
+  body("name").optional().isString(),
+  body("lastName").optional().isString(),
   body("theme").optional().isIn(["light", "dark"]),
   body("language").optional().isString(),
   body("timezone").optional().isString(),
@@ -59,7 +60,8 @@ exports.userProfileDetailUpdate = async (req, res) => {
     const allowedFields = [
       "phoneNumber",
       "bio",
-      "displayName",
+      "name",
+      "lastName",
       "dateOfBirth",
       "maritalStatus",
       "theme",
@@ -70,6 +72,7 @@ exports.userProfileDetailUpdate = async (req, res) => {
       "notifications",
       "privacy",
       "maritalDate",
+      "address",
       "country", // ✅ Added
       "city", 
       "whatsAppNumber",// ✅ Added
@@ -668,6 +671,7 @@ exports.getVisibilitySettingsWeb = async (req, res) => {
 
 
 
+
 exports.getUserProfileDetail = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
@@ -675,13 +679,14 @@ exports.getUserProfileDetail = async (req, res) => {
       return res.status(400).json({ message: "User ID is required" });
     }
 
-    // ✅ Fetch all necessary fields, including socialLinks
+    // ✅ Fetch profile and populate linked user info
     const profile = await Profile.findOne(
       { userId },
       `
-        bio displayName maritalStatus phoneNumber dateOfBirth
-        profileAvatar modifyAvatar timezone maritalDate gender
-        theme language privacy notifications socialLinks country city coverPhoto  whatsAppNumber
+        bio name lastName maritalStatus phoneNumber whatsAppNumber
+        dateOfBirth maritalDate gender theme language timezone
+        privacy notifications socialLinks country city address
+        coverPhoto profileAvatar modifyAvatar details
       `
     )
       .populate("userId", "userName email")
@@ -691,57 +696,64 @@ exports.getUserProfileDetail = async (req, res) => {
       return res.status(404).json({ message: "Profile not found" });
     }
 
-    // ✅ Define avatar URLs
-    const profileAvatarUrl = profile.profileAvatar || null;
-    const modifyAvatarUrl = profile.modifyAvatar || null;
-
-    // ✅ Extract fields with defaults
+    // ✅ Extract safe fields with defaults
     const {
-      bio = null,
-      displayName = null,
-      maritalStatus = null,
-      phoneNumber = null,
-      whatsAppNumber=null,
+      bio = "",
+      name = "",
+      lastName = "",
+      maritalStatus = "",
+      phoneNumber = "",
+      whatsAppNumber = "",
       dateOfBirth = null,
-      timezone = null,
       maritalDate = null,
-      gender = null,
+      gender = "",
       theme = "light",
       language = "en",
+      timezone = "Asia/Kolkata",
       privacy = {},
       notifications = {},
       socialLinks = {},
+      country = "",
+      city = "",
+      address = "",
+      coverPhoto = "",
+      details = "",
+      profileAvatar = "",
+      modifyAvatar = "",
       userId: user = {},
-      country="" ,
-      city="" ,
-      coverPhoto="",
     } = profile;
 
-    // ✅ Build response
+    // ✅ Compute age safely
+    const age = dateOfBirth ? calculateAge(dateOfBirth) : null;
+
+    // ✅ Build clean response
     return res.status(200).json({
       message: "Profile fetched successfully",
       profile: {
+        name,
+        lastName,
         bio,
-        displayName,
         maritalStatus,
         phoneNumber,
         whatsAppNumber,
         dateOfBirth,
-        country,
-         city,
-          coverPhoto,
-        age: calculateAge(dateOfBirth),
-        gender,
-        userName: user.userName || null,
-        userEmail: user.email || null,
-        profileAvatar: profileAvatarUrl,
-        modifyAvatar: modifyAvatarUrl,
-        timezone,
         maritalDate,
+        gender,
         theme,
         language,
+        timezone,
         privacy,
         notifications,
+        country,
+        city,
+        address,
+        coverPhoto,
+        details,
+        profileAvatar,
+        modifyAvatar,
+        userName: user.userName || null,
+        userEmail: user.email || null,
+        age,
         socialLinks: {
           facebook: socialLinks.facebook || "",
           instagram: socialLinks.instagram || "",
@@ -754,10 +766,13 @@ exports.getUserProfileDetail = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching profile:", error);
+    console.error("❌ Error fetching profile:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+
+
 
 
 

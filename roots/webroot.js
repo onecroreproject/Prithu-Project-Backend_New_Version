@@ -276,6 +276,29 @@ const{
   getUserFollowers,
 }=require("../WebController/UserController/userFolloweController");
 
+const{
+  createOrGetProfile,
+  getFullProfile,
+  addEducation,
+  updateEducation,
+  deleteEducation,
+  addExperience,
+  updateExperience,
+  deleteExperience,
+  addSkill,
+  updateSkill,
+  deleteSkill,
+  addCertification,
+  deleteCertification,
+  updateCertification,
+}=require("../controllers/userControllers/userCurriculamController");
+
+
+const{
+togglePublish,
+getPublicResume,
+}=require("../controllers/userControllers/userResumeController");
+
 
 
 
@@ -575,6 +598,36 @@ router.get("/get/user/post",auth,getUserFeedsWeb);
 router.get("/user/following", auth, getUserFollowing);
 router.get("/user/followers", auth, getUserFollowers);
 router.get("/user/profile/completion",auth,getProfileCompletion);
+
+// ✅ Profile
+router.post("/create", createOrGetProfile);
+router.get("/get/full/curriculam/profile",auth,getFullProfile);
+
+// ✅ Education
+router.post("/profile/education",auth,addEducation);
+router.put("/profile/education/:userId/:educationId",auth,updateEducation);
+router.delete("/education/profile/delete/:userId/:educationId",auth,deleteEducation);
+
+// ✅ Experience
+router.post("/user/job/experience",auth,addExperience);
+router.put("/user/job/experience/:userId/:experienceId",auth, updateExperience);
+router.delete("/user/job/experience/detele/:userId/:experienceId",auth, deleteExperience);
+
+// ✅ Skills
+router.post("/user/education/skill",auth, addSkill);
+router.put("/user/eduction/skill/:userId/:skillId",auth, updateSkill);
+router.delete("/user/eduction/skill/delete/:userId/:skillId",auth, deleteSkill);
+
+// ✅ Certifications
+router.post("/user/education/certification",auth, addCertification);
+router.put("/user/certification/update/:userId/:certificationId",auth,updateCertification)
+router.delete("/user/eduction/certification/delete/:userId/:certificationId",auth, deleteCertification);
+
+
+router.post("/profile/toggle-publish", auth,togglePublish);
+router.get("/public/resume/:username", getPublicResume);
+            
+
 
 
 router.get("/get/user/birthday", getUpcomingBirthdays);
