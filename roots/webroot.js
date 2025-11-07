@@ -297,6 +297,7 @@ const{
 const{
 togglePublish,
 getPublicResume,
+getPublicPortfolio,
 }=require("../controllers/userControllers/userResumeController");
 
 
@@ -626,6 +627,7 @@ router.delete("/user/eduction/certification/delete/:userId/:certificationId",aut
 
 router.post("/profile/toggle-publish", auth,togglePublish);
 router.get("/public/resume/:username", getPublicResume);
+router.get("/user/portfolio",auth,getPublicPortfolio); 
             
 
 

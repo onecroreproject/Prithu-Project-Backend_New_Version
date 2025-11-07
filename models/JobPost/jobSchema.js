@@ -26,7 +26,7 @@ const JobPostSchema = new mongoose.Schema(
 
     salaryRange: { type: String },
 
-    image: { type: String }, // Cloudinary URL
+    image: { type: String }, 
 
     startDate: { type: Date},
     endDate: { type: Date },

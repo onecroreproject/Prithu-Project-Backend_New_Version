@@ -1,16 +1,21 @@
 const JobPost = require("../../models/JobPost/jobSchema");
-const mongoose =require("mongoose");
+const mongoose = require("mongoose");
 const ProfileSettings = require("../../models/profileSettingModel");
-const JobEngagement=require("../../models/JobPost/jobEngagementSchema");
-const Payment =require("../../models/JobPost/jobPaymentSchema");
+const JobEngagement = require("../../models/JobPost/jobEngagementSchema");
+const Payment = require("../../models/JobPost/jobPaymentSchema");
+const {
+  uploadToCloudinary,
+  deleteFromCloudinary,
+} = require("../../middlewares/helper/Cloudinary/jobCloudinaryUpload");
 
 exports.createJobPost = async (req, res) => {
   try {
     const userId = req.Id;
+
     const {
-      jobId, // 👈 optional, comes from frontend when editing a draft
+      jobId,
       title,
-      exprience,
+      experience,
       description,
       companyName,
       location,
@@ -22,22 +27,42 @@ exports.createJobPost = async (req, res) => {
       startDate,
       endDate,
       isPaid,
-      image,
       tags,
       status,
     } = req.body;
 
     const jobStatus = status || "draft";
 
-    // 🧩 Normalize tags (capitalize first letter)
-    let formattedTags = [];
-    if (tags && Array.isArray(tags)) {
-      formattedTags = tags.map(
-        (tag) => tag.charAt(0).toUpperCase() + tag.slice(1).toLowerCase()
-      );
+    // ✅ Upload image if provided
+    let imageUrl = "";
+    let imagePublicId = "";
+
+    if (req.file && req.file.path) {
+      const uploadResult = await uploadToCloudinary(req.file.path, "job_posts");
+      imageUrl = uploadResult.url;
+      imagePublicId = uploadResult.public_id;
     }
 
-    // 🟡 Validation before publishing
+    // 🧩 Normalize tags
+    const formattedTags =
+      tags && Array.isArray(tags)
+        ? tags.map(
+            (tag) => tag.charAt(0).toUpperCase() + tag.slice(1).toLowerCase()
+          )
+        : [];
+
+    console.log({
+      title,
+      description,
+      companyName,
+      location,
+      category,
+      startDate,
+      endDate,
+      experience,
+    });
+
+    // 🟡 Validate required fields if publishing
     if (jobStatus === "active" || jobStatus === "publish") {
       if (
         !title ||
@@ -47,22 +72,42 @@ exports.createJobPost = async (req, res) => {
         !category ||
         !startDate ||
         !endDate ||
-        !exprience
+        !experience
       ) {
         return res.status(400).json({
-          message: "All required fields must be filled before publishing the job.",
+          message:
+            "All required fields must be filled before publishing the job.",
         });
       }
     }
 
-    // 🧠 CASE 1: If jobId exists and status is draft → update the draft
+    // ==========================================================
+    // 🧠 CASE 1: Update existing draft
+    // ==========================================================
     if (jobId && jobStatus === "draft") {
-      const existingJob = await JobPost.findOne({ _id: jobId, postedBy: userId });
+      const existingJob = await JobPost.findOne({
+        _id: jobId,
+        postedBy: userId,
+      });
 
       if (!existingJob) {
         return res.status(404).json({ message: "Draft job not found." });
       }
 
+      // 🧹 If new image uploaded, delete old one from Cloudinary
+      if (imageUrl && existingJob.imagePublicId) {
+        try {
+          await deleteFromCloudinary(existingJob.imagePublicId);
+          console.log("🗑️ Old image removed:", existingJob.imagePublicId);
+        } catch (err) {
+          console.warn(
+            "⚠️ Failed to delete old Cloudinary image:",
+            err.message
+          );
+        }
+      }
+
+      // 🧩 Update job fields
       existingJob.title = title || existingJob.title;
       existingJob.description = description || existingJob.description;
       existingJob.companyName = companyName || existingJob.companyName;
@@ -75,21 +120,31 @@ exports.createJobPost = async (req, res) => {
       existingJob.startDate = startDate || existingJob.startDate;
       existingJob.endDate = endDate || existingJob.endDate;
       existingJob.isPaid = isPaid ?? existingJob.isPaid;
-      existingJob.image = image || existingJob.image;
-      existingJob.exprience = exprience || existingJob.exprience;
-      existingJob.tags = formattedTags.length ? formattedTags : existingJob.tags;
+      existingJob.experience = experience || existingJob.experience;
+      existingJob.tags = formattedTags.length
+        ? formattedTags
+        : existingJob.tags;
       existingJob.status = "draft";
       existingJob.priorityScore = isPaid ? 10 : 1;
+
+      // Update image only if a new one was uploaded
+      if (imageUrl) {
+        existingJob.image = imageUrl;
+        existingJob.imagePublicId = imagePublicId;
+      }
 
       await existingJob.save();
 
       return res.status(200).json({
+        success: true,
         message: "Draft job updated successfully.",
         job: existingJob,
       });
     }
 
-    // 🧠 CASE 2: If no jobId but status is draft → create a new draft
+    // ==========================================================
+    // 🧠 CASE 2: Create new draft
+    // ==========================================================
     if (!jobId && jobStatus === "draft") {
       const draftJob = await JobPost.create({
         postedBy: userId,
@@ -106,20 +161,24 @@ exports.createJobPost = async (req, res) => {
         startDate,
         endDate,
         isPaid: isPaid || false,
-        image,
-        exprience,
+        image: imageUrl,
+        imagePublicId,
+        experience,
         tags: formattedTags,
         status: "draft",
         priorityScore: isPaid ? 10 : 1,
       });
 
       return res.status(201).json({
+        success: true,
         message: "Job draft created successfully.",
         job: draftJob,
       });
     }
 
-    // 🧠 CASE 3: If status is publish → create new published job
+    // ==========================================================
+    // 🧠 CASE 3: Publish job
+    // ==========================================================
     if (jobStatus === "publish") {
       const publishedJob = await JobPost.create({
         postedBy: userId,
@@ -135,31 +194,38 @@ exports.createJobPost = async (req, res) => {
         salaryRange,
         startDate,
         endDate,
-        exprience,
+        experience,
         isPaid: isPaid || false,
-        image,
+        image: imageUrl,
+        imagePublicId,
         tags: formattedTags,
-        status: "active", // published = active
+        status: "active",
         priorityScore: isPaid ? 10 : 1,
       });
 
       return res.status(201).json({
+        success: true,
         message: "Job published successfully.",
         job: publishedJob,
       });
     }
 
-    // 🧩 Fallback (should not reach here)
-    return res.status(400).json({ message: "Invalid job status or request data." });
+    // ==========================================================
+    // ❌ Fallback
+    // ==========================================================
+    return res.status(400).json({
+      success: false,
+      message: "Invalid job status or request data.",
+    });
   } catch (error) {
     console.error("❌ Error creating/updating job post:", error);
-    res.status(500).json({ message: "Server error", error });
+    res.status(500).json({
+      success: false,
+      message: "Server error while creating/updating job post.",
+      error: error.message,
+    });
   }
 };
-
-
-
-
 
 // ✅ Get All Jobs (Feed) - visible to users
 exports.getAllJobs = async (req, res) => {
@@ -178,14 +244,14 @@ exports.getAllJobs = async (req, res) => {
     } = req.query;
 
     // Base filter: only show approved + active jobs
-    const filter = { isApproved: true};
+    const filter = { isApproved: true };
 
     if (category) filter.category = category;
     if (location) filter.location = location;
     if (isPaid) filter.isPaid = isPaid === "true";
     if (language) filter.language = language;
     if (jobType) filter.jobType = jobType;
-    if(exprience)filter.exprience=exprience;
+    if (exprience) filter.exprience = exprience;
     if (status) filter.status = status; // allows admin filtering (active/inactive/etc.)
     if (tags) filter.tags = { $in: tags.split(",").map((t) => t.trim()) };
 
@@ -258,27 +324,50 @@ exports.getAllJobs = async (req, res) => {
   }
 };
 
-
 // ✅ Get Job by ID (detail view)
 exports.getJobById = async (req, res) => {
   try {
-    const job = await JobPost.findById(req.params.id).populate("postedBy", "name email");
-    if (!job) return res.status(404).json({ message: "Job not found" });
-    res.json(job);
+    const job = await JobPost.findById(req.params.id)
+      .populate("postedBy", "name email")
+      .lean();
+
+    if (!job) {
+      return res.status(404).json({ success: false, message: "Job not found" });
+    }
+
+    // Auto mark expired if needed
+    if (
+      job.endDate &&
+      new Date(job.endDate) < new Date() &&
+      job.status === "active"
+    ) {
+      await JobPost.findByIdAndUpdate(job._id, { status: "expired" });
+      job.status = "expired";
+    }
+
+    res.status(200).json({ success: true, job });
   } catch (error) {
-    console.error("Error fetching job:", error);
-    res.status(500).json({ message: "Server error" });
+    console.error("❌ Error fetching job:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
-// ✅ Auto deactivate expired jobs (can also be run by CRON)
+// =============================================================
+// 🔹 Auto Deactivate Expired Jobs (can be scheduled by CRON)
+// =============================================================
 exports.deactivateExpiredJobs = async () => {
-  const now = new Date();
-  await JobPost.updateMany(
-    { endDate: { $lt: now }, status: "active" },
-    { $set: { status: "expired" } }
-  );
-  console.log("✅ Expired jobs deactivated");
+  try {
+    const now = new Date();
+    const result = await JobPost.updateMany(
+      { endDate: { $lt: now }, status: "active" },
+      { $set: { status: "expired" } }
+    );
+    console.log(`✅ Expired jobs deactivated: ${result.modifiedCount}`);
+  } catch (error) {
+    console.error("❌ Error deactivating expired jobs:", error);
+  }
 };
 
 
@@ -286,17 +375,15 @@ exports.deactivateExpiredJobs = async () => {
 
 exports.getJobsByUserId = async (req, res) => {
   try {
-    const  userId  = req.Id;
+    const userId = req.Id;
 
-    // ✅ Validate userId format
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid user ID",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid user ID" });
     }
 
-    // ⚙️ Automatically mark expired jobs for this user
+    // Auto expire old jobs
     await JobPost.updateMany(
       {
         postedBy: userId,
@@ -306,34 +393,28 @@ exports.getJobsByUserId = async (req, res) => {
       { $set: { status: "expired" } }
     );
 
-    // 🧩 Fetch jobs posted by this user
     const jobs = await JobPost.find({ postedBy: userId })
       .sort({ createdAt: -1 })
       .populate("postedBy", "name email");
 
-    if (!jobs || jobs.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "No jobs found for this user",
-      });
+    if (!jobs.length) {
+      return res
+        .status(404)
+        .json({ success: false, message: "No jobs found for this user" });
     }
 
-    // 🧠 Calculate engagement score for each job before sending
+    // Calculate engagement score dynamically
     const updatedJobs = jobs.map((job) => {
-      const { stats } = job;
+      const s = job.stats || {};
       const engagementScore =
-        (stats.views || 0) +
-        (stats.likes || 0) * 2 +
-        (stats.shares || 0) * 3 +
-        (stats.appliedCount || 0) * 5;
+        (s.views || 0) +
+        (s.likes || 0) * 2 +
+        (s.shares || 0) * 3 +
+        (s.appliedCount || 0) * 5;
 
-      return {
-        ...job.toObject(),
-        stats: { ...stats, engagementScore },
-      };
+      return { ...job.toObject(), stats: { ...s, engagementScore } };
     });
 
-    // ✅ Send response
     res.status(200).json({
       success: true,
       total: updatedJobs.length,
@@ -349,32 +430,25 @@ exports.getJobsByUserId = async (req, res) => {
   }
 };
 
-
-
 exports.deleteJobPost = async (req, res) => {
   try {
-    const userId = req.Id; 
+    const userId = req.Id;
     const { jobId } = req.params;
 
-    // 🔍 Validate jobId
+    // 🔹 Validate ID
     if (!mongoose.Types.ObjectId.isValid(jobId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid job ID.",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid job ID" });
     }
 
-    // Find the job
+    // 🔹 Find the job
     const job = await JobPost.findById(jobId);
-
     if (!job) {
-      return res.status(404).json({
-        success: false,
-        message: "Job not found.",
-      });
+      return res.status(404).json({ success: false, message: "Job not found" });
     }
 
-    // Check permission (user can delete only their own jobs)
+    // 🔹 Check permission
     if (job.postedBy.toString() !== userId.toString()) {
       return res.status(403).json({
         success: false,
@@ -382,47 +456,72 @@ exports.deleteJobPost = async (req, res) => {
       });
     }
 
-    // Delete job
+    // 🔹 Delete Cloudinary image (if exists)
+    if (job.imagePublicId) {
+      try {
+        await deleteFromCloudinary(job.imagePublicId);
+        console.log(`🗑️ Cloudinary image deleted: ${job.imagePublicId}`);
+      } catch (cloudErr) {
+        console.warn(
+          "⚠️ Failed to delete image from Cloudinary:",
+          cloudErr.message
+        );
+      }
+    } else if (job.image && job.image.includes("res.cloudinary.com")) {
+      // Optional fallback: extract public ID from URL
+      try {
+        const match = job.image.match(/\/upload\/(?:v\d+\/)?(.+?)\.[a-zA-Z]+$/);
+        if (match && match[1]) {
+          await deleteFromCloudinary(match[1]);
+          console.log(`🗑️ Extracted Cloudinary image deleted: ${match[1]}`);
+        }
+      } catch (err) {
+        console.warn("⚠️ Cloudinary URL parse failed:", err.message);
+      }
+    }
+
+    // 🔹 Delete Job from DB
     await JobPost.findByIdAndDelete(jobId);
 
     return res.status(200).json({
       success: true,
-      message: "Job deleted successfully.",
+      message: "Job and associated image deleted successfully",
       deletedJobId: jobId,
     });
   } catch (error) {
     console.error("❌ Error deleting job:", error);
     res.status(500).json({
       success: false,
-      message: "Server error while deleting job.",
+      message: "Server error while deleting job",
       error: error.message,
     });
   }
 };
 
-
-
-
-
-
 exports.getRankedJobs = async (req, res) => {
   try {
-    // Step 1: Fetch all active jobs
+    // 🔹 Auto-expire outdated jobs
+    await JobPost.updateMany(
+      { endDate: { $lt: new Date() }, status: "active" },
+      { $set: { status: "expired" } }
+    );
+
+    // 🔹 Fetch all active & approved jobs
     const jobs = await JobPost.find({ status: "active", isApproved: true })
       .populate("postedBy", "name email")
       .lean();
 
     if (!jobs.length) {
-      return res.status(404).json({ success: false, message: "No active jobs found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "No active jobs found" });
     }
 
-    // Step 2: For each job, calculate engagement and payment priority
+    // 🔹 Process and rank each job
     const rankedJobs = await Promise.all(
       jobs.map(async (job) => {
-        // Fetch engagement data
+        // 1️⃣ Engagement stats
         const engagement = await JobEngagement.find({ jobId: job._id });
-
-        // Calculate engagement stats
         const engagementScore = engagement.reduce((acc, e) => {
           let score = 0;
           if (e.liked) score += 3;
@@ -432,47 +531,75 @@ exports.getRankedJobs = async (req, res) => {
           return acc + score;
         }, 0);
 
-        // Normalize engagement score (0–60 max)
         const maxEngagement = 60;
-        const engagementPercent = Math.min((engagementScore / maxEngagement) * 60, 60);
+        const engagementPercent = Math.min(
+          (engagementScore / maxEngagement) * 60,
+          60
+        );
 
-        // Check if job is paid
-        const payment = await Payment.findOne({ jobId: job._id, status: "success" });
+        // 2️⃣ Payment bonus
+        const payment = await Payment.findOne({
+          jobId: job._id,
+          status: "success",
+        });
         const paymentBonus = payment ? 25 : 0;
 
-        // Recency bonus (based on createdAt)
-        const daysSincePosted = (Date.now() - new Date(job.createdAt)) / (1000 * 60 * 60 * 24);
-        const recencyBonus = Math.max(0, 15 - daysSincePosted); // up to 15 points for recent posts
+        // 3️⃣ Recency bonus
+        const daysSincePosted =
+          (Date.now() - new Date(job.createdAt)) / (1000 * 60 * 60 * 24);
+        const recencyBonus = Math.max(0, 15 - daysSincePosted);
 
-        // Final Score (1–100)
+        // 4️⃣ Final score (max 100)
         const finalScore = Math.min(
           Math.round(paymentBonus + engagementPercent + recencyBonus),
           100
         );
-       
+      
+        // 5️⃣ Get profile from ProfileSettings based on postedBy userId
+        const profile = await ProfileSettings.findOne(
+          { userId: job.postedBy?._id },
+          { userName: 1, profileAvatar: 1, modifyAvatar: 1 }
+        ).lean();
+
+        const userName =
+          profile?.userName || job.postedBy?.name || "Unknown User";
+
+        const profileAvatar =
+          profile?.modifyAvatar ||
+          profile?.profileAvatar ||
+          "https://cdn-icons-png.flaticon.com/512/149/149071.png"; // default avatar
+console.log({profileAvatar,userName})
         return {
           ...job,
           score: finalScore,
           isPaid: !!payment,
           engagementCount: engagement.length,
+          userName,
+          profileAvatar,
+          image: job.image || "",
         };
       })
     );
 
-    // Step 3: Sort jobs — first by paid, then by score desc, then by posting date
+    // 🔹 Sort jobs by Paid → Score → Date
     rankedJobs.sort((a, b) => {
       if (a.isPaid !== b.isPaid) return b.isPaid - a.isPaid;
       if (a.score !== b.score) return b.score - a.score;
       return new Date(b.createdAt) - new Date(a.createdAt);
     });
 
+    // 🔹 Response
     res.status(200).json({
       success: true,
       count: rankedJobs.length,
       jobs: rankedJobs,
     });
-  } catch (err) {
-    console.error("Error fetching ranked jobs:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+  } catch (error) {
+    console.error("❌ Error fetching ranked jobs:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching ranked jobs",
+      error: error.message,
+    });
   }
 };

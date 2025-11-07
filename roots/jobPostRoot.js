@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { createJobPost, getAllJobs, getJobById ,getJobsByUserId,deleteJobPost,getRankedJobs} = require("../controllers/JobController/jobpostController");
-const { recordEngagement } = require("../controllers/JobController/engagementController");
+const { updateEngagement, getJobEngagementStats,getUserEngagements} = require("../controllers/JobController/engagementController");
 const upload=require("../middlewares/helper/MulterSetups/jobPostMulterSetup.js");
 const {auth}=require("../middlewares/jwtAuthentication.js")
 
@@ -15,7 +15,9 @@ router.get("/get/jobs/by/userId",auth,getJobsByUserId);
 router.get("/top/ranked/jobs", getRankedJobs);
 
 //User Action API
-router.post("/user/action/engage",recordEngagement);
+router.post("/update", auth, updateEngagement);
+router.get("/stats/:jobId", getJobEngagementStats);
+router.get("/user/:userId", auth, getUserEngagements);
 
 
 //Admin Roots
