@@ -11,6 +11,13 @@ const userProfileSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
 
+      professionalSummary: {
+      type: String,
+      maxlength: 2000,
+      default:
+        "A passionate professional focused on delivering innovative and scalable digital solutions.",
+    },
+
     // Arrays of embedded sub-schemas
     education: [educationSchema],
     experience: [experienceSchema],

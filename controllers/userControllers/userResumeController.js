@@ -35,7 +35,7 @@ console.log(shareableLink)
 
 exports.getPublicResume = async (req, res) => {
   try {
-    const { username } = req.params;
+    const { username } = req.params ;
     const user = await Users.findOne({ userName: username }).select("_id userName displayName");
     if (!user) return res.status(404).json({ message: "User not found" });
 
@@ -53,3 +53,55 @@ exports.getPublicResume = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+
+// ✅ controllers/resumeController.js
+exports.getPublicPortfolio = async (req, res) => {
+  try {
+    // 🔹 Get userId from JWT (Auth middleware should set req.Id)
+    const userId = req.Id;
+    if (!userId)
+      return res.status(401).json({ success: false, message: "Unauthorized access" });
+
+    // 🔹 Fetch basic user data
+    const user = await Users.findById(userId).select(
+      "_id userName displayName email phoneNumber"
+    );
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    // 🔹 Fetch published profile settings
+    const profile = await ProfileSettings.findOne({ userId }).lean();
+    if (!profile || !profile.isPublished)
+      return res.status(403).json({
+        success: false,
+        message: "Profile is not published or unavailable",
+      });
+
+    // 🔹 Fetch detailed resume/user profile info
+    const fullProfile = await UserProfile.findOne({ userId })
+      .populate("userId", "displayName email phoneNumber")
+      .lean();
+
+    // 🔹 Combine data
+    const resumeData = {
+      ...profile,
+      ...fullProfile,
+      user,
+    };
+
+    // 🔹 Respond
+    res.status(200).json({
+      success: true,
+      data: resumeData,
+      message: "Public resume fetched successfully",
+    });
+  } catch (error) {
+    console.error("❌ getPublicResume error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching resume",
+      error: error.message,
+    });
+  }
+};
+
