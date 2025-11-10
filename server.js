@@ -17,16 +17,17 @@ const app = express();
 const server = http.createServer(app);
 const io = initSocket(server);
 
-// Middleware setup
+// ✅ CORS: Allow all origins
 app.use(
   cors({
-    origin: true,
+    origin: "*", // Allow all origins
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
+// Middleware setup
 app.use(express.json());
 app.use(cookieParser());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
