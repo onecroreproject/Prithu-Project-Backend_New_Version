@@ -1,8 +1,20 @@
-const mongoose = require("mongoose");
+const mongoose=require("mongoose")
 
-// 🔹 Independent model for field-level visibility settings
+
+
 const ProfileVisibilitySchema = new mongoose.Schema(
   {
+    // 🔹 Basic Details
+    name: {
+      type: String,
+      enum: ["public", "followers", "private"],
+      default: "public",
+    },
+    lastName: {
+      type: String,
+      enum: ["public", "followers", "private"],
+      default: "public",
+    },
     displayName: {
       type: String,
       enum: ["public", "followers", "private"],
@@ -38,10 +50,29 @@ const ProfileVisibilitySchema = new mongoose.Schema(
       enum: ["public", "followers", "private"],
       default: "followers",
     },
+
+    // 🔹 Contact Details
     phoneNumber: {
       type: String,
       enum: ["public", "followers", "private"],
       default: "private",
+    },
+    whatsAppNumber: {
+      type: String,
+      enum: ["public", "followers", "private"],
+      default: "private",
+    },
+    email: {
+      type: String,
+      enum: ["public", "followers", "private"],
+      default: "private",
+    },
+
+    // 🔹 Location
+    address: {
+      type: String,
+      enum: ["public", "followers", "private"],
+      default: "followers",
     },
     country: {
       type: String,
@@ -53,6 +84,8 @@ const ProfileVisibilitySchema = new mongoose.Schema(
       enum: ["public", "followers", "private"],
       default: "public",
     },
+
+    // 🔹 Avatar & Cover
     profileAvatar: {
       type: String,
       enum: ["public", "followers", "private"],
@@ -63,16 +96,47 @@ const ProfileVisibilitySchema = new mongoose.Schema(
       enum: ["public", "followers", "private"],
       default: "public",
     },
+
+    // 🔹 Social Links (visibility for the entire social link section)
     socialLinks: {
-      type: String,
-      enum: ["public", "followers", "private"],
-      default: "public",
+      facebook: {
+        type: String,
+        enum: ["public", "followers", "private"],
+        default: "public",
+      },
+      instagram: {
+        type: String,
+        enum: ["public", "followers", "private"],
+        default: "public",
+      },
+      twitter: {
+        type: String,
+        enum: ["public", "followers", "private"],
+        default: "public",
+      },
+      linkedin: {
+        type: String,
+        enum: ["public", "followers", "private"],
+        default: "public",
+      },
+      github: {
+        type: String,
+        enum: ["public", "followers", "private"],
+        default: "public",
+      },
+      youtube: {
+        type: String,
+        enum: ["public", "followers", "private"],
+        default: "public",
+      },
+      website: {
+        type: String,
+        enum: ["public", "followers", "private"],
+        default: "public",
+      },
     },
-    email: {
-      type: String,
-      enum: ["public", "followers", "private"],
-      default: "private",
-    },
+
+    // 🔹 Extra / Privacy fields
     location: {
       type: String,
       enum: ["public", "followers", "private"],
@@ -82,4 +146,4 @@ const ProfileVisibilitySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("ProfileVisibility", ProfileVisibilitySchema);
+module.exports = mongoose.model("ProfileVisibility", ProfileVisibilitySchema, "ProfileVisibility");

@@ -25,52 +25,35 @@ const {feedTimeCalculator}=require("../../middlewares/feedTimeCalculator")
 exports.userImageViewCount = async (req, res) => {
   try {
     const { feedId } = req.body;
+    console.log(feedId)
     const userId = req.Id || req.body.userId;
-
+ 
     if (!userId || !feedId) {
       return res.status(400).json({ message: "userId and feedId are required" });
     }
-
-    // 1️⃣ Check feed type
-    const feed = await Feed.findById(feedId, "type");
-    if (!feed || feed.type !== "image") {
-      return; 
-    }
-
-    // 2️⃣ Check if this user has already viewed this feed
-    const existing = await ImageView.findOne({
-      userId,
-      "views.imageId": feedId,
-    });
-
-    if (existing) {
-      return; 
-    }
-
-    // 3️⃣ Push new feedId + timestamp into views array
-    await ImageView.findOneAndUpdate(
+ 
+    // ✅ Add only if not already viewed (unique)
+    const updated = await ImageView.updateOne(
       { userId },
-      { $push: { views: { imageId: feedId, viewedAt: new Date() } } },
+      { $addToSet: { views: { imageId: feedId, viewedAt: new Date() } } },
       { upsert: true }
     );
-
-    // 4️⃣ Update aggregated stats
-    await ImageStats.findOneAndUpdate(
-      { imageId: feedId },
-      {
-        $inc: { totalViews: 1 },
-        $set: { lastViewed: new Date() },
-      },
-      { upsert: true }
-    );
-
-    // 5️⃣ Minimal response
-    return res.json({ message: "Image view recorded" });
+ 
+    // ✅ If new view was added → increment count only once
+    if (updated.modifiedCount > 0) {
+      Feed.updateOne(
+        { _id: feedId },
+        { $inc: { views: 1 } }
+      ).exec(); // No await → non-blocking
+    }
+ 
+    return res.json({ message: "Unique image view recorded" });
   } catch (err) {
     console.error("❌ Error recording image view:", err);
     return res.status(500).json({ message: "Server error" });
   }
 };
+ 
 
 
 

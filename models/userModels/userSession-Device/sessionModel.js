@@ -1,4 +1,7 @@
 const mongoose = require("mongoose");
+const dbTimer = require("../../../middlewares/dbTimer");
+
+
 
 const SessionSchema = new mongoose.Schema({
     userId: {
@@ -34,9 +37,11 @@ const SessionSchema = new mongoose.Schema({
   },
   { timestamps: true } // adds updatedAt automatically
 );
+SessionSchema.plugin(dbTimer);
 
 // Index for auto-expiry (if refreshToken has TTL)
-SessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+SessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 },{_id:1});
+
 
 module.exports =  mongoose.models.Session || mongoose.model("Session", SessionSchema,"Session");
 

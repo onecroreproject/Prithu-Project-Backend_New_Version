@@ -3,7 +3,6 @@ const mongoose = require("mongoose");
 const CreatorFollower = require("../../models/creatorFollowerModel");
 const Feed = require("../../models/feedModel");
 const ProfileSettings = require("../../models/profileSettingModel");
-const User = require("../../models/userModels/userModel");
 const {
   createAndSendNotification,
 } = require("../../middlewares/helper/socketNotification");

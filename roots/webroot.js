@@ -402,8 +402,8 @@ router.get('/get/all/feed/for/Creator',auth,getFeedsByAccountId);
 router.get('/user/get/all/category', getUserPostCategories);
 
 /* --------------------- User Follower API --------------------- */
- router.post('/user/follow/creator',followAccount);
- router.post('/user/unfollow/creator',unFollowAccount);
+ router.post('/user/follow/creator',auth,followAccount);
+ router.post('/user/unfollow/creator',auth,unFollowAccount);
  router.get('/user/following/data',auth,getUserFollowersData);
 
  /* --------------------- User Notifiction API --------------------- */
