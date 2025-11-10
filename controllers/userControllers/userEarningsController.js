@@ -3,6 +3,7 @@ const UserEarning = require("../../models/userModels/referralEarnings");
 const ProfileSettings = require("../../models/profileSettingModel");
 const Withdrawal = require("../../models/userModels/withdrawal");
 const UserSubscription=require("../../models/subcriptionModels/userSubscreptionModel");
+const SubscriptionPlan=require("../../models/subcriptionModels/subscriptionPlanModel.js");
 
 
 
@@ -18,7 +19,7 @@ exports.getUserEarnings = async (req, res) => {
     }
 
     // ✅ Check if the user has an active "basic" subscription
-    const basicPlan = await SubscriptionPlan.findOne({ name: "basic" }).lean();
+    const basicPlan = await SubscriptionPlan.findOne({ planType: "basic" }).lean();
     if (!basicPlan) return res.status(500).json({ message: "Basic plan not found" });
 
     const activeSubscription = await UserSubscription.findOne({

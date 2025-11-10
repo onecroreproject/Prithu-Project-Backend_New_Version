@@ -568,7 +568,7 @@ exports.getRankedJobs = async (req, res) => {
           profile?.modifyAvatar ||
           profile?.profileAvatar ||
           "https://cdn-icons-png.flaticon.com/512/149/149071.png"; // default avatar
-console.log({profileAvatar,userName})
+
         return {
           ...job,
           score: finalScore,

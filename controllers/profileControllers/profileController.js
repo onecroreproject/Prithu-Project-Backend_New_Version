@@ -12,9 +12,10 @@ const { removeImageBackground } = require("../../middlewares/helper/backgroundRe
 const DEFAULT_COVER_PHOTO = "https://res.cloudinary.com/demo/image/upload/v1730123456/default-cover.jpg";
 const Following =require("../../models/userFollowingModel");
 const CreatorFollower =require("../../models/creatorFollowerModel");
-const Visibility = require("../../models/profileVisibilitySchema");
+const ProfileVisibility = require("../../models/profileVisibilitySchema");
 const Feed =require("../../models/feedModel");
 const {calculateProfileCompletion} =require("../../middlewares/helper/profileCompletionCalulator");
+const ProfileSettings=require("../../models/profileSettingModel");
 
 
 
@@ -23,6 +24,7 @@ exports.validateUserProfileUpdate = [
   body("phoneNumber").optional().isMobilePhone().withMessage("Invalid phone number"),
   body("whatsAppNumber").optional().isMobilePhone().withMessage("Invalid whatsAppNumber"),
   body("bio").optional().isString(),
+  body("profileSummary").optional().isString(),
   body("maritalStatus").optional().isString(),
   body("maritalDate").optional().isString(),
   body("dateOfBirth").optional().isISO8601().toDate(),
@@ -72,6 +74,7 @@ exports.userProfileDetailUpdate = async (req, res) => {
       "notifications",
       "privacy",
       "maritalDate",
+      "profileSummary",
       "address",
       "country", // ✅ Added
       "city", 
@@ -492,162 +495,95 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
 
 
 
-
 exports.toggleFieldVisibility = async (req, res) => {
-  try {
-    const userId = req.Id;       // From token middleware
-    const role = req.role;        // From token middleware
-    const { field, value, type = "general" } = req.body;
-
-    if (!field || typeof value !== "boolean") {
-      return res.status(400).json({ message: "Field and value are required" });
-    }
- 
-    // Determine which profile to update based on role
-    let profileQuery = {};
-    if (role === "Admin") profileQuery = { adminId: userId, };
-    else if (role === "Child_Admin") profileQuery = { childAdminId: userId,};
-    else if (role === "User") profileQuery = { userId: userId,};
-    else return res.status(403).json({ message: "Unauthorized role" });
- 
-    const profile = await Profile.findOne(profileQuery);
-    if (!profile) return res.status(404).json({ message: "ProfileSettings not found" });
- 
-    // Toggle fields
-    if (type === "general") {
-      if (!(field in profile.visibility)) {
-        return res.status(400).json({ message: "Invalid field for general visibility" });
-      }
-      profile.visibility[field] = value;
-    } else if (type === "social") {
-      if (!(field in profile.socialLinksVisibility)) {
-        return res.status(400).json({ message: "Invalid field for social link visibility" });
-      }
-      profile.socialLinksVisibility[field] = value;
-    } else {
-      return res.status(400).json({ message: "Invalid type" });
-    }
- 
-    await profile.save();
-    return res.json({ success: true, message: "Visibility updated", profile });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
- 
- 
- 
-// Get visibility settings for logged-in user
-exports.getVisibilitySettings = async (req, res) => {
-  try {
-    const userId = req.Id;   // From token middleware
-    const role = req.role;    // From token middleware
-  
- 
-    let profileQuery = {};
-    if (role === "Admin") profileQuery = { adminId: userId};
-    else if (role === "Child_Admin") profileQuery = { childAdminId: userId};
-     else if (role === "User") profileQuery = { userId: userId,};
-    else return res.status(403).json({ message: "Unauthorized role" });
- 
-    const profile = await Profile.findOne(profileQuery).select("visibility socialLinksVisibility");
-    if (!profile) return res.status(404).json({ message: "ProfileSettings not found" });
- 
-    return res.json({
-      success: true,
-      visibility: profile.visibility,
-      socialLinksVisibility: profile.socialLinksVisibility,
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
- 
- 
-
-
-
-
-
-
-
-exports.updateFieldVisibilityWeb = async (req, res) => {
-  try {
-    const userId = req.Id;  // From token middleware
-    const role = req.role;  // From token middleware
-    const { field, value, type = "general" } = req.body;
-
-    // Validate input
-    const allowedValues = ["public", "followers", "private"];
-    if (!field || !allowedValues.includes(value)) {
-      return res.status(400).json({
-        message: "Invalid request. Field and value ('public' | 'followers' | 'private') required.",
-      });
-    }
-
-    // Determine which profile to update
-    let profileQuery = {};
-    if (role === "Admin") profileQuery = { adminId: userId };
-    else if (role === "Child_Admin") profileQuery = { childAdminId: userId };
-    else if (role === "User") profileQuery = { userId: userId };
-    else return res.status(403).json({ message: "Unauthorized role" });
-
-    // Fetch profile
-    const profile = await Profile.findOne(profileQuery).populate("visibility");
-    if (!profile) {
-      return res.status(404).json({ message: "Profile not found" });
-    }
-
-    // Fetch or create visibility doc
-    let visibility = await Visibility.findById(profile.visibility);
-    if (!visibility) {
-      visibility = new Visibility();
-      profile.visibility = visibility._id;
-    }
-
-    // Update field
-    if (!(field in visibility.toObject())) {
-      return res.status(400).json({ message: "Invalid visibility field name" });
-    }
-
-    visibility[field] = value;
-    await visibility.save();
-    await profile.save();
-
-    return res.json({
-      success: true,
-      message: `Visibility for '${field}' updated to '${value}'`,
-      visibility,
-    });
-  } catch (err) {
-    console.error("❌ Visibility Update Error:", err);
-    return res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
-
-
-
-
-
-exports.getVisibilitySettingsWeb = async (req, res) => {
   try {
     const userId = req.Id;   // From token middleware
     const role = req.role;   // From token middleware
+    const { field, value } = req.body;
 
-    // Determine which profile to fetch
+    // ✅ Validate input
+    const allowedValues = ["public", "followers", "private"];
+    if (!field || !allowedValues.includes(value)) {
+      return res.status(400).json({
+        message:
+          "Invalid request. Field and value ('public' | 'followers' | 'private') are required.",
+      });
+    }
+
+    // ✅ Determine which profile to update
+    let profileQuery = {};
+    if (role === "Admin") profileQuery = { adminId: userId };
+    else if (role === "Child_Admin") profileQuery = { childAdminId: userId };
+    else if (role === "User") profileQuery = { userId: userId };
+    else return res.status(403).json({ message: "Unauthorized role." });
+
+    // ✅ Find ProfileSettings
+    const profile = await ProfileSettings.findOne(profileQuery).populate("visibility");
+    if (!profile)
+      return res.status(404).json({ message: "ProfileSettings not found for this user." });
+
+    // ✅ Ensure visibility document exists
+    let visibilityDoc = profile.visibility;
+    if (!visibilityDoc) {
+      visibilityDoc = await ProfileVisibility.create({ profileSettingsId: profile._id });
+      profile.visibility = visibilityDoc._id;
+      await profile.save();
+    }
+
+    // ✅ Determine where to update the field
+    const schemaPaths = Object.keys(ProfileVisibility.schema.paths);
+    const socialLinksFields = Object.keys(ProfileVisibility.schema.paths.socialLinks?.schema?.paths || {});
+
+    let updatedFieldPath = "";
+
+    if (socialLinksFields.includes(field)) {
+      // Field belongs to socialLinks
+      visibilityDoc.socialLinks[field] = value;
+      updatedFieldPath = `socialLinks.${field}`;
+    } else if (schemaPaths.includes(field)) {
+      // Field is top-level
+      visibilityDoc[field] = value;
+      updatedFieldPath = field;
+    } else {
+      return res.status(400).json({
+        message: `Invalid field name: '${field}'. Field not found in visibility schema.`,
+      });
+    }
+
+    // ✅ Save updated document
+    await visibilityDoc.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Visibility for '${updatedFieldPath}' updated to '${value}'.`,
+      visibility: visibilityDoc,
+    });
+  } catch (err) {
+    console.error("❌ Visibility Toggle Error:", err);
+    return res.status(500).json({
+      message: "Server error while updating visibility.",
+      error: err.message,
+    });
+  }
+};
+
+// ===========================================================
+// ✅ 2️⃣ Get visibility settings (API use)
+// ===========================================================
+exports.getVisibilitySettings = async (req, res) => {
+  try {
+    const userId = req.Id;
+    const role = req.role;
+
     let profileQuery = {};
     if (role === "Admin") profileQuery = { adminId: userId };
     else if (role === "Child_Admin") profileQuery = { childAdminId: userId };
     else if (role === "User") profileQuery = { userId: userId };
     else return res.status(403).json({ message: "Unauthorized role" });
 
-    // Get visibility
-    const profile = await Profile.findOne(profileQuery).populate("visibility");
-    if (!profile || !profile.visibility) {
+    const profile = await ProfileSettings.findOne(profileQuery).populate("visibility");
+    if (!profile || !profile.visibility)
       return res.status(404).json({ message: "Visibility settings not found" });
-    }
 
     return res.json({
       success: true,
@@ -655,10 +591,101 @@ exports.getVisibilitySettingsWeb = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Get Visibility Error:", err);
+    return res.status(500).json({
+      message: "Server error while fetching visibility.",
+      error: err.message,
+    });
+  }
+};
+
+// ===========================================================
+// ✅ 3️⃣ Update visibility (for Web UI - supports socialLinks.*)
+// ===========================================================
+exports.updateFieldVisibilityWeb = async (req, res) => {
+  try {
+    const userId = req.Id;
+    const role = req.role;
+    const { field, value, parent } = req.body; // optional parent for nested updates
+
+    const allowedValues = ["public", "followers", "private"];
+    if (!field || !allowedValues.includes(value)) {
+      return res.status(400).json({
+        message: "Invalid request. Field and value ('public' | 'followers' | 'private') required.",
+      });
+    }
+
+    // Role-based query
+    let profileQuery = {};
+    if (role === "Admin") profileQuery = { adminId: userId };
+    else if (role === "Child_Admin") profileQuery = { childAdminId: userId };
+    else if (role === "User") profileQuery = { userId: userId };
+    else return res.status(403).json({ message: "Unauthorized role" });
+
+    // Find ProfileSettings
+    const profile = await ProfileSettings.findOne(profileQuery).populate("visibility");
+    if (!profile) return res.status(404).json({ message: "Profile not found" });
+
+    let visibility = profile.visibility;
+    if (!visibility) {
+      visibility = await ProfileVisibility.create({ profileSettingsId: profile._id });
+      profile.visibility = visibility._id;
+      await profile.save();
+    }
+
+    // Update field (nested or top-level)
+    if (parent === "socialLinks") {
+      if (!visibility.socialLinks[field]) {
+        return res.status(400).json({ message: `Invalid social link field: ${field}` });
+      }
+      visibility.socialLinks[field] = value;
+    } else {
+      const validFields = Object.keys(ProfileVisibility.schema.paths);
+      if (!validFields.includes(field)) {
+        return res.status(400).json({ message: `Invalid field name: ${field}` });
+      }
+      visibility[field] = value;
+    }
+
+    await visibility.save();
+
+    return res.json({
+      success: true,
+      message: `Visibility for '${parent ? parent + "." : ""}${field}' updated to '${value}'`,
+      visibility,
+    });
+  } catch (err) {
+    console.error("❌ Update Visibility Web Error:", err);
     return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
+// ===========================================================
+// ✅ 4️⃣ Get visibility settings (Web)
+// ===========================================================
+exports.getVisibilitySettingsWeb = async (req, res) => {
+  try {
+    const userId = req.Id;
+    const role = req.role;
+
+    let profileQuery = {};
+    if (role === "Admin") profileQuery = { adminId: userId };
+    else if (role === "Child_Admin") profileQuery = { childAdminId: userId };
+    else if (role === "User") profileQuery = { userId: userId };
+    else return res.status(403).json({ message: "Unauthorized role" });
+
+    const profile = await ProfileSettings.findOne(profileQuery).populate("visibility");
+    if (!profile || !profile.visibility)
+      return res.status(404).json({ message: "Visibility settings not found" });
+
+    return res.json({
+      success: true,
+      visibility: profile.visibility,
+    });
+  } catch (err) {
+    console.error("❌ Get Visibility Web Error:", err);
+    return res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
 
 
 
@@ -686,7 +713,7 @@ exports.getUserProfileDetail = async (req, res) => {
         bio name lastName maritalStatus phoneNumber whatsAppNumber
         dateOfBirth maritalDate gender theme language timezone
         privacy notifications socialLinks country city address
-        coverPhoto profileAvatar modifyAvatar details
+        coverPhoto profileAvatar modifyAvatar details profileSummary
       `
     )
       .populate("userId", "userName email")
@@ -699,6 +726,7 @@ exports.getUserProfileDetail = async (req, res) => {
     // ✅ Extract safe fields with defaults
     const {
       bio = "",
+      profileSummary="",
       name = "",
       lastName = "",
       maritalStatus = "",
@@ -731,6 +759,7 @@ exports.getUserProfileDetail = async (req, res) => {
       message: "Profile fetched successfully",
       profile: {
         name,
+        profileSummary,
         lastName,
         bio,
         maritalStatus,

@@ -8,6 +8,7 @@ const UserCategory = require("../models/userModels/userCategotyModel");
 const ProfileSettings=require('../models/profileSettingModel');
 const { applyFrame } = require("../middlewares/helper/AddFrame/addFrame.js");
 const {extractThemeColor}=require("../middlewares/helper/extractThemeColor.js");
+const UserFeedActions=require('../models/userFeedInterSectionModel');
 
 
 

@@ -6,7 +6,7 @@ const { broadcastNotification, pushFCMToUser } = require("../../middlewares/help
 exports.sendAdminNotification = async (req, res) => {
   try {
     const { title, message, image, adminId: adminIdFromBody } = req.body;
-    const adminId = req.Id || adminIdFromBody;
+    const adminId = req.Id || "68edd60dff4c9aa0a69663ba";
 
     if (!adminId) return res.status(400).json({ error: "Admin ID missing" });
     if (!title || !message) return res.status(400).json({ error: "Title and message are required" });

@@ -13,6 +13,7 @@ const ProfileSettingsSchema = new mongoose.Schema(
     name:{ type: String },
     lastName:{ type: String },
     bio: { type: String },
+    profileSummary:{type:String},
     dateOfBirth: { type: Date },
     maritalDate: { type: Date },
     maritalStatus: { type: String },
