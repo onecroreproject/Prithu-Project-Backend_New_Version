@@ -375,7 +375,7 @@ exports.deactivateExpiredJobs = async () => {
 
 exports.getJobsByUserId = async (req, res) => {
   try {
-    const userId = req.Id;
+    const userId = req.Id || req.body.userId;
 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res

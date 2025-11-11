@@ -1,5 +1,6 @@
 // controllers/userProfile/userProfileController.js
-const UserProfile = require("../../models/userModels/UserEductionSchema/userFullCuricluamSchema");
+const UserCurricluam = require("../../models/userModels/UserEductionSchema/userFullCuricluamSchema");
+const Project = require("../../models/userModels/UserEductionSchema/userEducationProjectSchema");
 
 /* ===============================
    🧾 CREATE OR GET PROFILE
@@ -11,10 +12,10 @@ exports.createOrGetProfile = async (req, res) => {
     const userId = req.user?._id || req.body.userId;
     if (!userId) return res.status(400).json({ message: "User ID required" });
 
-    let profile = await UserProfile.findOne({ userId });
+    let profile = await UserCurricluam.findOne({ userId });
 
     if (!profile) {
-      profile = await UserProfile.create({ userId });
+      profile = await UserCurricluam.create({ userId });
     }
 
     res.status(200).json(profile);
@@ -37,7 +38,7 @@ exports.addEducation = async (req, res) => {
     if (!userId || !educationData)
       return res.status(400).json({ message: "User ID and education data required" });
 
-    const profile = await UserProfile.findOneAndUpdate(
+    const profile = await UserCurricluam.findOneAndUpdate(
       { userId },
       { $push: { education: educationData } },
       { new: true, upsert: true }
@@ -56,7 +57,7 @@ exports.updateEducation = async (req, res) => {
     const { userId, educationId } = req.params;
     const updatedData = req.body;
 
-    const profile = await UserProfile.findOneAndUpdate(
+    const profile = await UserCurricluam.findOneAndUpdate(
       { userId, "education._id": educationId },
       { $set: { "education.$": updatedData } },
       { new: true }
@@ -76,7 +77,7 @@ exports.deleteEducation = async (req, res) => {
   try {
     const { userId, educationId } = req.params;
 
-    const profile = await UserProfile.findOneAndUpdate(
+    const profile = await UserCurricluam.findOneAndUpdate(
       { userId },
       { $pull: { education: { _id: educationId } } },
       { new: true }
@@ -101,7 +102,7 @@ exports.addExperience = async (req, res) => {
       if (!userId || !experienceData)
       return res.status(400).json({ message: "User ID and exprience data required" });
     console.log(experienceData)
-    const profile = await UserProfile.findOneAndUpdate(
+    const profile = await UserCurricluam.findOneAndUpdate(
       { userId },
       { $push: { experience: experienceData } },
       { new: true, upsert: true }
@@ -118,7 +119,7 @@ exports.updateExperience = async (req, res) => {
     const { userId, experienceId } = req.params;
     const updatedData = req.body;
 
-    const profile = await UserProfile.findOneAndUpdate(
+    const profile = await UserCurricluam.findOneAndUpdate(
       { userId, "experience._id": experienceId },
       { $set: { "experience.$": updatedData } },
       { new: true }
@@ -136,7 +137,7 @@ exports.updateExperience = async (req, res) => {
 exports.deleteExperience = async (req, res) => {
   try {
     const { userId, experienceId } = req.params;
-    const profile = await UserProfile.findOneAndUpdate(
+    const profile = await UserCurricluam.findOneAndUpdate(
       { userId },
       { $pull: { experience: { _id: experienceId } } },
       { new: true }
@@ -155,7 +156,7 @@ exports.deleteExperience = async (req, res) => {
 exports.addSkill = async (req, res) => {
   try {
     const { userId, skillData } = req.body;
-    const profile = await UserProfile.findOneAndUpdate(
+    const profile = await UserCurricluam.findOneAndUpdate(
       { userId },
       { $push: { skills: skillData } },
       { new: true, upsert: true }
@@ -172,7 +173,7 @@ exports.updateSkill = async (req, res) => {
     const { userId, skillId } = req.params;
     const updatedData = req.body;
 
-    const profile = await UserProfile.findOneAndUpdate(
+    const profile = await UserCurricluam.findOneAndUpdate(
       { userId, "skills._id": skillId },
       { $set: { "skills.$": updatedData } },
       { new: true }
@@ -190,7 +191,7 @@ exports.updateSkill = async (req, res) => {
 exports.deleteSkill = async (req, res) => {
   try {
     const { userId, skillId } = req.params;
-    const profile = await UserProfile.findOneAndUpdate(
+    const profile = await UserCurricluam.findOneAndUpdate(
       { userId },
       { $pull: { skills: { _id: skillId } } },
       { new: true }
@@ -209,7 +210,7 @@ exports.deleteSkill = async (req, res) => {
 exports.addCertification = async (req, res) => {
   try {
     const { userId, certificationData } = req.body;
-    const profile = await UserProfile.findOneAndUpdate(
+    const profile = await UserCurricluam.findOneAndUpdate(
       { userId },
       { $push: { certifications: certificationData } },
       { new: true, upsert: true }
@@ -232,7 +233,7 @@ exports.updateCertification = async (req, res) => {
         .json({ message: "User ID and certification ID are required" });
     }
 
-    const profile = await UserProfile.findOneAndUpdate(
+    const profile = await UserCurricluam.findOneAndUpdate(
       { userId, "certifications._id": certificationId },
       { $set: { "certifications.$": updatedData } },
       { new: true }
@@ -256,7 +257,7 @@ exports.updateCertification = async (req, res) => {
 exports.deleteCertification = async (req, res) => {
   try {
     const { userId, certificationId } = req.params;
-    const profile = await UserProfile.findOneAndUpdate(
+    const profile = await UserCurricluam.findOneAndUpdate(
       { userId },
       { $pull: { certifications: { _id: certificationId } } },
       { new: true }
@@ -275,7 +276,7 @@ exports.deleteCertification = async (req, res) => {
 exports.getFullProfile = async (req, res) => {
   try {
     const userId =req.Id;
-    const profile = await UserProfile.findOne({ userId }).populate("userId", "name email role");
+    const profile = await UserCurricluam.findOne({ userId }).populate("userId", "name email role");
 
     if (!profile) return res.status(404).json({ message: "Profile not found" });
 
@@ -285,3 +286,95 @@ exports.getFullProfile = async (req, res) => {
     res.status(500).json({ message: "Server error", error });
   }
 };
+
+
+
+
+
+
+// ✅ Create or Update Project
+exports.addOrUpdateProject = async (req, res) => {
+  try {
+    const userId = req.Id;
+    const projectData = req.body ;
+
+    // ✅ Find user profile first
+    let userProfile = await UserCurricluam.findOne({ userId });
+    if (!userProfile) {
+      return res.status(404).json({ error: "User profile not found" });
+    }
+
+    // ✅ Update if project ID exists
+    if (projectData._id) {
+      const projectIndex = userProfile.projects.findIndex(
+        (p) => p._id.toString() === projectData._id
+      );
+
+      if (projectIndex === -1) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      userProfile.projects[projectIndex] = {
+        ...userProfile.projects[projectIndex]._doc,
+        ...projectData,
+      };
+    } else {
+      // ✅ Add new project
+      userProfile.projects.push({ ...projectData, userId });
+    }
+
+    await userProfile.save();
+
+    res.json({ success: true, projects: userProfile.projects });
+  } catch (error) {
+    console.error("Error in addOrUpdateProject:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/* ✅ Get all Projects for Logged-in User */
+exports.getUserProjects = async (req, res) => {
+  try {
+    const userId = req.Id;
+    const userProfile = await UserCurricluam.findOne({ userId }).select("projects");
+
+    if (!userProfile) {
+      return res.status(404).json({ error: "User profile not found" });
+    }
+
+    res.json({
+      success: true,
+      projects: userProfile.projects.sort(
+        (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
+      ),
+    });
+  } catch (error) {
+    console.error("Error in getUserProjects:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/* ✅ Delete a Project (Embedded in user profile) */
+exports.deleteProject = async (req, res) => {
+  try {
+    const userId = req.Id;
+    const { projectId } = req.params;
+
+    const userProfile = await UserCurricluam.findOne({ userId });
+    if (!userProfile) {
+      return res.status(404).json({ error: "User profile not found" });
+    }
+
+    userProfile.projects = userProfile.projects.filter(
+      (p) => p._id.toString() !== projectId
+    );
+
+    await userProfile.save();
+
+    res.json({ success: true, message: "Project deleted successfully" });
+  } catch (error) {
+    console.error("Error in deleteProject:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+

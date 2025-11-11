@@ -1,6 +1,7 @@
 const Users=require("../../models/userModels/userModel");
 const ProfileSettings= require("../../models/profileSettingModel");
 const UserProfile =require("../../models/userModels/UserEductionSchema/userFullCuricluamSchema");
+const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
 
 // ✅ controllers/profileController.js
 exports.togglePublish = async (req, res) => {
@@ -58,50 +59,72 @@ exports.getPublicResume = async (req, res) => {
 // ✅ controllers/resumeController.js
 exports.getPublicPortfolio = async (req, res) => {
   try {
-    // 🔹 Get userId from JWT (Auth middleware should set req.Id)
-    const userId = req.Id;
-    if (!userId)
-      return res.status(401).json({ success: false, message: "Unauthorized access" });
+    // 🔹 Get username from URL params
+    const { username } = req.params;
 
-    // 🔹 Fetch basic user data
-    const user = await Users.findById(userId).select(
+    if (!username) {
+      return res.status(400).json({
+        success: false,
+        message: "Username is required in the request parameters",
+      });
+    }
+
+    // 🔹 Find user by username (case-insensitive match)
+    const user = await Users.findOne({ userName: new RegExp(`^${username}$`, "i") }).select(
       "_id userName displayName email phoneNumber"
     );
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-    // 🔹 Fetch published profile settings
-    const profile = await ProfileSettings.findOne({ userId }).lean();
-    if (!profile || !profile.isPublished)
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // 🔹 Fetch published profile settings for the user
+    const profile = await ProfileSettings.findOne({ userId: user._id }).lean();
+    if (!profile || !profile.isPublished) {
       return res.status(403).json({
         success: false,
-        message: "Profile is not published or unavailable",
+        message: "This user's profile is not published or unavailable",
       });
+    }
 
     // 🔹 Fetch detailed resume/user profile info
-    const fullProfile = await UserProfile.findOne({ userId })
+    const fullProfile = await UserProfile.findOne({ userId: user._id })
       .populate("userId", "displayName email phoneNumber")
       .lean();
 
-    // 🔹 Combine data
-    const resumeData = {
+    // 🔹 Merge all data
+    const portfolioData = {
       ...profile,
       ...fullProfile,
       user,
     };
 
-    // 🔹 Respond
+
+     await logUserActivity({
+                userId:user._id,
+                actionType: "VIEW_PORTFOLIO",
+                targetId: user._id,
+                targetModel: "UserCurricluam",
+                metadata: { platform: "web" },
+              });
+
+    // 🔹 Success response
     res.status(200).json({
       success: true,
-      data: resumeData,
-      message: "Public resume fetched successfully",
+      data: portfolioData,
+      message: "Public portfolio fetched successfully",
     });
   } catch (error) {
-    console.error("❌ getPublicResume error:", error);
+    console.error("❌ getPublicPortfolio error:", error);
     res.status(500).json({
       success: false,
-      message: "Server error while fetching resume",
+      message: "Server error while fetching public portfolio",
       error: error.message,
     });
   }
 };
+
 

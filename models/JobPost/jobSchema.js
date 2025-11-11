@@ -8,15 +8,15 @@ const JobPostSchema = new mongoose.Schema(
       required: true,
     },
 
-    role: { type: String, trim: true }, // main role field
-    jobRole: { type: String, trim: true }, // added to support separate job role
-    experience:{type:Number,default:0},
+    role: { type: String, trim: true },
+    jobRole: { type: String, trim: true },
+    experience: { type: Number, default: 0 },
     title: { type: String, trim: true },
     description: { type: String },
     companyName: { type: String },
-    location: { type: String},
-    category: { type: String},
-    keyword: { type: String, trim: true }, // additional SEO keyword field
+    location: { type: String },
+    category: { type: String },
+    keyword: { type: String, trim: true },
 
     jobType: {
       type: String,
@@ -26,15 +26,19 @@ const JobPostSchema = new mongoose.Schema(
 
     salaryRange: { type: String },
 
-    image: { type: String }, 
+    image: { type: String },
 
-    startDate: { type: Date},
-    endDate: { type: Date },
+    startDate: { type: Date },
+
+    // ✅ Automatically delete job after this date (TTL index)
+    endDate: {
+      type: Date,
+      index: { expireAfterSeconds: 0 }, // 🔥 TTL index: delete when date passes
+    },
 
     isPaid: { type: Boolean, default: false },
     priorityScore: { type: Number, default: 0 },
 
-    // --- Engagement tracking ---
     stats: {
       views: { type: Number, default: 0 },
       likes: { type: Number, default: 0 },
@@ -44,33 +48,30 @@ const JobPostSchema = new mongoose.Schema(
       engagementScore: { type: Number, default: 0 },
     },
 
-    // --- Status tracking ---
     status: {
       type: String,
       enum: ["active", "inactive", "expired", "blocked", "draft"],
       default: "active",
     },
 
-    // --- Moderation ---
     isApproved: { type: Boolean, default: true },
     reasonForBlock: { type: String },
 
-    // --- Localization / Language ---
     language: { type: String, default: "en" },
 
-    // --- SEO / Tags ---
     tags: [
       {
         type: String,
         trim: true,
-        set: (v) => (v ? v.charAt(0).toUpperCase() + v.slice(1).toLowerCase() : v),
+        set: (v) =>
+          v ? v.charAt(0).toUpperCase() + v.slice(1).toLowerCase() : v,
       },
     ],
   },
   { timestamps: true }
 );
 
-// Expire job automatically after endDate
+// ✅ Mark as expired before deletion
 JobPostSchema.pre("save", function (next) {
   if (this.endDate && this.endDate < new Date()) {
     this.status = "expired";

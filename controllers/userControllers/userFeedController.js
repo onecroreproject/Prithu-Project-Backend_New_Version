@@ -346,34 +346,45 @@ exports.fetchUserLiked = async (req, res) => {
     const { userId } = req.params;
     const { startDate, endDate, type } = req.query;
 
-    // Fetch user liked feeds
-    const actions = await UserFeedActions.findOne({ userId })
-      .populate("likedFeeds.feedId", "type category language contentUrl");
-     
-    if (!actions) {
-      return res.status(200).json({ success: true, likedFeeds: [] });
-    }
+    // Optimized: Use aggregation to filter and fetch liked feeds with feed details
+    const pipeline = [
+      { $match: { userId: mongoose.Types.ObjectId(userId) } },
+      { $unwind: "$likedFeeds" },
+      {
+        $lookup: {
+          from: "Feed",
+          localField: "likedFeeds.feedId",
+          foreignField: "_id",
+          as: "feedDetails",
+          pipeline: [{ $project: { type: 1, category: 1, language: 1, contentUrl: 1 } }]
+        }
+      },
+      { $unwind: "$feedDetails" },
+      {
+        $match: {
+          ...(type && type !== "all" && { "feedDetails.type": type }),
+          ...(startDate || endDate ? {
+            "likedFeeds.likedAt": {
+              ...(startDate && { $gte: new Date(startDate) }),
+              ...(endDate && { $lte: new Date(endDate) })
+            }
+          } : {})
+        }
+      },
+      {
+        $project: {
+          feedId: "$feedDetails._id",
+          type: "$feedDetails.type",
+          category: "$feedDetails.category",
+          language: "$feedDetails.language",
+          contentUrl: "$feedDetails.contentUrl",
+          likedAt: "$likedFeeds.likedAt"
+        }
+      },
+      { $sort: { likedAt: -1 } }
+    ];
 
-    let likedFeeds = actions.likedFeeds || [];
-
-    // Filter by type if specified (image/video)
-    if (type && type !== "all") {
-      likedFeeds = likedFeeds.filter(
-        (item) => item.feedId?.type === type
-      );
-    }
-
-    // Filter by date range if specified
-    if (startDate || endDate) {
-      likedFeeds = likedFeeds.filter((item) => {
-        const likedAt = new Date(item.likedAt);
-        if (startDate && likedAt < new Date(startDate)) return false;
-        if (endDate && likedAt > new Date(endDate)) return false;
-        return true;
-      });
-    }
-
-console.log(likedFeeds)
+    const likedFeeds = await UserFeedActions.aggregate(pipeline);
 
     res.status(200).json({
       success: true,
@@ -525,48 +536,59 @@ exports.getUserAnalyticsSummary = async (req, res) => {
       return res.status(400).json({ success: false, message: "User ID required" });
     }
 
-    // Fetch all data in parallel for speed
-    const [user, feedActions, userCategory, followerData] = await Promise.all([
-      User.findById(userId).select("hiddenPostIds"),
-      UserFeedActions.findOne({ userId }),
-      UserCategory.findOne({ userId }),
-      Follower.findOne({ userId }),
+    // Optimized: Single aggregation pipeline to count all metrics
+    const [result] = await UserFeedActions.aggregate([
+      { $match: { userId: mongoose.Types.ObjectId(userId) } },
+      {
+        $lookup: {
+          from: "User",
+          localField: "userId",
+          foreignField: "_id",
+          as: "user",
+          pipeline: [{ $project: { hiddenPostIds: 1 } }]
+        }
+      },
+      {
+        $lookup: {
+          from: "UserCategories",
+          localField: "userId",
+          foreignField: "userId",
+          as: "userCategory",
+          pipeline: [{ $project: { interestedCategories: 1, nonInterestedCategories: 1 } }]
+        }
+      },
+      {
+        $lookup: {
+          from: "UserFollowings",
+          localField: "userId",
+          foreignField: "userId",
+          as: "followerData",
+          pipeline: [{ $project: { followerIds: 1, blockedIds: 1 } }]
+        }
+      },
+      {
+        $project: {
+          liked: { $size: { $ifNull: ["$likedFeeds", []] } },
+          saved: { $size: { $ifNull: ["$savedFeeds", []] } },
+          downloaded: { $size: { $ifNull: ["$downloadedFeeds", []] } },
+          shared: { $size: { $ifNull: ["$sharedFeeds", []] } },
+          interested: { $size: { $ifNull: ["$userCategory.interestedCategories", []] } },
+          notInterested: { $size: { $ifNull: ["$userCategory.nonInterestedCategories", []] } },
+          hidden: { $size: { $ifNull: ["$user.hiddenPostIds", []] } },
+          following: { $size: { $ifNull: ["$followerData.followerIds", []] } },
+          blocked: { $size: { $ifNull: ["$followerData.blockedIds", []] } }
+        }
+      }
     ]);
 
-    if (!user && !feedActions && !userCategory && !followerData) {
+    if (!result) {
       return res.status(404).json({ success: false, message: "No user data found" });
     }
-
-    // Extract and count everything safely
-    const totalLiked = feedActions?.likedFeeds?.length || 0;
-    const totalSaved = feedActions?.savedFeeds?.length || 0;
-    const totalDownloaded = feedActions?.downloadedFeeds?.length || 0;
-    const totalShared = feedActions?.sharedFeeds?.length || 0;
-
-    const totalInterested = userCategory?.interestedCategories?.length || 0;
-    const totalNonInterested = userCategory?.nonInterestedCategories?.length || 0;
-
-    const totalHidden = user?.hiddenPostIds?.length || 0;
-    const totalFollowing = followerData?.followerIds?.length || 0;
-    const totalBlocked = followerData?.blockedIds?.length || 0;
-
-    // Combine all counts
-    const summary = {
-      liked: totalLiked,
-      saved: totalSaved,
-      downloaded: totalDownloaded,
-      shared: totalShared,
-      interested: totalInterested,
-      notInterested: totalNonInterested,
-      hidden: totalHidden,
-      following: totalFollowing,
-      blocked: totalBlocked,
-    };
 
     return res.status(200).json({
       success: true,
       message: "User analytics summary fetched successfully",
-      summary,
+      summary: result,
     });
 
   } catch (error) {
@@ -581,6 +603,10 @@ exports.getUserAnalyticsSummary = async (req, res) => {
 
 
 
+// In-memory cache for profile data (simple Map-based cache)
+const profileCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // Assuming you have a middleware that sets req.userId from the token
 exports.getUserdetailWithinTheFeed = async (req, res) => {
   try {
@@ -589,6 +615,16 @@ exports.getUserdetailWithinTheFeed = async (req, res) => {
 
     if (!profileUserId || !roleRef) {
       return res.status(400).json({ message: "profileUserId and roleRef are required" });
+    }
+
+    // Check cache first
+    const cacheKey = `${profileUserId}-${roleRef}`;
+    const cached = profileCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return res.json({
+        success: true,
+        profile: cached.data,
+      });
     }
 
     // Determine the field to query based on roleRef
@@ -611,20 +647,25 @@ exports.getUserdetailWithinTheFeed = async (req, res) => {
     const creatorFollowerCount = creatorFollowerDoc ? creatorFollowerDoc.followerIds.length : 0;
 
     // Check if current user is following this profile
-    const isFollowing = followerDoc 
-      ? followerDoc.followingIds.some(f => f.userId.toString() === currentUserId) 
+    const isFollowing = followerDoc
+      ? followerDoc.followingIds.some(f => f.userId.toString() === currentUserId)
       : false;
+
+    const profileData = {
+      userName: profile.userName,
+      profileAvatar: profile.profileAvatar,
+      bio: profile.bio,
+      followingCount,
+      creatorFollowerCount,
+      isFollowing,
+    };
+
+    // Cache the result
+    profileCache.set(cacheKey, { data: profileData, timestamp: Date.now() });
 
     return res.json({
       success: true,
-      profile: {
-        userName: profile.userName,
-        profileAvatar: profile.profileAvatar,
-        bio: profile.bio,
-        followingCount,
-        creatorFollowerCount,
-        isFollowing,
-      }
+      profile: profileData,
     });
 
   } catch (error) {
@@ -647,18 +688,39 @@ exports.getUserPost = async (req, res) => {
 
     const creatorId = userId;
 
-    // ✅ Run feed fetching and count in parallel
-    const [feeds, feedCount] = await Promise.all([
-      Feed.find(
-        { createdByAccount: creatorId },
-        { contentUrl: 1, createdAt: 1 }
-      )
-        .sort({ createdAt: -1 })
-        .lean(),
-      Feed.countDocuments({ createdByAccount: creatorId })
+    // Optimized: Single aggregation pipeline to fetch feeds with like counts
+    const result = await Feed.aggregate([
+      { $match: { createdByAccount: mongoose.Types.ObjectId(creatorId) } },
+      { $sort: { createdAt: -1 } },
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: "$likedFeeds" },
+            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$feedId"] } } },
+            { $count: "likeCount" }
+          ],
+          as: "likeData"
+        }
+      },
+      {
+        $addFields: {
+          likeCount: { $ifNull: [{ $arrayElemAt: ["$likeData.likeCount", 0] }, 0] },
+          timeAgo: { $function: { body: feedTimeCalculator.toString(), args: ["$createdAt"], lang: "js" } }
+        }
+      },
+      {
+        $project: {
+          feedId: "$_id",
+          contentUrl: 1,
+          timeAgo: 1,
+          likeCount: 1
+        }
+      }
     ]);
 
-    if (!feeds || feeds.length === 0) {
+    if (!result || result.length === 0) {
       return res.status(404).json({
         message: "No feeds found for this creator",
         feedCount: 0,
@@ -666,39 +728,10 @@ exports.getUserPost = async (req, res) => {
       });
     }
 
-    // ✅ Get feedIds for like count lookup
-    const feedIds = feeds.map(feed => feed._id);
-
-    // ✅ Aggregate like counts for each feed
-    const likeCounts = await UserFeedActions.aggregate([
-      { $unwind: "$likedFeeds" },
-      { $match: { "likedFeeds.feedId": { $in: feedIds } } },
-      {
-        $group: {
-          _id: "$likedFeeds.feedId",
-          count: { $sum: 1 },
-        },
-      },
-    ]);
-
-    // Convert to a lookup map for faster access
-    const likeCountMap = {};
-    likeCounts.forEach(item => {
-      likeCountMap[item._id.toString()] = item.count;
-    });
-
-    // ✅ Format feeds with like count + time ago
-    const feedsFormatted = feeds.map(feed => ({
-      feedId: feed._id,
-      contentUrl: feed.contentUrl,
-      timeAgo: feedTimeCalculator(feed.createdAt),
-      likeCount: likeCountMap[feed._id.toString()] || 0,
-    }));
-
     return res.status(200).json({
       message: "Creator feeds retrieved successfully",
-      feedCount,
-      feeds: feedsFormatted,
+      feedCount: result.length,
+      feeds: result,
     });
 
   } catch (error) {

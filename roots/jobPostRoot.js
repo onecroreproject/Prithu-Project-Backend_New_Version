@@ -12,6 +12,7 @@ router.get("/user/get/all",getAllJobs);
 router.get("/get/job/:id", getJobById);
 router.delete("/delete/jobs/:jobId",auth,deleteJobPost);
 router.get("/get/jobs/by/userId",auth,getJobsByUserId);
+router.get("/get/jobs/by/userId/params",getJobsByUserId);
 router.get("/top/ranked/jobs", getRankedJobs);
 
 //User Action API

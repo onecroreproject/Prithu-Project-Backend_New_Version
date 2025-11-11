@@ -16,6 +16,8 @@ const ProfileVisibility = require("../../models/profileVisibilitySchema");
 const Feed =require("../../models/feedModel");
 const {calculateProfileCompletion} =require("../../middlewares/helper/profileCompletionCalulator");
 const ProfileSettings=require("../../models/profileSettingModel");
+const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
+const Follower=require("../../models/creatorFollowerModel.js");
 
 
 
@@ -161,6 +163,13 @@ exports.userProfileDetailUpdate = async (req, res) => {
     if (userName) {
       await User.findByIdAndUpdate(userId, { $set: { userName } }, { new: true });
     }
+ await logUserActivity({
+                userId,
+                actionType: "UPDATE_PROFILE",
+                targetId:userId,
+                targetModel: "Feed",
+                metadata: { platform: "web" },
+              });
 
     // ✅ Populate updated profile
     const populatedProfile = await Profile.findById(updatedProfile._id)
@@ -1114,6 +1123,128 @@ exports.getProfileOverview = async (req, res) => {
     console.error("❌ Error fetching profile overview:", error);
     return res.status(500).json({
       message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+
+
+
+
+exports.getProfileByUsername = async (req, res) => {
+  try {
+    const { username } = req.params;
+    const viewerId = req.user?.id || null; // optional: authenticated viewer
+
+    if (!username || typeof username !== "string") {
+      return res.status(400).json({ success: false, message: "Invalid username." });
+    }
+
+    // 🔹 Find the profile by username
+    const profile = await ProfileSettings.findOne({ userName: username })
+      .populate("visibility") // get visibility reference
+      .populate("userId", "email createdAt")
+      .lean();
+
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        message: "User profile not found.",
+      });
+    }
+
+    // 🔹 Check follow relationship (to allow “followers” visibility)
+    let isFollower = false;
+    if (viewerId) {
+      const creatorFollowers = await CreatorFollower.findOne({ creatorId: profile.userId }).lean();
+      if (creatorFollowers?.followerIds?.some((id) => id.toString() === viewerId)) {
+        isFollower = true;
+      }
+    }
+
+    // 🔹 Helper: check visibility permission
+    const canView = (fieldKey) => {
+      const visibility = profile.visibility?.[fieldKey];
+      if (!visibility || visibility === "public") return true;
+      if (visibility === "followers" && isFollower) return true;
+      return viewerId?.toString() === profile.userId?.toString(); // owner can view all
+    };
+
+    // 🔹 Get follower/following data
+    const [creatorFollowers, followingData] = await Promise.all([
+      Follower.findOne({ creatorId: profile.userId }).lean(),
+      Following.findOne({ userId: profile.userId }).lean(),
+    ]);
+
+    const followerCount = creatorFollowers?.followerIds?.length || 0;
+    const followingCount = followingData?.followingIds?.length || 0;
+
+    // 🔹 Get user feeds (visible to all if public)
+    const userFeeds = await Feed.find({
+      createdByAccount: profile.userId,
+      roleRef: "User",
+      status: "Published",
+    })
+      .populate("category", "name")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // ✅ Apply visibility filter to data
+    const filteredData = {
+      _id: profile._id,
+      userName: canView("userName") ? profile.userName : null,
+      name: canView("name") ? profile.name : null,
+      lastName: canView("lastName") ? profile.lastName : null,
+      bio: canView("bio") ? profile.bio : null,
+      profileSummary: canView("bio") ? profile.profileSummary : null,
+      gender: canView("gender") ? profile.gender : null,
+      maritalStatus: canView("maritalStatus") ? profile.maritalStatus : null,
+      dateOfBirth: canView("dateOfBirth") ? profile.dateOfBirth : null,
+      maritalDate: canView("maritalDate") ? profile.maritalDate : null,
+      phoneNumber: canView("phoneNumber") ? profile.phoneNumber : null,
+      whatsAppNumber: canView("whatsAppNumber") ? profile.whatsAppNumber : null,
+      address: canView("address") ? profile.address : null,
+      city: canView("city") ? profile.city : null,
+      country: canView("country") ? profile.country : null,
+      profileAvatar: canView("profileAvatar") ? profile.profileAvatar : null,
+      coverPhoto: canView("coverPhoto") ? profile.coverPhoto : null,
+      theme: profile.theme,
+      language: profile.language,
+      timezone: profile.timezone,
+      isPublished: profile.isPublished,
+      shareableLink: profile.shareableLink,
+      createdAt: profile.createdAt,
+      updatedAt: profile.updatedAt,
+      followerCount,
+      followingCount,
+      feeds: userFeeds,
+    };
+
+    // 🔹 Filter social links per platform visibility
+    const socialVisibility = profile.visibility?.socialLinks || {};
+    filteredData.socialLinks = {};
+    for (const [platform, value] of Object.entries(profile.socialLinks || {})) {
+      const vis = socialVisibility[platform] || "public";
+      if (vis === "public" || (vis === "followers" && isFollower) || viewerId?.toString() === profile.userId?.toString()) {
+        filteredData.socialLinks[platform] = value;
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile fetched successfully",
+      data: filteredData,
+      permissions: {
+        isFollower,
+        viewerId,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error fetching profile by username:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching user profile",
       error: error.message,
     });
   }

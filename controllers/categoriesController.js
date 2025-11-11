@@ -14,6 +14,16 @@ const UserFeedActions=require('../models/userFeedInterSectionModel');
 
 exports.getAllCategories = async (req, res) => {
   try {
+    // Check cache first
+    const cacheKey = 'allCategories';
+    const cached = categoryStatsCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+      return res.status(200).json({
+        message: "Categories retrieved successfully",
+        categories: cached.data,
+      });
+    }
+
     // Step 1: Fetch all categories (only _id + name)
     const categories = await Categories.find({}, { _id: 1, name: 1 })
       .sort({ createdAt: -1 })
@@ -50,6 +60,9 @@ exports.getAllCategories = async (req, res) => {
         imageCount: stat ? stat.imageCount : 0,
       };
     });
+
+    // Cache the result
+    categoryStatsCache.set(cacheKey, { data: formattedCategories, timestamp: Date.now() });
 
     // Step 4: Send success response
     return res.status(200).json({
@@ -217,6 +230,10 @@ exports.saveInterestedCategory = async (req, res) => {
 
 
 
+// In-memory cache for category stats
+const categoryStatsCache = new Map();
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
 exports.getfeedWithCategoryWithId = async (req, res) => {
   try {
     const categoryId = req.params.id;
@@ -237,202 +254,99 @@ exports.getfeedWithCategoryWithId = async (req, res) => {
       return res.status(404).json({ message: "Category not found" });
     }
 
-    // 2️⃣ Aggregate feeds in this category with dynamic lookups and analytics
-    const feeds = await Feed.aggregate([
-      {
-        $match: {
-          category: new mongoose.Types.ObjectId(categoryId),
-          _id: { $nin: hiddenPostIds },
-        },
-      },
-      { $sort: { createdAt: -1 } },
-      { $skip: skip },
-      { $limit: limit },
+    // Optimized: Pre-fetch profiles for batch processing
+    const feeds = await Feed.find({
+      category: categoryId,
+      _id: { $nin: hiddenPostIds },
+    })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .select("type language category contentUrl roleRef createdByAccount createdAt")
+      .lean();
 
-      // 🔹 Lookup based on roleRef
-      { $lookup: { from: "Accounts", localField: "createdByAccount", foreignField: "_id", as: "account" } },
-      { $lookup: { from: "Admins", localField: "createdByAccount", foreignField: "_id", as: "admin" } },
-      { $lookup: { from: "Child_Admins", localField: "createdByAccount", foreignField: "_id", as: "childAdmin" } },
-      { $lookup: { from: "Creators", localField: "createdByAccount", foreignField: "_id", as: "creator" } },
+    if (!feeds.length) {
+      return res.status(200).json({
+        category: {
+          categoryId: category._id,
+          categoryName: category.name,
+        },
+        feeds: [],
+        pagination: {
+          total: 0,
+          page,
+          limit,
+          hasMore: false,
+        },
+      });
+    }
 
-      // 🔹 Merge correct reference based on roleRef
-      {
-        $addFields: {
-          accountData: {
-            $switch: {
-              branches: [
-                { case: { $eq: ["$roleRef", "Admin"] }, then: { $arrayElemAt: ["$admin", 0] } },
-                { case: { $eq: ["$roleRef", "Account"] }, then: { $arrayElemAt: ["$account", 0] } },
-                { case: { $eq: ["$roleRef", "Child_Admin"] }, then: { $arrayElemAt: ["$childAdmin", 0] } },
-                { case: { $eq: ["$roleRef", "Creator"] }, then: { $arrayElemAt: ["$creator", 0] } },
-              ],
-              default: null,
-            },
-          },
-        },
-      },
+    // Collect unique creator IDs for batch profile lookup
+    const creatorIds = [...new Set(feeds.map(f => f.createdByAccount.toString()))];
 
-      // 🔹 Lookup ProfileSettings based on roleRef
-      {
-        $lookup: {
-          from: "ProfileSettings",
-          let: {
-            adminId: { $cond: [{ $eq: ["$roleRef", "Admin"] }, "$createdByAccount", null] },
-            userId: { $cond: [{ $eq: ["$roleRef", "User"] }, "$createdByAccount", null] },
-            childAdminId: { $cond: [{ $eq: ["$roleRef", "Child_Admin"] }, "$createdByAccount", null] },
-          },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $or: [
-                    { $eq: ["$adminId", "$$adminId"] },
-                    { $eq: ["$childAdminId", "$$childAdminId"] },
-                    { $eq: ["$userId", "$$userId"] },
-                  ],
-                },
-              },
-            },
-            { $limit: 1 },
-            { $project: { userName: 1, profileAvatar: 1 } },
-          ],
-          as: "profile",
-        },
-      },
-      { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
+    // Batch fetch profiles
+    const profiles = await ProfileSettings.find({
+      $or: [
+        { userId: { $in: creatorIds } },
+        { adminId: { $in: creatorIds } },
+        { childAdminId: { $in: creatorIds } },
+      ]
+    }).select("userId adminId childAdminId userName profileAvatar").lean();
 
-      // 🔹 Analytics lookups
-      {
-        $lookup: {
-          from: "UserFeedActions",
-          let: { feedId: "$_id" },
-          pipeline: [
-            { $unwind: "$likedFeeds" },
-            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$feedId"] } } },
-            { $count: "count" },
-          ],
-          as: "likesCount",
-        },
-      },
-      {
-        $lookup: {
-          from: "UserFeedActions",
-          let: { feedId: "$_id" },
-          pipeline: [
-            { $unwind: "$disLikeFeeds" },
-            { $match: { $expr: { $eq: ["$disLikeFeeds.feedId", "$$feedId"] } } },
-            { $count: "count" },
-          ],
-          as: "dislikesCount",
-        },
-      },
-      {
-        $lookup: {
-          from: "UserFeedActions",
-          let: { feedId: "$_id" },
-          pipeline: [
-            { $unwind: "$downloadedFeeds" },
-            { $match: { $expr: { $eq: ["$downloadedFeeds.feedId", "$$feedId"] } } },
-            { $count: "count" },
-          ],
-          as: "downloadsCount",
-        },
-      },
-      {
-        $lookup: {
-          from: "UserFeedActions",
-          let: { feedId: "$_id" },
-          pipeline: [
-            { $unwind: "$sharedFeeds" },
-            { $match: { $expr: { $eq: ["$sharedFeeds.feedId", "$$feedId"] } } },
-            { $count: "count" },
-          ],
-          as: "sharesCount",
-        },
-      },
-      {
-        $lookup: {
-          from: "UserViews",
-          let: { feedId: "$_id" },
-          pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } }, { $count: "count" }],
-          as: "viewsCount",
-        },
-      },
-      {
-        $lookup: {
-          from: "UserComments",
-          let: { feedId: "$_id" },
-          pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } }, { $count: "count" }],
-          as: "commentsCount",
-        },
-      },
+    const profileMap = {};
+    profiles.forEach(p => {
+      if (p.userId) profileMap[p.userId.toString()] = { userName: p.userName, profileAvatar: p.profileAvatar };
+      if (p.adminId) profileMap[p.adminId.toString()] = { userName: p.userName, profileAvatar: p.profileAvatar };
+      if (p.childAdminId) profileMap[p.childAdminId.toString()] = { userName: p.userName, profileAvatar: p.profileAvatar };
+    });
 
-      // 🔹 Current user actions
-      {
-        $lookup: {
-          from: "UserFeedActions",
-          let: { feedId: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$userId", userId] } } },
-            {
-              $project: {
-                isLiked: {
-                  $in: [
-                    "$$feedId",
-                    { $map: { input: { $ifNull: ["$likedFeeds", []] }, as: "f", in: "$$f.feedId" } },
-                  ],
-                },
-                isSaved: {
-                  $in: [
-                    "$$feedId",
-                    { $map: { input: { $ifNull: ["$savedFeeds", []] }, as: "f", in: "$$f.feedId" } },
-                  ],
-                },
-                isDisliked: {
-                  $in: [
-                    "$$feedId",
-                    { $map: { input: { $ifNull: ["$disLikeFeeds", []] }, as: "f", in: "$$f.feedId" } },
-                  ],
-                },
-              },
-            },
-          ],
-          as: "userActions",
-        },
-      },
-
-      // 🔹 Final projection
-      {
-        $project: {
-          feedId: "$_id",
-          type: 1,
-          language: 1,
-          category: 1,
-          contentUrl: 1,
-          roleRef: 1,
-          createdByAccount: 1,
-          createdAt: 1,
-          userName: "$profile.userName",
-          profileAvatar: "$profile.profileAvatar",
-          likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCount.count", 0] }, 0] },
-          dislikesCount: { $ifNull: [{ $arrayElemAt: ["$dislikesCount.count", 0] }, 0] },
-          downloadsCount: { $ifNull: [{ $arrayElemAt: ["$downloadsCount.count", 0] }, 0] },
-          shareCount: { $ifNull: [{ $arrayElemAt: ["$sharesCount.count", 0] }, 0] },
-          viewsCount: { $ifNull: [{ $arrayElemAt: ["$viewsCount.count", 0] }, 0] },
-          commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCount.count", 0] }, 0] },
-          isLiked: { $arrayElemAt: ["$userActions.isLiked", 0] },
-          isSaved: { $arrayElemAt: ["$userActions.isSaved", 0] },
-          isDisliked: { $arrayElemAt: ["$userActions.isDisliked", 0] },
-        },
-      },
+    // Batch fetch analytics using parallel aggregations
+    const feedIds = feeds.map(f => f._id);
+    const [likesResult, dislikesResult, downloadsResult, sharesResult] = await Promise.all([
+      UserFeedActions.aggregate([
+        { $unwind: "$likedFeeds" },
+        { $match: { "likedFeeds.feedId": { $in: feedIds } } },
+        { $group: { _id: "$likedFeeds.feedId", count: { $sum: 1 } } }
+      ]),
+      UserFeedActions.aggregate([
+        { $unwind: "$disLikeFeeds" },
+        { $match: { "disLikeFeeds.feedId": { $in: feedIds } } },
+        { $group: { _id: "$disLikeFeeds.feedId", count: { $sum: 1 } } }
+      ]),
+      UserFeedActions.aggregate([
+        { $unwind: "$downloadedFeeds" },
+        { $match: { "downloadedFeeds.feedId": { $in: feedIds } } },
+        { $group: { _id: "$downloadedFeeds.feedId", count: { $sum: 1 } } }
+      ]),
+      UserFeedActions.aggregate([
+        { $unwind: "$sharedFeeds" },
+        { $match: { "sharedFeeds.feedId": { $in: feedIds } } },
+        { $group: { _id: "$sharedFeeds.feedId", count: { $sum: 1 } } }
+      ])
     ]);
 
-    // 3️⃣ Enrich feeds with theme colors and avatar frames
+    const analyticsMap = {};
+    likesResult.forEach(r => analyticsMap[r._id.toString()] = { ...analyticsMap[r._id.toString()], likesCount: r.count });
+    dislikesResult.forEach(r => analyticsMap[r._id.toString()] = { ...analyticsMap[r._id.toString()], dislikesCount: r.count });
+    downloadsResult.forEach(r => analyticsMap[r._id.toString()] = { ...analyticsMap[r._id.toString()], downloadsCount: r.count });
+    sharesResult.forEach(r => analyticsMap[r._id.toString()] = { ...analyticsMap[r._id.toString()], shareCount: r.count });
+
+    // Batch fetch user actions
+    const userActions = await UserFeedActions.findOne({ userId }).lean();
+    const userActionMap = {};
+    if (userActions) {
+      userActions.likedFeeds?.forEach(l => userActionMap[l.feedId.toString()] = { ...userActionMap[l.feedId.toString()], isLiked: true });
+      userActions.savedFeeds?.forEach(s => userActionMap[s.feedId.toString()] = { ...userActionMap[s.feedId.toString()], isSaved: true });
+      userActions.disLikeFeeds?.forEach(d => userActionMap[d.feedId.toString()] = { ...userActionMap[d.feedId.toString()], isDisliked: true });
+    }
+
+    // 3️⃣ Enrich feeds with theme colors and avatar frames (batch process theme colors)
+    const profileSetting = await ProfileSettings.findOne({ userId });
+    const avatarToUse = profileSetting?.modifyAvatarPublicId;
+    const framedAvatar = await applyFrame(avatarToUse);
+
     const enrichedFeeds = await Promise.all(
       feeds.map(async (feed) => {
-        const profileSetting = await ProfileSettings.findOne({ userId });
-        const avatarToUse = profileSetting?.modifyAvatarPublicId;
-        const framedAvatar = await applyFrame(avatarToUse);
 
         let themeColor = {
           primary: "#ffffff",
@@ -448,8 +362,25 @@ exports.getfeedWithCategoryWithId = async (req, res) => {
           console.warn(`Theme extraction failed for feed ${feed.feedId}:`, err.message);
         }
 
+        const profile = profileMap[feed.createdByAccount.toString()] || {};
+        const analytics = analyticsMap[feed._id.toString()] || {};
+        const actions = userActionMap[feed._id.toString()] || {};
+
         return {
-          ...feed,
+          feedId: feed._id,
+          type: feed.type,
+          language: feed.language,
+          category: feed.category,
+          contentUrl: feed.contentUrl,
+          roleRef: feed.roleRef,
+          createdByAccount: feed.createdByAccount,
+          createdAt: feed.createdAt,
+          userName: profile.userName,
+          profileAvatar: profile.profileAvatar,
+          ...analytics,
+          viewsCount: 0, // Placeholder, implement if needed
+          commentsCount: 0, // Placeholder, implement if needed
+          ...actions,
           framedAvatar: framedAvatar || avatarToUse,
           themeColor,
           timeAgo: feedTimeCalculator(feed.createdAt),

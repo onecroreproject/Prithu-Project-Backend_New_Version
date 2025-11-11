@@ -908,6 +908,47 @@ exports.getTrendingFeeds = async (req, res) => {
 
 
 
+exports.getFeedById = async (req, res) => {
+  try {
+    const { feedId } = req.params;
+
+    // 🧩 Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(feedId)) {
+      return res.status(400).json({ message: "Invalid feed ID" });
+    }
+
+    // 🔍 Find feed by ID and populate optional references
+    const feed = await Feed.findById(feedId)
+      .populate("category", "name")
+      .populate("createdByAccount", "userName profileAvatar roleRef")
+      .lean();
+
+    if (!feed) {
+      return res.status(404).json({ message: "Feed not found" });
+    }
+
+    // ✅ Normalize response
+    res.status(200).json({
+      _id: feed._id,
+      type: feed.type,
+      language: feed.language,
+      category: feed.category?.name || "Uncategorized",
+      contentUrl: feed.contentUrl,
+      caption: feed.dec || "",
+      duration: feed.duration || null,
+      status: feed.status,
+      createdAt: feed.createdAt,
+      createdBy: feed.createdByAccount?.userName || "Unknown",
+      profileAvatar: feed.createdByAccount?.profileAvatar || null,
+    });
+  } catch (err) {
+    console.error("Error fetching feed:", err);
+    res.status(500).json({ message: "Server error fetching feed" });
+  }
+};
+
+
+
 
 
 

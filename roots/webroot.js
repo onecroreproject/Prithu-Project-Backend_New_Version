@@ -30,7 +30,7 @@ const {
   getUserInfoAssociatedFeed,
   getUserHidePost,
   getTrendingFeeds,
-  
+  getFeedById,
 } = require('../controllers/feedControllers/feedsController');
 
 const {
@@ -88,6 +88,7 @@ const {
   getVisibilitySettingsWeb,
   updateFieldVisibilityWeb,
   getProfileCompletion,
+  getProfileByUsername,
   } = require('../controllers/profileControllers/profileController');
 
 const {
@@ -263,6 +264,7 @@ const {getUserEarnings}=require("../controllers/userControllers/userEarningsCont
 
 const {saveUserLocation,
   getUserLocation,
+  getUpcomingEvents,
 }=require("../controllers/userControllers/userLoactionController");
 
 
@@ -291,6 +293,9 @@ const{
   addCertification,
   deleteCertification,
   updateCertification,
+  addOrUpdateProject,
+getUserProjects,
+deleteProject,
 }=require("../controllers/userControllers/userCurriculamController");
 
 
@@ -299,6 +304,14 @@ togglePublish,
 getPublicResume,
 getPublicPortfolio,
 }=require("../controllers/userControllers/userResumeController");
+
+const{
+  getMyActivities,
+}=require("../controllers/userControllers/userActivitController");
+
+const{
+  globalSearch
+}=require("../controllers/searchController");
 
 
 
@@ -436,6 +449,9 @@ router.get('/get/userearnigs/referrals',getUserEarnings);
 /*-----------------------User Location API ---------------------*/
 router.post("/save/user/location",auth,saveUserLocation);
 router.get("/get/user/location",auth,getUserLocation);
+
+
+router.get("/get/upcomming/events",auth,getUpcomingEvents);
 
 
 
@@ -625,11 +641,25 @@ router.put("/user/certification/update/:userId/:certificationId",auth,updateCert
 router.delete("/user/eduction/certification/delete/:userId/:certificationId",auth, deleteCertification);
 
 
+router.post("/user/add/education/project",auth, addOrUpdateProject);
+router.put("/user/update/projects/:projectId",auth,addOrUpdateProject)
+router.delete("/user/delete/projects/:projectId",auth, deleteProject);
+
+
 router.post("/profile/toggle-publish", auth,togglePublish);
 router.get("/public/resume/:username", getPublicResume);
-router.get("/user/portfolio",auth,getPublicPortfolio); 
-            
+router.get("/user/portfolio/:username",getPublicPortfolio); 
 
+
+router.get("/get/user/activity",auth,getMyActivities);
+
+router.get("/get/individual/profile/detail/:username",getProfileByUsername);
+router.post("/individual/user/following", getUserFollowing);
+router.post("/individual/user/followers", getUserFollowers);
+
+router.get("/feed/:feedId", getFeedById);
+            
+router.get("/global/search",globalSearch);
 
 
 router.get("/get/user/birthday", getUpcomingBirthdays);
