@@ -6,6 +6,7 @@ const ProfileSettings = require("../../models/profileSettingModel");
 const {
   createAndSendNotification,
 } = require("../../middlewares/helper/socketNotification");
+const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
  
  
  
@@ -68,6 +69,14 @@ exports.followAccount = async (req, res) => {
     })
       .select("userName profileAvatar")
       .lean();
+
+       await logUserActivity({
+            userId,
+            actionType: "FOLLOW_USER",
+            targetId: userId,
+            targetModel: "Feed",
+            metadata: { platform: "web" },
+          });
 
     // 🔹 4️⃣ Send notification to the followed user
     await createAndSendNotification({
@@ -148,6 +157,15 @@ exports.unFollowAccount = async (req, res) => {
     })
       .select("userName profileAvatar")
       .lean();
+
+
+       await logUserActivity({
+            userId,
+            actionType: "UNFOLLOW_USER",
+            targetId: userId,
+            targetModel: "Feed",
+            metadata: { platform: "web" },
+          });
 
     await createAndSendNotification({
       senderId: currentUserId,

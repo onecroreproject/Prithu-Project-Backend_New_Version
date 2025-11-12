@@ -1,5 +1,6 @@
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 const Location = require("../../models/userModels/userLoactionSchema");
+const axios = require("axios");
 const dotenv = require("dotenv");
 
 dotenv.config();
@@ -129,3 +130,100 @@ exports.getUserLocation = async (req, res) => {
     });
   }
 };
+
+
+
+
+
+
+
+
+
+
+
+exports.getUpcomingEvents = async (req, res) => {
+  try {
+    const userId = req.Id;
+
+    // 🧭 Find user's last known location
+    const location = await Location.findOne({ userId }).sort({ createdAt: -1 });
+    if (!location || !location.latitude || !location.longitude) {
+      return res.status(404).json({
+        success: false,
+        message: "User location not found. Please allow location access.",
+      });
+    }
+
+    const { latitude, longitude } = location;
+
+    // 📆 Time range: now → 6 months ahead (in UTC)
+    const startDate = new Date().toISOString().split(".")[0] + "Z";
+    const endDate = new Date();
+    endDate.setMonth(endDate.getMonth() + 6);
+    const endDateISO = endDate.toISOString().split(".")[0] + "Z";
+
+    // 🎟️ Ticketmaster API Key
+    const apiKey = process.env.TICKETMASTER_API_KEY;
+    if (!apiKey)
+      return res.status(500).json({ error: "Ticketmaster API key missing." });
+
+    // ✅ Correct Ticketmaster Discovery API call
+    const response = await axios.get("https://app.ticketmaster.com/discovery/v2/events.json", {
+      params: {
+        apikey: apiKey,
+        latlong: `${latitude},${longitude}`, // e.g. "12.9716,77.5946"
+        radius: 200, // miles
+        startDateTime: startDate,
+        endDateTime: endDateISO,
+        sort: "date,asc",
+        size: 20,
+      },
+    });
+
+    // 🧩 Handle if no events
+    const events = response.data?._embedded?.events || [];
+    if (!events.length) {
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        message: "No upcoming events found near this location.",
+        events: [],
+      });
+    }
+
+    // 🧩 Format events cleanly
+    const formatted = events.map((event) => ({
+      id: event.id,
+      name: event.name,
+      url: event.url,
+      image: event.images?.[0]?.url || "",
+      date: event.dates?.start?.localDate || "TBA",
+      time: event.dates?.start?.localTime || "",
+      venue: event._embedded?.venues?.[0]?.name || "Unknown Venue",
+      city: event._embedded?.venues?.[0]?.city?.name || "Unknown City",
+      country: event._embedded?.venues?.[0]?.country?.name || "",
+      category: event.classifications?.[0]?.segment?.name || "General",
+    }));
+
+    // ✅ Return structured response
+    res.status(200).json({
+      success: true,
+      count: formatted.length,
+      location: {
+        latitude,
+        longitude,
+        address: location.address,
+      },
+      events: formatted,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching events:", error.response?.data || error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch events",
+      error: error.response?.data || error.message,
+    });
+  }
+};
+

@@ -15,6 +15,7 @@ const HiddenPost=require("../../models/userModels/hiddenPostSchema.js");
 const Feed =require("../../models/feedModel.js");
 const Notification = require("../../models/notificationModel.js");
 const { createAndSendNotification } = require("../../middlewares/helper/socketNotification.js");
+const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
 
 
 
@@ -33,6 +34,15 @@ exports.likeFeed = async (req, res) => {
     });
 
     let updatedDoc, message, isLike;
+
+     // record activity
+    await logUserActivity({
+      userId,
+      actionType: "LIKE_POST",
+      targetId: feedId,
+      targetModel: "Feed",
+      metadata: { platform: "web" },
+    });
 
     if (existingAction) {
       updatedDoc = await UserFeedActions.findOneAndUpdate(
@@ -245,6 +255,14 @@ exports.downloadFeed = async (req, res) => {
     );
     if (!feed) return res.status(404).json({ message: "Feed not found" });
 
+    await logUserActivity({
+      userId,
+      actionType: "DWONLOAD_POST",
+      targetId: feedId,
+      targetModel: "Feed",
+      metadata: { platform: "web" },
+    });
+
     // ✅ Generate proper absolute download link
    
     const downloadLink =
@@ -289,6 +307,14 @@ exports.shareFeed = async (req, res) => {
 
     const feed = await Feeds.findById(feedId).lean();
     if (!feed) return res.status(404).json({ message: "Feed not found" });
+
+    await logUserActivity({
+      userId,
+      actionType: "SHARE_POST",
+      targetId: feedId,
+      targetModel: "Feed",
+      metadata: { platform: "web" },
+    });
 
     const host = `${req.protocol}://${req.get("host")}`;
     const shareUrl = `${host}/feed/${feedId}?ref=${user.referralCode}`;
@@ -336,6 +362,16 @@ exports.postComment = async (req, res) => {
 const feed = await Feeds.findById(feedId)
   .select("createdByAccount contentUrl roleRef")
   .lean();
+
+
+  await logUserActivity({
+      userId,
+      actionType: "COMMENT",
+      targetId: feedId,
+      targetModel: "Feed",
+      metadata: { platform: "web" },
+    });
+
 
 if (feed && feed.createdByAccount.toString() !== userId.toString()) {
   await createAndSendNotification({
@@ -408,6 +444,8 @@ exports.commentLike = async (req, res) => {
       const likerProfile = await ProfileSettings.findOne({ userId })
         .select("userName profileAvatar")
         .lean();
+
+        
 
       // 🔹 Notify comment owner (not self)
       if (comment.userId.toString() !== userId.toString()) {

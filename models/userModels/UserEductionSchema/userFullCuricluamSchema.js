@@ -6,6 +6,7 @@ const educationSchema = require("./userEductionSchema");
 const experienceSchema = require("./UserExprienceSchema");
 const skillSchema = require("./userSkillSchema");
 const certificationSchema = require("./userCertificationSchema");
+const ProjectSchema=require("./userEducationProjectSchema");
 
 const userProfileSchema = new mongoose.Schema(
   {
@@ -23,6 +24,7 @@ const userProfileSchema = new mongoose.Schema(
     experience: [experienceSchema],
     skills: [skillSchema],
     certifications: [certificationSchema],
+    projects:[ProjectSchema],
 
     // Extra profile fields (LinkedIn-style)
     about: { type: String, maxlength: 2000 },

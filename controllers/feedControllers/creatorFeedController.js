@@ -9,6 +9,7 @@ const Categories=require('../../models/categorySchema');
 const mongoose=require("mongoose");
 const { getLanguageCode, getLanguageName } = require("../../middlewares/helper/languageHelper");
 const  feedQueue=require("../../queue/feedPostQueue");
+const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
 
 
 
@@ -91,6 +92,14 @@ exports.creatorFeedUpload = async (req, res) => {
     await Categories.findByIdAndUpdate(categoryId, {
       $addToSet: { feedIds: newFeed._id },
     });
+
+    await logUserActivity({
+                userId,
+                actionType: "CREATE_POST",
+                targetId: newFeed_id,
+                targetModel: "Feed",
+                metadata: { platform: "web" },
+              });
 
     return res.status(201).json({
       message: scheduleDate
@@ -198,6 +207,14 @@ exports.creatorFeedScheduleUpload = async (req, res) => {
             removeOnFail: true,
           }
         );
+
+        await logUserActivity({
+                userId,
+                actionType: "SCHEDULE_POST",
+                targetId: newFeed._id,
+                targetModel: "Feed",
+                metadata: { platform: "web" },
+              });
 
         return res.status(200).json({
           message: "✅ Feed scheduled successfully",
