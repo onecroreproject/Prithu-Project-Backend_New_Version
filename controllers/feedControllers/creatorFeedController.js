@@ -96,7 +96,7 @@ exports.creatorFeedUpload = async (req, res) => {
     await logUserActivity({
                 userId,
                 actionType: "CREATE_POST",
-                targetId: newFeed_id,
+                targetId: newFeed._id,
                 targetModel: "Feed",
                 metadata: { platform: "web" },
               });
