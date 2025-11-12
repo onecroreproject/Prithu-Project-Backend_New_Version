@@ -1,9 +1,10 @@
 const express = require("express");
 const router = express.Router();
-const { createJobPost, getAllJobs, getJobById ,getJobsByUserId,deleteJobPost,getRankedJobs} = require("../controllers/JobController/jobpostController");
+const { createJobPost, getAllJobs, getJobById ,getJobsByUserId,deleteJobPost,getRankedJobs,getAllJobsForAdmin} = require("../controllers/JobController/jobpostController");
 const { updateEngagement, getJobEngagementStats,getUserEngagements} = require("../controllers/JobController/engagementController");
 const upload=require("../middlewares/helper/MulterSetups/jobPostMulterSetup.js");
 const {auth}=require("../middlewares/jwtAuthentication.js")
+const {deleteJob,approveJob}=require("../controllers/ChildAdminControllers/childAdminJobsController.js");
 
 
 // User routes
@@ -22,8 +23,10 @@ router.get("/user/:userId", auth, getUserEngagements);
 
 
 //Admin Roots
-router.get("/admin/get/all", getAllJobs);
+router.get("/admin/get/all", getAllJobsForAdmin);
 router.get("/admin/get/job/:id", getJobById);
+router.post("/childadmin/job/approval",auth,approveJob);
+router.post("/chiladmin/job/delete",auth,deleteJob);
 
 // Engagement
 module.exports = router;
