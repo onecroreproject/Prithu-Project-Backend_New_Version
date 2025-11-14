@@ -265,7 +265,7 @@ exports.getAllJobsForAdmin = async (req, res) => {
 
     const jobs = await JobPost.find(filter)
       .sort({ isPaid: -1, priorityScore: -1, "stats.engagementScore": -1, createdAt: -1 })
-      .populate("postedBy", "name email")
+      .populate("postedBy", "name email ")
       .lean();
 
     // Enhance with profile info
@@ -273,7 +273,7 @@ exports.getAllJobsForAdmin = async (req, res) => {
       jobs.map(async (job) => {
         const profile = await ProfileSettings.findOne(
           { userId: job.postedBy?._id },
-          "userName profileAvatar"
+          "userName profileAvatar phoneNumber"
         ).lean();
 
         return {
@@ -281,6 +281,7 @@ exports.getAllJobsForAdmin = async (req, res) => {
           postedBy: {
             ...job.postedBy,
             userName: profile?.userName || job.postedBy?.name || "Unknown",
+            phoneNumber:profile?.phoneNumber || "Unknown",
             profileAvatar:
               profile?.profileAvatar ||
               "https://cdn-icons-png.flaticon.com/512/149/149071.png",

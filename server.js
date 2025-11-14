@@ -18,14 +18,27 @@ const server = http.createServer(app);
 const io = initSocket(server);
 
 // ✅ CORS: Allow all origins
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://prithu.app/",
+  "http://localhost:5174",
+];
+
 app.use(
   cors({
-    origin: "*", // Allow all origins
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
 
 // Middleware setup
 app.use(express.json());

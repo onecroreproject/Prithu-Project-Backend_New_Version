@@ -6,41 +6,42 @@ const UserFeedActionsSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     accountId: { type: mongoose.Schema.Types.ObjectId, ref: "Account" },
 
-    // ✅ Track likes with timestamp
+    // Track Likes
     likedFeeds: [
       {
-        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed" },
+        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed", index: true },
         likedAt: { type: Date, default: Date.now },
       }
     ],
 
-    // ✅ Track saved feeds with timestamp
+    // Track Saved
     savedFeeds: [
       {
-        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed" },
+        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed", index: true },
         savedAt: { type: Date, default: Date.now },
       },
     ],
 
-    // ✅ Track downloads with timestamp
+    // Track Downloads
     downloadedFeeds: [
       {
-        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed" },
+        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed", index: true },
         downloadedAt: { type: Date, default: Date.now },
       },
     ],
 
-     disLikeFeeds: [
+    // Track Dislikes
+    disLikeFeeds: [
       {
-        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed" },
-        downloadedAt: { type: Date, default: Date.now },
+        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed", index: true },
+        dislikedAt: { type: Date, default: Date.now },
       },
     ],
 
-    // ✅ Track shares with timestamp + channel
+    // Track Shares
     sharedFeeds: [
       {
-        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed" },
+        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed", index: true },
         shareChannel: {
           type: String,
           enum: [
@@ -54,7 +55,7 @@ const UserFeedActionsSchema = new mongoose.Schema(
             "other",
           ],
         },
-        shareTarget: { type: String }, // optional: group, timeline, direct, etc.
+        shareTarget: String,
         sharedAt: { type: Date, default: Date.now },
       },
     ],
@@ -63,21 +64,23 @@ const UserFeedActionsSchema = new mongoose.Schema(
 );
 
 /**
- * ✅ Indexing for performance & uniqueness
- * - Either userId or accountId must be unique separately
+ * UNIQUE INDEXES — ensures 1 document per user
  */
 UserFeedActionsSchema.index({ userId: 1 }, { unique: true, sparse: true });
 UserFeedActionsSchema.index({ accountId: 1 }, { unique: true, sparse: true });
 
+/**
+ * HIGH-PERFORMANCE INDEXES FOR FAST QUERIES
+ * Needed for $lookup performance in feed aggregation
+ */
+UserFeedActionsSchema.index({ "likedFeeds.feedId": 1 });
+UserFeedActionsSchema.index({ "savedFeeds.feedId": 1 });
+UserFeedActionsSchema.index({ "downloadedFeeds.feedId": 1 });
+UserFeedActionsSchema.index({ "disLikeFeeds.feedId": 1 });
+UserFeedActionsSchema.index({ "sharedFeeds.feedId": 1 });
 
 module.exports = mongoose.model(
   "UserFeedActions",
   UserFeedActionsSchema,
   "UserFeedActions"
 );
-
-
-
-
-
-

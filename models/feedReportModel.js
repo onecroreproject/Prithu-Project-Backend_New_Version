@@ -1,60 +1,134 @@
 // models/Report.js
 const mongoose = require("mongoose");
-const {sendMailSafe} = require("../utils/sendMail"); 
+const { sendMailSafe } = require("../utils/sendMail");
 
-const ReportAnswerSchema = new mongoose.Schema({
-  questionId: { type: mongoose.Schema.Types.ObjectId, ref: "ReportQuestion", required: true },
-  questionText: { type: String, required: true },
-  selectedOption: { type: String, required: true },
-});
+// Embedded Answers
+const ReportAnswerSchema = new mongoose.Schema(
+  {
+    questionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ReportQuestion",
+      required: true,
+      index: true, // ⚡ answers lookup faster
+    },
+    questionText: { type: String, required: true, trim: true },
+    selectedOption: { type: String, required: true, trim: true },
+  },
+  { _id: false } // ⚡ reduces document size
+);
 
 const ReportSchema = new mongoose.Schema(
   {
-    typeId: { type: mongoose.Schema.Types.ObjectId, ref: "ReportType", required: true },
-    reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    targetId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed", required: true },
-    targetType: { type: String, enum: ["Feed", "User", "Comment"], required: true },
-    answers: [ReportAnswerSchema],
+    typeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ReportType",
+      required: true,
+      index: true,
+    },
+
+    reportedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+
+    targetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      index: true,
+    },
+
+    targetType: {
+      type: String,
+      enum: ["Feed", "User", "Comment"],
+      required: true,
+      index: true,
+      trim: true,
+    },
+
+    answers: {
+      type: [ReportAnswerSchema],
+      default: [],
+      validate: v => Array.isArray(v) && v.length > 0,
+    },
 
     status: {
       type: String,
       enum: ["Pending", "Reviewed", "Action Taken", "Rejected"],
       default: "Pending",
+      index: true,
     },
-    reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admins", default: null },
-    actionTaken: { type: String, default: null },
-    actionDate: { type: Date, default: null },
 
-    notified: { type: Boolean, default: false },
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admins",
+      default: null,
+    },
+
+    actionTaken: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: 300,
+    },
+
+    actionDate: {
+      type: Date,
+      default: null,
+    },
+
+    notified: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    versionKey: false, // ⚡ remove __v
+    minimize: true, // ⚡ remove empty objects
+  }
 );
 
-// ✅ Hook to send email on status change
+// ⚡ Common query pattern optimization
+ReportSchema.index({ status: 1, actionDate: -1 });
+ReportSchema.index({ reportedBy: 1, status: 1 });
+ReportSchema.index({ targetId: 1, targetType: 1 });
+
+// ---------------------------------------------------------
+// ⚠️ FIXED: No infinite save loop for .post("save")
+// ---------------------------------------------------------
 ReportSchema.post("save", async function (doc) {
   try {
-    if (doc.status !== "Pending" && !doc.notified) {
-      const populatedDoc = await doc.populate("reportedBy", "email username");
+    // Only trigger email if status changed from Pending AND not notified yet
+    if (doc.status === "Pending" || doc.notified) return;
 
-      if (populatedDoc.reportedBy?.email) {
-        const subject = "Your Report Status Has Been Updated";
-        const html = `Hello ${populatedDoc.reportedBy.username},
+    const populatedDoc = await doc.populate("reportedBy", "email username");
 
-Your report regarding ${populatedDoc.targetType} has been updated.
+    if (!populatedDoc.reportedBy?.email) return;
 
-📌 Status: ${populatedDoc.status}
-📌 Action: ${populatedDoc.actionTaken || "N/A"}
-📌 Date: ${populatedDoc.actionDate || new Date().toLocaleString()}
+    // Prepare email content
+    const subject = "Your Report Status Has Been Updated";
+    const html = `Hello ${populatedDoc.reportedBy.username},<br><br>
 
-Thank you,
+Your report regarding <b>${populatedDoc.targetType}</b> has been updated.<br><br>
+
+📌 <b>Status:</b> ${populatedDoc.status}<br>
+📌 <b>Action:</b> ${populatedDoc.actionTaken || "N/A"}<br>
+📌 <b>Date:</b> ${populatedDoc.actionDate || new Date().toLocaleString()}<br><br>
+
+Thank you,<br>
 Support Team`;
 
-        await sendMailSafe({ to: populatedDoc.reportedBy.email, subject, html });
+    // Send email
+    await sendMailSafe({ to: populatedDoc.reportedBy.email, subject, html });
 
-        populatedDoc.notified = true;
-        await populatedDoc.save();
-      }
-    }
+    // ⚡ Direct update, avoids recursive save() loop
+    await mongoose.model("Report").updateOne(
+      { _id: doc._id },
+      { $set: { notified: true } }
+    );
   } catch (err) {
     console.error("❌ Error sending report status mail:", err.message);
   }

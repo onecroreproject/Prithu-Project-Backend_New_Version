@@ -10,25 +10,24 @@ const ProfileSettingsSchema = new mongoose.Schema(
     // Basic Details
     gender: { type: String },
     userName: { type: String },
-    name:{ type: String },
-    lastName:{ type: String },
+    name: { type: String },
+    lastName: { type: String },
     bio: { type: String },
-    profileSummary:{type:String},
+    profileSummary: { type: String },
     dateOfBirth: { type: Date },
     maritalDate: { type: Date },
     maritalStatus: { type: String },
     phoneNumber: { type: Number },
-    whatsAppNumber:{type:Number},
+    whatsAppNumber: { type: Number },
 
     // Location
-    address:{ type: String },
+    address: { type: String },
     country: { type: String },
     city: { type: String },
 
     //Profile Link 
     shareableLink: { type: String },
     isPublished: { type: Boolean, default: false },
-
 
     // Avatar & Cover
     profileAvatar: { type: String },
@@ -70,10 +69,37 @@ const ProfileSettingsSchema = new mongoose.Schema(
     timezone: { type: String, default: "Asia/Kolkata" },
     details: { type: mongoose.Schema.Types.Mixed },
 
-    // Visibility — now stored as reference
+    // Visibility
     visibility: { type: mongoose.Schema.Types.ObjectId, ref: "ProfileVisibility" },
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model("ProfileSettings", ProfileSettingsSchema, "ProfileSettings");
+/* ---------------------------------------------------
+ * 🚀 PERFORMANCE INDEXES (CRITICAL FOR FEED SPEED)
+ * ---------------------------------------------------
+ */
+
+// Used in feed aggregation lookups
+ProfileSettingsSchema.index({ userId: 1 });
+ProfileSettingsSchema.index({ adminId: 1 });
+ProfileSettingsSchema.index({ childAdminId: 1 });
+ProfileSettingsSchema.index({ accountId: 1 });
+
+// Search & sorting
+ProfileSettingsSchema.index({ userName: 1 });
+
+// Public profile discovery
+ProfileSettingsSchema.index({ shareableLink: 1 });
+
+// Filtering visible profiles
+ProfileSettingsSchema.index({ isPublished: 1 });
+
+// Multi-role identification
+ProfileSettingsSchema.index({ userId: 1, adminId: 1, childAdminId: 1 });
+
+module.exports = mongoose.model(
+  "ProfileSettings",
+  ProfileSettingsSchema,
+  "ProfileSettings"
+);
