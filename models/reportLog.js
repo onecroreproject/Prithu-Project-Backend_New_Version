@@ -1,28 +1,67 @@
-const mongoose = require("mongoose"); 
+const mongoose = require("mongoose");
 
 const ReportLogSchema = new mongoose.Schema(
   {
-    reportId: { type: mongoose.Schema.Types.ObjectId, ref: "Report", required: true }, 
+    reportId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Report",
+      required: true,
+      index: true, // ⚡ Logs are usually fetched by reportId
+    },
 
     action: {
       type: String,
-      enum: ["Created", "Reviewed", "Action Taken", "Rejected", "Reopened", "Answered"], // added Answered
       required: true,
+      enum: ["Created", "Reviewed", "Action Taken", "Rejected", "Reopened", "Answered"],
+      index: true, // ⚡ Useful for filtering logs by action type
+      trim: true,
     },
 
-    note: { type: String, default: null }, // optional comment by admin or system
+    note: {
+      type: String,
+      default: null,
+      maxlength: 500, // Avoids huge payload
+      trim: true,
+    },
 
-    performedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // user or admin id
-    performedAt: { type: Date, default: Date.now },
+    performedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      index: true, // ⚡ Often used in audit filtering
+    },
 
-    // ✅ Only used when action = "Answered"
+    performedAt: {
+      type: Date,
+      default: Date.now,
+      index: true, // ⚡ Useful for sorting/filtering logs
+    },
+
+    // Only used when action = "Answered"
     answer: {
-      questionId: { type: mongoose.Schema.Types.ObjectId, ref: "ReportQuestion" },
-      questionText: String,
-      selectedOption: String,
+      questionId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "ReportQuestion",
+      },
+
+      questionText: {
+        type: String,
+        trim: true,
+      },
+
+      selectedOption: {
+        type: String,
+        trim: true,
+      },
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    versionKey: false,  // ⚡ Remove __v
+    minimize: true,     // ⚡ Remove empty objects
+  }
 );
+
+// ⚡ Compound index (most common query pattern)
+ReportLogSchema.index({ reportId: 1, performedAt: -1 });
 
 module.exports = mongoose.model("ReportLog", ReportLogSchema, "ReportLogs");

@@ -18,14 +18,14 @@ const { sendTemplateEmail } = require("../../utils/templateMailer");
 
 exports.createNewUser = async (req, res) => {
   try {
-    const { username, email, password, referralCode,phone,whatsapp } = req.body;
+    const { username, email, password, referralCode, phone, whatsapp, accountType } = req.body;
 
-    // Validate inputs
-    if (!username || !email || !password) {
-      return res.status(400).json({ message: "All fields required" });
+    // ✅ Validate inputs
+    if (!username || !email || !password || !accountType) {
+      return res.status(400).json({ message: "All required fields must be provided" });
     }
 
-    // Check for existing user
+    // ✅ Check for existing user
     const existingUser = await User.findOne({
       $or: [{ email }, { userName: username }],
     }).lean();
@@ -39,25 +39,25 @@ exports.createNewUser = async (req, res) => {
       });
     }
 
-    // Hash password
+    // ✅ Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    //  Generate referral code like ARU234 (3 letters + 3 digits)
-    const letters =
-      username.replace(/\s+/g, "").slice(0, 3).toUpperCase() || "USR";
-    const digits = Math.floor(100 + Math.random() * 900); 
+    // ✅ Generate referral code (e.g., ARU234)
+    const letters = username.replace(/\s+/g, "").slice(0, 3).toUpperCase() || "USR";
+    const digits = Math.floor(100 + Math.random() * 900);
     const generatedCode = `${letters}${digits}`;
 
-    // Create user instance
+    // ✅ Create new user
     const user = new User({
       userName: username,
       email,
       passwordHash,
       referralCode: generatedCode,
       referralCodeIsValid: true,
+      accountType, // ✅ store account type (Personal / Company)
     });
 
-    // If user signed up with a referral
+    // ✅ If referral code provided
     if (referralCode) {
       const parent = await User.findOne({
         referralCode,
@@ -65,9 +65,7 @@ exports.createNewUser = async (req, res) => {
       });
 
       if (!parent) {
-        return res
-          .status(400)
-          .json({ message: "Referral code invalid or inactive" });
+        return res.status(400).json({ message: "Referral code invalid or inactive" });
       }
 
       user.referredByUserId = parent._id;
@@ -84,18 +82,17 @@ exports.createNewUser = async (req, res) => {
       await user.save();
     }
 
-    //Create ProfileSettings for this user
+    // ✅ Create profile settings
     ProfileSettings.create({
       userId: user._id,
       userName: username,
       displayName: username,
-      phoneNumber:phone,
-      whatsAppNumber:whatsapp,
-    }).catch((err) =>
-      console.error("❌ Failed to create ProfileSettings:", err)
-    );
+      phoneNumber: phone,
+      whatsAppNumber: whatsapp,
+      accountType, // ✅ also store here if you want to show in user profile
+    }).catch((err) => console.error("❌ Failed to create ProfileSettings:", err));
 
-    // Send confirmation email (non-blocking)
+    // ✅ Send welcome email
     sendTemplateEmail({
       templateName: "registration-confirmation.html",
       to: email,
@@ -103,23 +100,26 @@ exports.createNewUser = async (req, res) => {
       placeholders: {
         username,
         email,
-        password, 
+        password,
         referralCode: generatedCode,
+        accountType, // optional, if template includes account type
       },
       embedLogo: true,
     }).catch((err) => console.error("❌ Email sending failed:", err));
 
-    // Respond success
+    // ✅ Final response
     res.status(201).json({
-      success:true,
+      success: true,
       message: "User registered successfully",
       referralCode: generatedCode,
+      accountType,
     });
   } catch (err) {
     console.error("❌ Error creating user:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
+
 
 
 

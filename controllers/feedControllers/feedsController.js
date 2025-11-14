@@ -13,38 +13,38 @@ const { applyFrame } = require("../../middlewares/helper/AddFrame/addFrame.js");
 const {extractThemeColor}=require("../../middlewares/helper/extractThemeColor.js");
 const ImageStats = require("../../models/userModels/MediaSchema/imageViewModel.js");
 const VideoStats = require("../../models/userModels/MediaSchema/videoViewStatusModel");
+const cloudinary = require("cloudinary").v2;
+
+
 
 exports.getAllFeedsByUserId = async (req, res) => {
   try {
     const rawUserId = req.Id || req.body.userId;
-    if (!rawUserId)
-      return res.status(404).json({ message: "User ID Required" });
+    if (!rawUserId) return res.status(404).json({ message: "User ID Required" });
 
     const userId = new mongoose.Types.ObjectId(rawUserId);
+    const page = Math.max(1, Number(req.query.page || 1));
+    const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
 
-    // 0️⃣ Get hidden posts for this user
     const user = await User.findById(userId).select("hiddenPostIds").lean();
     const hiddenPostIds = user?.hiddenPostIds || [];
 
-    // 1️⃣ Aggregate feeds
     const feeds = await Feed.aggregate([
       {
         $match: {
           _id: { $nin: hiddenPostIds },
           $or: [
             { isScheduled: { $ne: true } },
-            {
-              $and: [
-                { isScheduled: true },
-                { scheduleDate: { $lte: new Date() } },
-              ],
-            },
+            { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] },
           ],
         },
       },
-      { $sort: { createdAt: -1 } },
 
-      // 🔹 Lookup Admins
+      { $sort: { createdAt: -1 } },
+      { $skip: (page - 1) * limit },
+      { $limit: limit },
+
+      // ========== Admin / Child / User lookup ==========
       {
         $lookup: {
           from: "Admin",
@@ -53,8 +53,6 @@ exports.getAllFeedsByUserId = async (req, res) => {
           as: "admin",
         },
       },
-
-      // 🔹 Lookup Child Admins
       {
         $lookup: {
           from: "Child_Admin",
@@ -63,8 +61,6 @@ exports.getAllFeedsByUserId = async (req, res) => {
           as: "childAdmin",
         },
       },
-
-      // 🔹 Lookup Users
       {
         $lookup: {
           from: "User",
@@ -73,8 +69,6 @@ exports.getAllFeedsByUserId = async (req, res) => {
           as: "user",
         },
       },
-
-      // 🔹 Merge correct reference based on roleRef
       {
         $addFields: {
           accountData: {
@@ -90,20 +84,14 @@ exports.getAllFeedsByUserId = async (req, res) => {
         },
       },
 
-      // 🔹 Lookup ProfileSettings
+      // ========== PROFILE SETTINGS ==========
       {
         $lookup: {
           from: "ProfileSettings",
           let: {
-            adminId: {
-              $cond: [{ $eq: ["$roleRef", "Admin"] }, "$createdByAccount", null],
-            },
-            userId: {
-              $cond: [{ $eq: ["$roleRef", "User"] }, "$createdByAccount", null],
-            },
-            childAdminId: {
-              $cond: [{ $eq: ["$roleRef", "Child_Admin"] }, "$createdByAccount", null],
-            },
+            adminId: { $cond: [{ $eq: ["$roleRef", "Admin"] }, "$createdByAccount", null] },
+            userId: { $cond: [{ $eq: ["$roleRef", "User"] }, "$createdByAccount", null] },
+            childAdminId: { $cond: [{ $eq: ["$roleRef", "Child_Admin"] }, "$createdByAccount", null] },
           },
           pipeline: [
             {
@@ -118,70 +106,107 @@ exports.getAllFeedsByUserId = async (req, res) => {
               },
             },
             { $limit: 1 },
-            { $project: { userName: 1, profileAvatar: 1 } },
+            { $project: { userName: 1, profileAvatar: 1, modifyAvatar: 1 } },
           ],
           as: "profile",
         },
       },
       { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
 
-      // 🔹 Likes
+      // ========== LIKE, DISLIKE, DOWNLOAD, SHARE COUNTS ==========
       {
         $lookup: {
           from: "UserFeedActions",
           let: { feedId: "$_id" },
           pipeline: [
-            { $unwind: "$likedFeeds" },
-            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$feedId"] } } },
-            { $count: "count" },
+            {
+              $project: {
+                count: {
+                  $size: {
+                    $filter: {
+                      input: { $ifNull: ["$likedFeeds", []] },
+                      as: "f",
+                      cond: { $eq: ["$$f.feedId", "$$feedId"] },
+                    },
+                  },
+                },
+              },
+            },
           ],
           as: "likesCount",
         },
       },
 
-      // 🔹 Dislikes
       {
         $lookup: {
           from: "UserFeedActions",
           let: { feedId: "$_id" },
           pipeline: [
-            { $unwind: "$disLikeFeeds" },
-            { $match: { $expr: { $eq: ["$disLikeFeeds.feedId", "$$feedId"] } } },
-            { $count: "count" },
+            {
+              $project: {
+                count: {
+                  $size: {
+                    $filter: {
+                      input: { $ifNull: ["$disLikeFeeds", []] },
+                      as: "f",
+                      cond: { $eq: ["$$f.feedId", "$$feedId"] },
+                    },
+                  },
+                },
+              },
+            },
           ],
           as: "dislikesCount",
         },
       },
 
-      // 🔹 Downloads
       {
         $lookup: {
           from: "UserFeedActions",
           let: { feedId: "$_id" },
           pipeline: [
-            { $unwind: "$downloadedFeeds" },
-            { $match: { $expr: { $eq: ["$downloadedFeeds.feedId", "$$feedId"] } } },
-            { $count: "count" },
+            {
+              $project: {
+                count: {
+                  $size: {
+                    $filter: {
+                      input: { $ifNull: ["$downloadedFeeds", []] },
+                      as: "f",
+                      cond: { $eq: ["$$f.feedId", "$$feedId"] },
+                    },
+                  },
+                },
+              },
+            },
           ],
           as: "downloadsCount",
         },
       },
 
-      // 🔹 Shares
       {
         $lookup: {
           from: "UserFeedActions",
           let: { feedId: "$_id" },
           pipeline: [
-            { $unwind: "$sharedFeeds" },
-            { $match: { $expr: { $eq: ["$sharedFeeds.feedId", "$$feedId"] } } },
-            { $count: "count" },
+            {
+              $project: {
+                count: {
+                  $size: {
+                    $filter: {
+                      input: { $ifNull: ["$sharedFeeds", []] },
+                      as: "f",
+                      cond: { $eq: ["$$f.feedId", "$$feedId"] },
+                    },
+                  },
+                },
+              },
+            },
           ],
           as: "sharesCount",
         },
       },
 
-      // 🔹 Views
+      // ========== VIEWS & COMMENTS ==========
       {
         $lookup: {
           from: "UserViews",
@@ -193,8 +218,6 @@ exports.getAllFeedsByUserId = async (req, res) => {
           as: "viewsCount",
         },
       },
-
-      // 🔹 Comments
       {
         $lookup: {
           from: "UserComments",
@@ -207,7 +230,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
         },
       },
 
-      // 🔹 Current User Actions
+      // ========== CURRENT USER ACTIONS ==========
       {
         $lookup: {
           from: "UserFeedActions",
@@ -219,19 +242,19 @@ exports.getAllFeedsByUserId = async (req, res) => {
                 isLiked: {
                   $in: [
                     "$$feedId",
-                    { $map: { input: { $ifNull: ["$likedFeeds", []] }, as: "f", in: "$$f.feedId" } },
+                    { $map: { input: "$likedFeeds", as: "f", in: "$$f.feedId" } },
                   ],
                 },
                 isSaved: {
                   $in: [
                     "$$feedId",
-                    { $map: { input: { $ifNull: ["$savedFeeds", []] }, as: "f", in: "$$f.feedId" } },
+                    { $map: { input: "$savedFeeds", as: "f", in: "$$f.feedId" } },
                   ],
                 },
                 isDisliked: {
                   $in: [
                     "$$feedId",
-                    { $map: { input: { $ifNull: ["$disLikeFeeds", []] }, as: "f", in: "$$f.feedId" } },
+                    { $map: { input: "$disLikeFeeds", as: "f", in: "$$f.feedId" } },
                   ],
                 },
               },
@@ -241,7 +264,34 @@ exports.getAllFeedsByUserId = async (req, res) => {
         },
       },
 
-      // 🔹 Final projection
+      // ========== FOLLOW LOOKUP ==========
+      {
+        $lookup: {
+          from: "Follows",
+          let: { creatorId: "$createdByAccount" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$creatorId", "$$creatorId"] },
+                    { $eq: ["$followerId", userId] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: "followInfo",
+        },
+      },
+      {
+        $addFields: {
+          isFollowing: { $gt: [{ $size: "$followInfo" }, 0] }
+        }
+      },
+
+      // ========== FINAL OUTPUT ==========
       {
         $project: {
           feedId: "$_id",
@@ -255,41 +305,41 @@ exports.getAllFeedsByUserId = async (req, res) => {
           dec: 1,
           userName: "$profile.userName",
           profileAvatar: "$profile.profileAvatar",
-          isScheduled: 1,
-          scheduleDate: 1,
+          modifyAvatarFromProfile: "$profile.modifyAvatar",
+
           likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCount.count", 0] }, 0] },
           dislikesCount: { $ifNull: [{ $arrayElemAt: ["$dislikesCount.count", 0] }, 0] },
           downloadsCount: { $ifNull: [{ $arrayElemAt: ["$downloadsCount.count", 0] }, 0] },
           shareCount: { $ifNull: [{ $arrayElemAt: ["$sharesCount.count", 0] }, 0] },
           viewsCount: { $ifNull: [{ $arrayElemAt: ["$viewsCount.count", 0] }, 0] },
           commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCount.count", 0] }, 0] },
+
           isLiked: { $arrayElemAt: ["$userActions.isLiked", 0] },
           isSaved: { $arrayElemAt: ["$userActions.isSaved", 0] },
           isDisliked: { $arrayElemAt: ["$userActions.isDisliked", 0] },
+
+          isFollowing: 1,
+
+          themeColor: 1,
         },
       },
     ]);
 
-    // ✅ Enrich with additional info (theme color + avatar)
+    // ========== ENRICH RESPONSE ==========
     const enrichedFeeds = await Promise.all(
       feeds.map(async (feed) => {
-        const profileSetting = await ProfileSettings.findOne({userId });
-        const avatarToUse = profileSetting?.modifyAvatar;
-        //  const framedAvatar = await applyFrame(avatarToUse);
+        const avatarToUse =
+          feed.modifyAvatarFromProfile ||
+          feed.profileAvatar ||
+          process.env.DEFAULT_AVATAR;
 
-        let themeColor = {
-          primary: "#ffffff",
-          secondary: "#cccccc",
-          accent: "#999999",
-          text: "#000000",
-          gradient: "linear-gradient(135deg, #ffffff, #cccccc, #999999)",
+        let themeColor = feed.themeColor || {
+          primary: "#fff",
+          secondary: "#ccc",
+          accent: "#999",
+          text: "#000",
+          gradient: "linear-gradient(135deg,#fff,#ccc,#999)",
         };
-
-        try {
-          themeColor = await extractThemeColor(feed.contentUrl, feed.type);
-        } catch (err) {
-          console.warn(`Theme extraction failed for feed ${feed.feedId}:`, err.message);
-        }
 
         return {
           ...feed,
@@ -303,18 +353,15 @@ exports.getAllFeedsByUserId = async (req, res) => {
     res.status(200).json({
       message: "Feeds retrieved successfully",
       feeds: enrichedFeeds,
+      page,
+      limit,
     });
+
   } catch (err) {
     console.error("Error in getAllFeedsByUserId:", err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
-
-
-
-
-
-
 
 
 
@@ -946,6 +993,104 @@ exports.getFeedById = async (req, res) => {
     res.status(500).json({ message: "Server error fetching feed" });
   }
 };
+
+
+
+
+
+exports.deleteFeed = async (req, res) => {
+    try {
+        const {feedId}  = req.body;
+
+        console.log(req);
+
+        if (!feedId) {
+            return res.status(400).json({
+                success: false,
+                message: "feedId is required in body",
+            });
+        }
+
+        // ---------------------------------------------
+        // 1️⃣ Fetch Feed (needed for cloudinaryId)
+        // ---------------------------------------------
+        const feed = await Feed.findById(feedId).lean(); // lean = faster
+
+        if (!feed) {
+            return res.status(404).json({
+                success: false,
+                message: "Feed not found",
+            });
+        }
+
+        // ---------------------------------------------
+        // 2️⃣ Prepare parallel delete tasks
+        // ---------------------------------------------
+        const deleteTasks = [];
+
+        // Cloudinary delete (non-blocking)
+        if (feed.cloudinaryId) {
+            deleteTasks.push(
+                cloudinary.uploader
+                    .destroy(feed.cloudinaryId)
+                    .catch((err) => console.log("⚠ Cloudinary delete error:", err.message))
+            );
+        }
+
+        // Feed document
+        deleteTasks.push(Feed.findByIdAndDelete(feedId));
+
+        // Comments
+        deleteTasks.push(UserComment.deleteMany({ feedId }));
+
+        // Feed actions
+        deleteTasks.push(
+            UserFeedActions.updateMany(
+                {},
+                {
+                    $pull: {
+                        likedFeeds: { feedId },
+                        savedFeeds: { feedId },
+                        downloadedFeeds: { feedId },
+                        disLikeFeeds: { feedId },
+                        sharedFeeds: { feedId },
+                    },
+                }
+            )
+        );
+
+        // Views
+        deleteTasks.push(UserView.deleteMany({ feedId }));
+
+        // ---------------------------------------------
+        // 3️⃣ Execute all tasks in parallel
+        // ---------------------------------------------
+        await Promise.all(deleteTasks);
+
+        // ---------------------------------------------
+        // 4️⃣ Response
+        // ---------------------------------------------
+        return res.status(200).json({
+            success: true,
+            message: "Feed and all related data deleted successfully",
+        });
+
+    } catch (error) {
+        console.error("❌ Delete Feed Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Server error while deleting feed",
+            error: error.message,
+        });
+    }
+};
+
+
+
+
+
+
+
 
 
 

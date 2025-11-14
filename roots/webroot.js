@@ -31,6 +31,7 @@ const {
   getUserHidePost,
   getTrendingFeeds,
   getFeedById,
+  deleteFeed,
 } = require('../controllers/feedControllers/feedsController');
 
 const {
@@ -376,7 +377,7 @@ router.get('/user/check/active/subcription',auth,checkUserActiveSubscription);
 router.get("/report-questions/start", getStartQuestion);
 router.post("/report-questions/:id", getNextQuestion);
 router.get("/report-types", getReportTypes);
-router.post("/report-post", auth,createFeedReport);
+router.post("/report-post",auth,createFeedReport);
 
 
 /*-------------------------User Session API ---------------------*/
@@ -498,6 +499,7 @@ router.post(
 router.get("/admin/get/all/feed",getAllFeedAdmin);
 
 
+
 /* --------------------- Admin Category API --------------------- */
 router.post('/admin/add/feed/category', adminAddCategory);
 router.delete('/admin/feed/category/:id', deleteCategory);
@@ -537,13 +539,6 @@ router.get("/nonInterested/:userId", fetchUserNonInterested);
 
 
 
-/*-------------------Admin Report API -------------------------*/
-router.post("/admin/add/report/questions",addReportQuestion);
-router.post("/admin/report-type", createReportType);
-router.put("/:reportId/status", updateReportStatus);
-router.get("/:reportId/logs", auth,getReportLogs);
-router.get ('/admin/user/report',getReports);
-router.put("/admin/report/action/update/:reportId",auth,adminTakeActionOnReport);
 
 
 /*---------------------Admin DashBoard API---------------------*/

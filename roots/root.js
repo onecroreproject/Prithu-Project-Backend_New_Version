@@ -30,6 +30,7 @@ const {
   getUserInfoAssociatedFeed,
   getUserHidePost,
   getTrendingFeeds,
+  deleteFeed,
   
 } = require('../controllers/feedControllers/feedsController');
 
@@ -100,7 +101,6 @@ const {
   getUserAnalyticalData,
   getUserLevelWithEarnings,
   getUserProfileDashboardMetricCount,
-  getReports ,
   deleteUserAndAllRelated,
 } = require('../controllers/adminControllers/adminUserControllers');
 
@@ -205,15 +205,10 @@ const{
 
 
 const{
-addReportQuestion,
-createReportType,
 getStartQuestion,
 getNextQuestion,
 getReportTypes,
 createFeedReport,
-updateReportStatus,
-getReportLogs,
-adminTakeActionOnReport,
 }=require('../controllers/adminControllers/userReportController');
 
 const{
@@ -273,6 +268,25 @@ const{
   getUserFollowing,
   getUserFollowers,
 }=require("../WebController/UserController/userFolloweController");
+
+
+const{
+  addReportQuestion,
+getQuestionsByType,
+createReportType,
+adminGetReportTypes,
+updateReportStatus,
+getReportLogs,
+getQuestionById,
+deleteQuestion,
+toggleReportType,
+deleteReportType,
+getReports,
+linkNextQuestion,
+adminTakeActionOnReport,
+getAllQuestions,
+getAllReports
+}=require("../controllers/adminControllers/adminReportController")
 
 
 
@@ -335,9 +349,10 @@ router.get('/user/check/active/subcription',auth,checkUserActiveSubscription);
 
 /*----------------------User Report -----------------------------*/
 router.get("/report-questions/start", getStartQuestion);
-router.post("/report-questions/:id", getNextQuestion);
+router.post("/report-questions/next", getNextQuestion);
 router.get("/report-types", getReportTypes);
-router.post("/report-post", auth,createFeedReport);
+router.post("/report-post", auth, createFeedReport);
+router.get("/report-logs/:reportId", getReportLogs);
 
 
 /*-------------------------User Session API ---------------------*/
@@ -452,7 +467,7 @@ router.post(
 );
 
 router.get("/admin/get/all/feed",getAllFeedAdmin);
-
+router.delete("/delete/feed", deleteFeed);
 
 /* --------------------- Admin Category API --------------------- */
 router.post('/admin/add/feed/category', adminAddCategory);
@@ -493,12 +508,20 @@ router.get("/nonInterested/:userId", fetchUserNonInterested);
 
 
 
-/*-------------------Admin Report API -------------------------*/
+// /*-------------------Admin Report API -------------------------*/
 router.post("/admin/add/report/questions",addReportQuestion);
+router.get("/admin/get/Questions/ByType", getQuestionsByType);
+router.patch("/admin/linkNextQuestion", linkNextQuestion);
+router.get("/admin/get/QuestionById", getQuestionById);
+router.get("/admin/getAllQuestions", getAllQuestions);
 router.post("/admin/report-type", createReportType);
+router.get("/admin/get/ReportTypes", adminGetReportTypes);
+router.patch("/admin/toggleReportType", toggleReportType);
+router.delete("/admin/deleteReportType", deleteReportType);
+router.delete("/admin/deleteQuestion", deleteQuestion);
 router.put("/:reportId/status", updateReportStatus);
 router.get("/:reportId/logs", auth,getReportLogs);
-router.get ('/admin/user/report',getReports);
+router.get ('/admin/user/report',getAllReports);
 router.put("/admin/report/action/update/:reportId",auth,adminTakeActionOnReport);
 
 
@@ -507,7 +530,7 @@ router.get("/admin/dashboard/metricks/counts",getDashboardMetricCount);
 router.get("/admin/users/monthly-registrations",getDashUserRegistrationRatio);
 router.get("/admin/user/subscriptionration",getDashUserSubscriptionRatio)
 
-/* --------------------- Admin Creator API --------------------- */
+// /* --------------------- Admin Creator API --------------------- */
 router.get('/admin/getall/creators', getAllCreatorDetails);
 router.get('/admin/get/user/detail', getUserProfileDetail);
 router.get ('/admin/get/trending/creator',getAllTrendingCreators);

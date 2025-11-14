@@ -1,19 +1,24 @@
 const mongoose = require("mongoose");
 
-const creatorFollowerSchema = new mongoose.Schema({
-  creatorId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  
-  followerIds: [
-    { 
-      type: mongoose.Schema.Types.ObjectId, 
-      ref: "User" 
-    }
-  ],
+const followSchema = new mongoose.Schema({
+  creatorId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: "User",
+    index: true,
+    required: true 
+  },
+
+  followerId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: "User",
+    index: true,
+    required: true
+  },
 
   createdAt: { type: Date, default: Date.now }
 });
 
-// Ensure one document per creator
-creatorFollowerSchema.index({ creatorId: 1 }, { unique: true });
+// 🌟 Unique index — prevents duplicate follow
+followSchema.index({ creatorId: 1, followerId: 1 }, { unique: true });
 
-module.exports = mongoose.model("CreatorFollower", creatorFollowerSchema, "CreatorFollowers");
+module.exports = mongoose.model("Follow", followSchema, "Follows");
