@@ -9,9 +9,9 @@ const ProfileSettingsSchema = new mongoose.Schema(
 
     // Basic Details
     gender: { type: String },
-    userName: { type: String },
-    name: { type: String },
-    lastName: { type: String },
+    userName: { type: String ,index:true},
+    name: { type: String,index:true },
+    lastName: { type: String,index:true },
     bio: { type: String },
     profileSummary: { type: String },
     dateOfBirth: { type: Date },

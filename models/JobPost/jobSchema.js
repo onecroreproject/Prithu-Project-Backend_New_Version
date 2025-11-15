@@ -15,7 +15,7 @@ const JobPostSchema = new mongoose.Schema(
 
     title: { type: String, trim: true, required: true, index: true },
     jobRole: { type: String, trim: true, index: true },
-    role: { type: String, trim: true },
+    role: { type: String, trim: true,index:true },
     description: { type: String, trim: true },
     salary:{type:Number,trim:true},
     companyName: { type: String, trim: true, index: true },
