@@ -20,8 +20,8 @@ const io = initSocket(server);
 // ✅ CORS: Allow all origins
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://prithu.app/",
   "http://localhost:5174",
+  "https://www.prithu.app",   
 ];
 
 app.use(
@@ -30,7 +30,7 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error("Not allowed by CORS"));
+        callback(new Error("Not allowed by CORS: " + origin));
       }
     },
     credentials: true,
@@ -38,6 +38,7 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
 
 
 // Middleware setup
