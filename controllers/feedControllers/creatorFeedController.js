@@ -13,6 +13,13 @@ const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js
 
 
 
+const extractHashtags = (text) => {
+  const regex = /#(\w+)/g;
+  const tags = text?.match(regex);
+  if (!tags) return [];
+  return tags.map(t => t.slice(1).toLowerCase());
+};
+
 exports.creatorFeedUpload = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
@@ -22,7 +29,6 @@ exports.creatorFeedUpload = async (req, res) => {
       return res.status(400).json({ message: "User ID is required" });
     }
 
-    // ✅ Ensure file uploaded to Cloudinary
     if (!req.cloudinaryFile) {
       return res.status(400).json({ message: "No file uploaded to Cloudinary" });
     }
@@ -35,13 +41,15 @@ exports.creatorFeedUpload = async (req, res) => {
         .json({ message: "Language, categoryId, and type are required" });
     }
 
-    // ✅ Normalize language
+    // ✅ Extract hashtags
+    const hashtags = extractHashtags(dec); // <-- FIXED
+
+    // normalize language
     const normalizedLang = getLanguageCode(language);
     if (!normalizedLang) {
       return res.status(400).json({ message: "Invalid language" });
     }
 
-    // ✅ Validate category
     const categoryDoc = await Categories.findById(categoryId).lean();
     if (!categoryDoc) {
       return res.status(400).json({ message: "Invalid categoryId" });
@@ -49,9 +57,8 @@ exports.creatorFeedUpload = async (req, res) => {
 
     const { url, public_id } = req.cloudinaryFile;
     const fileHash = req.fileHash || null;
-    const videoDuration = req.videoDuration || null; // duration from middleware if video
+    const videoDuration = req.videoDuration || null;
 
-    // ✅ Check duplicate by fileHash or URL
     if (fileHash) {
       const existingByHash = await Feed.findOne({ fileHash }).lean();
       if (existingByHash) {
@@ -70,7 +77,7 @@ exports.creatorFeedUpload = async (req, res) => {
       });
     }
 
-    // ✅ Create new feed
+    // ✅ Create new feed with hashtags included
     const newFeed = new Feed({
       type,
       language: normalizedLang,
@@ -83,23 +90,33 @@ exports.creatorFeedUpload = async (req, res) => {
       duration: videoDuration,
       scheduledAt: scheduleDate ? new Date(scheduleDate) : null,
       isPosted: scheduleDate ? false : true,
-      dec: dec || "", // 🆕 description field
+      dec: dec || "",
+      hashtags: hashtags,                
     });
 
     await newFeed.save();
 
-    // ✅ Update category feed list
+    // Update category feed list
     await Categories.findByIdAndUpdate(categoryId, {
       $addToSet: { feedIds: newFeed._id },
     });
 
+    // ---------------------------------------
+    // 🚀 REDIS INCREMENT HASHTAGS (SCALABLE)
+    // ---------------------------------------
+    if (hashtags.length > 0) {
+      hashtags.forEach(tag => {
+        redisClient.hincrby("hashtag_counts", tag, 1);  
+      });
+    }
+
     await logUserActivity({
-                userId,
-                actionType: "CREATE_POST",
-                targetId: newFeed._id,
-                targetModel: "Feed",
-                metadata: { platform: "web" },
-              });
+      userId,
+      actionType: "CREATE_POST",
+      targetId: newFeed._id,
+      targetModel: "Feed",
+      metadata: { platform: "web" },
+    });
 
     return res.status(201).json({
       message: scheduleDate
@@ -110,6 +127,7 @@ exports.creatorFeedUpload = async (req, res) => {
         languageName: getLanguageName(normalizedLang),
       },
     });
+
   } catch (err) {
     console.error("Error creating feed:", err);
 
@@ -124,6 +142,7 @@ exports.creatorFeedUpload = async (req, res) => {
       .json({ message: "Server error", error: err.message });
   }
 };
+
 
  
  

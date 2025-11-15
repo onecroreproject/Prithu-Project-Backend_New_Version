@@ -43,7 +43,7 @@ const feedSchema = new mongoose.Schema(
       },
       text: { type: String, default: "#000000" },
     },
-
+ hashtags: [{ type: String, index: true }],
     // 🔥 Precomputed Stats reference (1 lookup only)
     statsId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -77,5 +77,6 @@ feedSchema.index({ category: 1 });
 feedSchema.index({ isScheduled: 1, scheduleDate: 1 });
 feedSchema.index({ fileHash: 1 });
 feedSchema.index({ language: 1 });
+feedSchema.index({ hashtags: 1 });
 
 module.exports = mongoose.model("Feed", feedSchema, "Feeds");
