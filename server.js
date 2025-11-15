@@ -18,21 +18,9 @@ const server = http.createServer(app);
 const io = initSocket(server);
 
 // ✅ CORS: Allow all origins
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "https://www.prithu.app",   
-];
-
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS: " + origin));
-      }
-    },
+    origin: true, // or origin: "*" for certain setups, but true is recommended with credentials
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
