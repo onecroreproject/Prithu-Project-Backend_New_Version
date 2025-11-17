@@ -10,6 +10,7 @@ const mongoose=require("mongoose");
 const { getLanguageCode, getLanguageName } = require("../../middlewares/helper/languageHelper");
 const  feedQueue=require("../../queue/feedPostQueue");
 const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
+const redisClient=require("../../Config/redisConfig.js")
 
 
 
@@ -24,6 +25,8 @@ exports.creatorFeedUpload = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
     const userRole = req.role;
+    
+    console.log(req.cloudinaryFile)
 
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
