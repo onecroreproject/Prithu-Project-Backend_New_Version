@@ -1,19 +1,47 @@
 const mongoose = require("mongoose");
 
-const CommentLikeSchema = new mongoose.Schema({
-  // Either userId or accountId (support both operations)
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
-  accountId: { type: mongoose.Schema.Types.ObjectId, ref: "Account", index: true },
+const CommentLikeSchema = new mongoose.Schema(
+  {
+    // Like by User
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      index: true,
+      sparse: true,
+    },
 
-  commentId: { type: mongoose.Schema.Types.ObjectId, ref: "UserComment", required: true, index: true },
+    // MAIN COMMENT like
+    commentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "UserComment",
+      index: true,
+      sparse: true,
+    },
 
-  createdAt: { type: Date, default: Date.now }
-}, { timestamps: true });
+    // REPLY COMMENT like
+    replyCommentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ReplyComment",
+      index: true,
+      sparse: true,
+    },
 
-// Prevent duplicate like per user/account on a comment
-CommentLikeSchema.index(
-  { userId: 1, accountId: 1, commentId: 1 },
-  { unique: true, partialFilterExpression: { commentId: { $exists: true } } }
+    createdAt: { type: Date, default: Date.now },
+  },
+  { timestamps: true }
 );
 
+
+
+/* ======================================================
+   HIGH PERFORMANCE LOOKUP INDEXES
+====================================================== */
+CommentLikeSchema.index({ commentId: 1 });
+CommentLikeSchema.index({ replyCommentId: 1 });
+
 module.exports = mongoose.model("CommentLike", CommentLikeSchema, "CommentLikes");
+
+
+
+
+

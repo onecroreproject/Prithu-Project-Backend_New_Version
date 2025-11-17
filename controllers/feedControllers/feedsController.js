@@ -30,45 +30,30 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const hiddenPostIds = user?.hiddenPostIds || [];
 
     const feeds = await Feed.aggregate([
+      /* ============================================
+         FILTER FEEDS
+      ============================================ */
       {
         $match: {
           _id: { $nin: hiddenPostIds },
           $or: [
             { isScheduled: { $ne: true } },
-            { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] },
-          ],
-        },
+            { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] }
+          ]
+        }
       },
 
       { $sort: { createdAt: -1 } },
       { $skip: (page - 1) * limit },
       { $limit: limit },
 
-      // ========== Admin / Child / User lookup ==========
-      {
-        $lookup: {
-          from: "Admin",
-          localField: "createdByAccount",
-          foreignField: "_id",
-          as: "admin",
-        },
-      },
-      {
-        $lookup: {
-          from: "Child_Admin",
-          localField: "createdByAccount",
-          foreignField: "_id",
-          as: "childAdmin",
-        },
-      },
-      {
-        $lookup: {
-          from: "User",
-          localField: "createdByAccount",
-          foreignField: "_id",
-          as: "user",
-        },
-      },
+      /* ============================================
+         FETCH ACCOUNT DATA
+      ============================================ */
+      { $lookup: { from: "Admin", localField: "createdByAccount", foreignField: "_id", as: "admin" } },
+      { $lookup: { from: "Child_Admin", localField: "createdByAccount", foreignField: "_id", as: "childAdmin" } },
+      { $lookup: { from: "User", localField: "createdByAccount", foreignField: "_id", as: "user" } },
+
       {
         $addFields: {
           accountData: {
@@ -76,22 +61,24 @@ exports.getAllFeedsByUserId = async (req, res) => {
               branches: [
                 { case: { $eq: ["$roleRef", "Admin"] }, then: { $arrayElemAt: ["$admin", 0] } },
                 { case: { $eq: ["$roleRef", "Child_Admin"] }, then: { $arrayElemAt: ["$childAdmin", 0] } },
-                { case: { $eq: ["$roleRef", "User"] }, then: { $arrayElemAt: ["$user", 0] } },
+                { case: { $eq: ["$roleRef", "User"] }, then: { $arrayElemAt: ["$user", 0] } }
               ],
-              default: null,
-            },
-          },
-        },
+              default: null
+            }
+          }
+        }
       },
 
-      // ========== PROFILE SETTINGS ==========
+      /* ============================================
+         PROFILE SETTINGS
+      ============================================ */
       {
         $lookup: {
           from: "ProfileSettings",
           let: {
             adminId: { $cond: [{ $eq: ["$roleRef", "Admin"] }, "$createdByAccount", null] },
             userId: { $cond: [{ $eq: ["$roleRef", "User"] }, "$createdByAccount", null] },
-            childAdminId: { $cond: [{ $eq: ["$roleRef", "Child_Admin"] }, "$createdByAccount", null] },
+            childAdminId: { $cond: [{ $eq: ["$roleRef", "Child_Admin"] }, "$createdByAccount", null] }
           },
           pipeline: [
             {
@@ -100,137 +87,108 @@ exports.getAllFeedsByUserId = async (req, res) => {
                   $or: [
                     { $eq: ["$adminId", "$$adminId"] },
                     { $eq: ["$childAdminId", "$$childAdminId"] },
-                    { $eq: ["$userId", "$$userId"] },
-                  ],
-                },
-              },
+                    { $eq: ["$userId", "$$userId"] }
+                  ]
+                }
+              }
             },
             { $limit: 1 },
-            { $project: { userName: 1, profileAvatar: 1, modifyAvatar: 1 } },
+            { $project: { userName: 1, profileAvatar: 1, modifyAvatar: 1 } }
           ],
-          as: "profile",
-        },
+          as: "profile"
+        }
       },
+
       { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
 
-      // ========== LIKE, DISLIKE, DOWNLOAD, SHARE COUNTS ==========
+      /* ============================================
+         LIKE COUNT
+      ============================================ */
       {
         $lookup: {
           from: "UserFeedActions",
           let: { feedId: "$_id" },
           pipeline: [
-            {
-              $project: {
-                count: {
-                  $size: {
-                    $filter: {
-                      input: { $ifNull: ["$likedFeeds", []] },
-                      as: "f",
-                      cond: { $eq: ["$$f.feedId", "$$feedId"] },
-                    },
-                  },
-                },
-              },
-            },
+            { $unwind: { path: "$likedFeeds", preserveNullAndEmptyArrays: true } },
+            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" }
           ],
-          as: "likesCount",
-        },
+          as: "likesCount"
+        }
       },
 
+      /* ============================================
+         DISLIKE COUNT
+      ============================================ */
       {
         $lookup: {
           from: "UserFeedActions",
           let: { feedId: "$_id" },
           pipeline: [
-            {
-              $project: {
-                count: {
-                  $size: {
-                    $filter: {
-                      input: { $ifNull: ["$disLikeFeeds", []] },
-                      as: "f",
-                      cond: { $eq: ["$$f.feedId", "$$feedId"] },
-                    },
-                  },
-                },
-              },
-            },
+            { $unwind: { path: "$disLikeFeeds", preserveNullAndEmptyArrays: true } },
+            { $match: { $expr: { $eq: ["$disLikeFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" }
           ],
-          as: "dislikesCount",
-        },
+          as: "dislikesCount"
+        }
       },
 
+      /* ============================================
+         DOWNLOAD COUNT
+      ============================================ */
       {
         $lookup: {
           from: "UserFeedActions",
           let: { feedId: "$_id" },
           pipeline: [
-            {
-              $project: {
-                count: {
-                  $size: {
-                    $filter: {
-                      input: { $ifNull: ["$downloadedFeeds", []] },
-                      as: "f",
-                      cond: { $eq: ["$$f.feedId", "$$feedId"] },
-                    },
-                  },
-                },
-              },
-            },
+            { $unwind: { path: "$downloadedFeeds", preserveNullAndEmptyArrays: true } },
+            { $match: { $expr: { $eq: ["$downloadedFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" }
           ],
-          as: "downloadsCount",
-        },
+          as: "downloadsCount"
+        }
       },
 
+      /* ============================================
+         SHARE COUNT (CORRECT)
+      ============================================ */
       {
         $lookup: {
           from: "UserFeedActions",
           let: { feedId: "$_id" },
           pipeline: [
-            {
-              $project: {
-                count: {
-                  $size: {
-                    $filter: {
-                      input: { $ifNull: ["$sharedFeeds", []] },
-                      as: "f",
-                      cond: { $eq: ["$$f.feedId", "$$feedId"] },
-                    },
-                  },
-                },
-              },
-            },
+            { $unwind: { path: "$sharedFeeds", preserveNullAndEmptyArrays: true } },
+            { $match: { $expr: { $eq: ["$sharedFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" }
           ],
-          as: "sharesCount",
-        },
+          as: "sharesCount"
+        }
       },
 
-      // ========== VIEWS & COMMENTS ==========
+      /* ============================================
+         VIEWS & COMMENTS COUNT
+      ============================================ */
       {
         $lookup: {
           from: "UserViews",
           let: { feedId: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } },
-            { $count: "count" },
-          ],
-          as: "viewsCount",
-        },
+          pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } }, { $count: "count" }],
+          as: "viewsCount"
+        }
       },
+
       {
         $lookup: {
           from: "UserComments",
           let: { feedId: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } },
-            { $count: "count" },
-          ],
-          as: "commentsCount",
-        },
+          pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } }, { $count: "count" }],
+          as: "commentsCount"
+        }
       },
 
-      // ========== CURRENT USER ACTIONS ==========
+      /* ============================================
+         CURRENT USER ACTIONS
+      ============================================ */
       {
         $lookup: {
           from: "UserFeedActions",
@@ -240,31 +198,24 @@ exports.getAllFeedsByUserId = async (req, res) => {
             {
               $project: {
                 isLiked: {
-                  $in: [
-                    "$$feedId",
-                    { $map: { input: "$likedFeeds", as: "f", in: "$$f.feedId" } },
-                  ],
+                  $in: ["$$feedId", { $map: { input: "$likedFeeds", as: "f", in: "$$f.feedId" } }]
                 },
                 isSaved: {
-                  $in: [
-                    "$$feedId",
-                    { $map: { input: "$savedFeeds", as: "f", in: "$$f.feedId" } },
-                  ],
+                  $in: ["$$feedId", { $map: { input: "$savedFeeds", as: "f", in: "$$f.feedId" } }]
                 },
                 isDisliked: {
-                  $in: [
-                    "$$feedId",
-                    { $map: { input: "$disLikeFeeds", as: "f", in: "$$f.feedId" } },
-                  ],
-                },
-              },
-            },
+                  $in: ["$$feedId", { $map: { input: "$disLikeFeeds", as: "f", in: "$$f.feedId" } }]
+                }
+              }
+            }
           ],
-          as: "userActions",
-        },
+          as: "userActions"
+        }
       },
 
-      // ========== FOLLOW LOOKUP ==========
+      /* ============================================
+         FOLLOW DATA
+      ============================================ */
       {
         $lookup: {
           from: "Follows",
@@ -275,23 +226,26 @@ exports.getAllFeedsByUserId = async (req, res) => {
                 $expr: {
                   $and: [
                     { $eq: ["$creatorId", "$$creatorId"] },
-                    { $eq: ["$followerId", userId] },
-                  ],
-                },
-              },
+                    { $eq: ["$followerId", userId] }
+                  ]
+                }
+              }
             },
-            { $limit: 1 },
+            { $limit: 1 }
           ],
-          as: "followInfo",
-        },
+          as: "followInfo"
+        }
       },
+
       {
         $addFields: {
           isFollowing: { $gt: [{ $size: "$followInfo" }, 0] }
         }
       },
 
-      // ========== FINAL OUTPUT ==========
+      /* ============================================
+         FINAL OUTPUT PROJECTION
+      ============================================ */
       {
         $project: {
           feedId: "$_id",
@@ -303,6 +257,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
           createdByAccount: 1,
           createdAt: 1,
           dec: 1,
+
           userName: "$profile.userName",
           profileAvatar: "$profile.profileAvatar",
           modifyAvatarFromProfile: "$profile.modifyAvatar",
@@ -319,13 +274,14 @@ exports.getAllFeedsByUserId = async (req, res) => {
           isDisliked: { $arrayElemAt: ["$userActions.isDisliked", 0] },
 
           isFollowing: 1,
-
-          themeColor: 1,
-        },
-      },
+          themeColor: 1
+        }
+      }
     ]);
 
-    // ========== ENRICH RESPONSE ==========
+    /* ============================================
+       POST-PROCESSING
+    ============================================ */
     const enrichedFeeds = await Promise.all(
       feeds.map(async (feed) => {
         const avatarToUse =
@@ -333,19 +289,19 @@ exports.getAllFeedsByUserId = async (req, res) => {
           feed.profileAvatar ||
           process.env.DEFAULT_AVATAR;
 
-        let themeColor = feed.themeColor || {
+        const themeColor = feed.themeColor || {
           primary: "#fff",
           secondary: "#ccc",
           accent: "#999",
           text: "#000",
-          gradient: "linear-gradient(135deg,#fff,#ccc,#999)",
+          gradient: "linear-gradient(135deg,#fff,#ccc,#999)"
         };
 
         return {
           ...feed,
           avatarToUse,
           themeColor,
-          timeAgo: feedTimeCalculator(feed.createdAt),
+          timeAgo: feedTimeCalculator(feed.createdAt)
         };
       })
     );
@@ -354,7 +310,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
       message: "Feeds retrieved successfully",
       feeds: enrichedFeeds,
       page,
-      limit,
+      limit
     });
 
   } catch (err) {
@@ -362,6 +318,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
+
 
 
 

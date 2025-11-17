@@ -215,6 +215,7 @@ exports.checkUsernameAvailability = async (req, res) => {
 exports.checkEmailAvailability = async (req, res) => {
   try {
     const { email } = req.query;
+    console.log(email)
 
     if (!email || email.trim() === "") {
       return res.status(400).json({ message: "Email is required" });
@@ -234,6 +235,10 @@ exports.checkEmailAvailability = async (req, res) => {
         message: "Email not available",
       });
     }
+    console.log({
+      available: true,
+      message: "Email available",
+    })
 
     return res.status(200).json({
       available: true,
