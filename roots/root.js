@@ -374,7 +374,7 @@ router.post("/creator/feed/ScheduleUpload",auth,userUpload.single("file"),(req, 
   userUploadToCloudinary,
   creatorFeedScheduleUpload
 );
-router.get("/get/trending/feed",getTrendingFeeds);
+router.get("/get/trending/feed",auth,getTrendingFeeds);
 router.get('/get/all/feeds/user',auth,getAllFeedsByUserId);
 router.post('/user/watching/vidoes',auth,userVideoViewCount);
 router.post('/user/image/view/count',auth,userImageViewCount);

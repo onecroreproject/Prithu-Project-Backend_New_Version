@@ -242,37 +242,36 @@ exports.downloadFeed = async (req, res) => {
   if (!feedId) return res.status(400).json({ message: "feedId is required" });
 
   try {
-    // ✅ Record download (push every time with timestamp)
+    // Record download
     const updatedDoc = await UserFeedActions.findOneAndUpdate(
       { userId },
-      { $push: { downloadedFeeds: { feedId, downloadedAt: new Date() } } },
+      {
+        $push: {
+          downloadedFeeds: {
+            feedId,
+            downloadedAt: new Date(),
+          }
+        }
+      },
       { upsert: true, new: true }
     );
 
-    // ✅ Fetch feed to get the download link
     const feed = await Feeds.findById(feedId).select(
       "contentUrl fileUrl downloadUrl"
     );
+
     if (!feed) return res.status(404).json({ message: "Feed not found" });
 
     await logUserActivity({
       userId,
-      actionType: "DWONLOAD_POST",
+      actionType: "DOWNLOAD_POST",
       targetId: feedId,
       targetModel: "Feed",
       metadata: { platform: "web" },
     });
 
-    // ✅ Generate proper absolute download link
-   
     const downloadLink =
-      feed.downloadUrl
-        ?feed.downloadUrl
-        : feed.fileUrl
-        ? feed.fileUrl
-        : feed.contentUrl
-        ? feed.contentUrl
-        : null;
+      feed.downloadUrl || feed.fileUrl || feed.contentUrl;
 
     if (!downloadLink) {
       return res.status(400).json({ message: "No downloadable link available" });
@@ -283,6 +282,7 @@ exports.downloadFeed = async (req, res) => {
       downloadedFeeds: updatedDoc.downloadedFeeds,
       downloadLink,
     });
+
   } catch (err) {
     console.error("Error in downloadFeed:", err);
     res.status(500).json({ message: "Internal server error" });
@@ -293,9 +293,10 @@ exports.downloadFeed = async (req, res) => {
 
 
 
+
 exports.shareFeed = async (req, res) => {
   const userId = req.Id || req.body.userId;
-  const { feedId } = req.body;
+  const { feedId, shareChannel, shareTarget } = req.body;
 
   if (!userId || !feedId) {
     return res.status(400).json({ message: "userId and feedId are required" });
@@ -308,6 +309,22 @@ exports.shareFeed = async (req, res) => {
     const feed = await Feeds.findById(feedId).lean();
     if (!feed) return res.status(404).json({ message: "Feed not found" });
 
+    // SAVE SHARE ACTION
+    await UserFeedActions.findOneAndUpdate(
+      { userId },
+      {
+        $push: {
+          sharedFeeds: {
+            feedId,
+            shareChannel: shareChannel || "copy_link",
+            shareTarget: shareTarget || null,
+            sharedAt: new Date()
+          }
+        }
+      },
+      { upsert: true }
+    );
+
     await logUserActivity({
       userId,
       actionType: "SHARE_POST",
@@ -316,18 +333,17 @@ exports.shareFeed = async (req, res) => {
       metadata: { platform: "web" },
     });
 
-    const host = `${req.protocol}://${req.get("host")}`;
-    const shareUrl = `${host}/feed/${feedId}?ref=${user.referralCode}`;
-
     res.status(200).json({
-      message: "Share link generated",
-      shareUrl
+      message: "Share recorded successfully",
     });
+
   } catch (err) {
     console.error("Error generating share link:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+
 
 
 
@@ -404,74 +420,143 @@ if (feed && feed.createdByAccount.toString() !== userId.toString()) {
 };
 
 
-
 exports.commentLike = async (req, res) => {
-  const userId = req.Id || req.body.userId;
-  const { commentId } = req.body;
-
-  if (!userId) return res.status(400).json({ message: "userId is required" });
-  if (!commentId) return res.status(400).json({ message: "commentId is required" });
+  const { commentId, replyCommentId } = req.body;
+  const userIdRaw = req.Id;
+console.log({ commentId, replyCommentId })
+  if (!userIdRaw) return res.status(401).json({ message: "Unauthorized" });
 
   try {
-    // Check if user already liked the comment
-    const existingLike = await CommentLike.findOne({ userId, commentId });
+    const userId = new mongoose.Types.ObjectId(userIdRaw);
 
-    if (existingLike) {
-      // Unlike: remove the like
-      await CommentLike.deleteOne({ _id: existingLike._id });
-      const likeCount = await CommentLike.countDocuments({ commentId });
-      return res.status(200).json({
-        message: "Comment unliked",
-        liked: false,
-        likeCount,
-      });
+    // Build filter
+    const filter = { userId };
+
+    if (commentId) filter.commentId = new mongoose.Types.ObjectId(commentId);
+    if (replyCommentId) filter.replyCommentId = new mongoose.Types.ObjectId(replyCommentId);
+
+    // Delete fields that should not exist
+    if (!commentId) delete filter.commentId;
+    if (!replyCommentId) delete filter.replyCommentId;
+
+    console.log("FINAL FILTER:", filter);
+
+    // Toggle like
+    const existing = await CommentLike.findOne(filter);
+
+    if (existing) {
+      await CommentLike.deleteOne(filter);
+      return res.json({ liked: false, message: "Unliked" });
     }
 
-    // Like: create new
-    await CommentLike.create({ userId, commentId, likedAt: new Date() });
+    await CommentLike.create(filter);
 
-    const likeCount = await CommentLike.countDocuments({ commentId });
+    return res.json({ liked: true, message: "Liked" });
 
-    // 🔹 Find comment to get feedId and text
-    const comment = await UserComment.findById(commentId)
-      .select("feedId commentText userId")
-      .lean();
-
-    if (comment) {
-      const feed = await Feeds.findById(comment.feedId).select("userId contentUrl").lean();
-
-      // 🔹 Get liker info (for better message)
-      const likerProfile = await ProfileSettings.findOne({ userId })
-        .select("userName profileAvatar")
-        .lean();
-
-        
-
-      // 🔹 Notify comment owner (not self)
-      if (comment.userId.toString() !== userId.toString()) {
-        await createAndSendNotification({
-          senderId: userId,
-          receiverId: comment.userId,
-          type: "COMMENT_LIKE",
-          title: `${likerProfile?.userName || "Someone"} liked your comment 💬`,
-          message: `"${comment.commentText?.slice(0, 80) || "Your comment"}"`,
-          entityId: comment.feedId,
-          entityType: "Comment",
-          image: likerProfile?.profileAvatar || feed?.contentUrl || "",
-        });
-      }
-    }
-
-    res.status(201).json({
-      message: "Comment liked",
-      liked: true,
-      likeCount,
-    });
   } catch (err) {
-    console.error("❌ Error toggling comment like:", err);
-    res.status(500).json({ message: "Internal server error" });
+    console.error("Toggle like error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
+
+
+
+
+// ==================================
+//  TOGGLE LIKE FOR REPLY COMMENT
+// ==================================
+exports.likeReplyComment = async (req, res) => {
+  const { replyCommentId } = req.body;
+  const userIdRaw = req.Id;
+
+  if (!userIdRaw)
+    return res.status(401).json({ message: "Unauthorized" });
+
+  if (!replyCommentId)
+    return res.status(400).json({ message: "replyCommentId is required" });
+
+  try {
+    const userId = new mongoose.Types.ObjectId(userIdRaw);
+
+    const filter = {
+      userId,
+      replyCommentId: new mongoose.Types.ObjectId(replyCommentId),
+    };
+
+    // Check if already liked
+    const existing = await CommentLike.findOne(filter);
+
+    if (existing) {
+      // Unlike reply
+      await CommentLike.deleteOne(filter);
+      return res.json({ liked: false, message: "Reply unliked" });
+    }
+
+    // Like reply
+    await CommentLike.create(filter);
+
+    return res.json({ liked: true, message: "Reply liked" });
+
+  } catch (err) {
+    console.error("Reply Comment Like Error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+
+
+
+// ===============================
+//  TOGGLE LIKE FOR MAIN COMMENT
+// ===============================
+exports.likeMainComment = async (req, res) => {
+  const { commentId } = req.body;
+  const userIdRaw = req.Id;
+
+  if (!userIdRaw) 
+    return res.status(401).json({ message: "Unauthorized" });
+
+  if (!commentId)
+    return res.status(400).json({ message: "commentId is required" });
+
+  try {
+    const userId = new mongoose.Types.ObjectId(userIdRaw);
+
+    const filter = {
+      userId,
+      commentId: new mongoose.Types.ObjectId(commentId),
+    };
+
+    // Check if already liked
+    const existing = await CommentLike.findOne(filter);
+
+    if (existing) {
+      // Unlike
+      await CommentLike.deleteOne(filter);
+      return res.json({ liked: false, message: "Comment unliked" });
+    }
+
+    // Like
+    await CommentLike.create(filter);
+
+    return res.json({ liked: true, message: "Comment liked" });
+
+  } catch (err) {
+    console.error("Main Comment Like Error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -481,7 +566,7 @@ exports.postReplyComment = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
     const { commentText, parentCommentId } = req.body;
-
+    console.log({ commentText, parentCommentId } )
     if (!userId || !commentText?.trim()) {
       return res.status(400).json({ message: "Invalid input" });
     }

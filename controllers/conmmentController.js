@@ -28,63 +28,85 @@ exports.getCommentsByFeed = async (req, res) => {
     const commentIds = comments.map(c => c._id);
     const userIds = comments.map(c => c.userId);
 
-    // 2. Likes for comments
+    /* ======================================================
+       2. Get like count for MAIN comments
+       (Correct field → commentId)
+    ======================================================= */
     const commentLikesAgg = await CommentLike.aggregate([
       { $match: { commentId: { $in: commentIds } } },
       { $group: { _id: "$commentId", count: { $sum: 1 } } }
     ]);
-    const commentLikeMap = {};
-    commentLikesAgg.forEach(l => { commentLikeMap[l._id.toString()] = l.count; });
 
-    // 3. User liked which comments
+    const commentLikeMap = {};
+    commentLikesAgg.forEach(l => {
+      commentLikeMap[l._id.toString()] = l.count;
+    });
+
+    /* ======================================================
+       3. Get which comments USER has liked
+       (Correct field → commentId)
+    ======================================================= */
     const userLikedComments = await CommentLike.find({
       userId,
       commentId: { $in: commentIds }
-    }).select("commentId -_id").lean();
-    const userLikedCommentIds = userLikedComments.map(c => c.commentId.toString());
+    }).select("commentId -_id");
 
-    // 4. Replies count per comment
+    const userLikedCommentIds = new Set(
+      userLikedComments.map(c => c.commentId.toString())
+    );
+
+    /* ======================================================
+       4. Replies count
+    ======================================================= */
     const replyAgg = await UserReplyComment.aggregate([
-      { $match: { commentId: { $in: commentIds } } },
-      { $group: { _id: "$commentId", count: { $sum: 1 } } }
+      { $match: { parentCommentId: { $in: commentIds } } },
+      { $group: { _id: "$parentCommentId", count: { $sum: 1 } } }
     ]);
+
     const replyCountMap = {};
     replyAgg.forEach(r => { replyCountMap[r._id.toString()] = r.count; });
 
-    // 5. Fetch user profiles for all commenters
-    const profiles = await ProfileSettings.find({ userId: { $in: userIds } })
-      .select("userId userName profileAvatar")
-      .lean();
+    /* ======================================================
+       5. Fetch user profile info
+    ======================================================= */
+    const profiles = await ProfileSettings.find({
+      userId: { $in: userIds }
+    }).select("userId userName profileAvatar");
 
     const profileMap = {};
     profiles.forEach(p => {
       profileMap[p.userId.toString()] = {
         username: p.userName,
-        avatar: p.profileAvatar 
+        avatar: p.profileAvatar
       };
     });
 
-    // 6. Format response
+    /* ======================================================
+       6. Format final response
+    ======================================================= */
     const formattedComments = comments.map(c => {
       const profile = profileMap[c.userId?.toString()] || {};
+
       return {
         commentId: c._id,
         commentText: c.commentText,
         likeCount: commentLikeMap[c._id.toString()] || 0,
-        isLiked: userLikedCommentIds.includes(c._id.toString()),
+        isLiked: userLikedCommentIds.has(c._id.toString()),
         replyCount: replyCountMap[c._id.toString()] || 0,
         timeAgo: feedTimeCalculator(c.createdAt),
         username: profile.username || "Unknown User",
-        avatar: profile.avatar,
+        avatar: profile.avatar
       };
     });
 
-    res.status(200).json({ comments: formattedComments });
+    return res.status(200).json({ comments: formattedComments });
+
   } catch (error) {
     console.error("Error in getCommentsByFeed:", error);
-    res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Server error" });
   }
 };
+
 
 
 
@@ -95,17 +117,28 @@ exports.getRepliesByComment = async (req, res) => {
     const { parentCommentId } = req.body;
     const currentUserId = req.Id || req.body.userId;
 
-    if (!parentCommentId) return res.status(400).json({ message: "Parent Comment ID required" });
-    // Aggregation pipeline to fetch replies with like count
+    if (!parentCommentId)
+      return res.status(400).json({ message: "Parent Comment ID required" });
+
     const replies = await UserReplyComment.aggregate([
-      { $match: { parentCommentId:new mongoose.Types.ObjectId(parentCommentId) } },
+      {
+        $match: {
+          parentCommentId: new mongoose.Types.ObjectId(parentCommentId)
+        }
+      },
       { $sort: { createdAt: -1 } },
+
+      // LIKE COUNT for each reply
       {
         $lookup: {
-          from: "CommentLikes",
+          from: "CommentLikes",       // FIXED
           let: { replyId: "$_id" },
           pipeline: [
-            { $match: { $expr: { $eq: ["$commentId", "$$replyId"] } } },
+            {
+              $match: {
+                $expr: { $eq: ["$replyCommentId", "$$replyId"] }
+              }
+            },
             { $count: "count" }
           ],
           as: "likeData"
@@ -113,7 +146,9 @@ exports.getRepliesByComment = async (req, res) => {
       },
       {
         $addFields: {
-          likeCount: { $arrayElemAt: ["$likeData.count", 0] }
+          likeCount: {
+            $ifNull: [{ $arrayElemAt: ["$likeData.count", 0] }, 0]
+          }
         }
       },
       { $project: { likeData: 0 } }
@@ -121,28 +156,32 @@ exports.getRepliesByComment = async (req, res) => {
 
     if (!replies.length) return res.status(200).json({ replies: [] });
 
+    // Fetch user profiles
     const replyUserIds = replies.map(r => r.userId);
 
-    // Fetch profiles in one query
-    const profiles = await ProfileSettings.find({ userId: { $in: replyUserIds } })
-      .select("userId userName profileAvatar")
-      .lean();
+    const profiles = await ProfileSettings.find({
+      userId: { $in: replyUserIds }
+    }).select("userId userName profileAvatar").lean();
 
     const profileMap = {};
     profiles.forEach(p => {
       profileMap[p.userId.toString()] = {
         username: p.userName,
-        avatar: p.profileAvatar ,
+        avatar: p.profileAvatar
       };
     });
 
-    // Fetch all likes by current user in one query
-    const userLikedReplies = await CommentLike.find({
-      userId: currentUserId,
-      commentId: { $in: replies.map(r => r._id) }
-    }).select("commentId -_id").lean();
+    // Which replies the current user liked
+    const userObjectId = new mongoose.Types.ObjectId(currentUserId);
 
-    const userLikedReplyIds = new Set(userLikedReplies.map(r => r.commentId.toString()));
+    const userLikedReplies = await CommentLike.find({
+      userId: userObjectId,
+      replyCommentId: { $in: replies.map(r => r._id) }
+    }).select("replyCommentId");
+
+    const userLikedReplyIds = new Set(
+      userLikedReplies.map(r => r.replyCommentId.toString())
+    );
 
     // Format response
     const formattedReplies = replies.map(r => {
@@ -150,7 +189,7 @@ exports.getRepliesByComment = async (req, res) => {
       return {
         replyId: r._id,
         replyText: r.replyText,
-        likeCount: r.likeCount || 0,
+        likeCount: r.likeCount,
         isLiked: userLikedReplyIds.has(r._id.toString()),
         timeAgo: feedTimeCalculator(r.createdAt),
         username: profile.username || "Unknown User",
@@ -159,9 +198,12 @@ exports.getRepliesByComment = async (req, res) => {
     });
 
     res.status(200).json({ replies: formattedReplies });
+
   } catch (error) {
     console.error("Error in getRepliesByComment:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+
 

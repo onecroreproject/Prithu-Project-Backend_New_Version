@@ -42,6 +42,7 @@ exports.creatorFeedUpload = async (req, res) => {
     }
 
     // ✅ Extract hashtags
+    console.log(dec)
     const hashtags = extractHashtags(dec); // <-- FIXED
 
     // normalize language
