@@ -144,7 +144,7 @@ const userUploadToCloudinary = async (req, res, next) => {
       mimetype: req.file.mimetype,
       originalname: req.file.originalname,
     };
-
+console.log()
     next();
   } catch (err) {
     console.error("Cloudinary upload error:", err);
