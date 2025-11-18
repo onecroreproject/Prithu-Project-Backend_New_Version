@@ -63,7 +63,7 @@ exports.followAccount = async (req, res) => {
       senderId: currentUserId,
       receiverId: userId,
       type: "FOLLOW",
-      title: `${followerProfile?.userName || "Someone"} started following you 👥`,
+      title: `${followerProfile?.userName ||" " } started following you 👥`,
       message: `${followerProfile?.userName || "A user"} is now following your account.`,
       entityId: userId,
       entityType: "Follow",
