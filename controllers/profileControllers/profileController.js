@@ -1076,40 +1076,38 @@ exports.getProfileCompletion = async (req, res) => {
 
 exports.getProfileOverview = async (req, res) => {
   try {
-    // 1️⃣ Get user ID from token (middleware should attach req.Id)
     const userId = req.Id;
+
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized: user ID not found" });
     }
 
-    // 2️⃣ Check if profile exists (optional validation)
-    const profileExists = await Profile.exists({ userId: new mongoose.Types.ObjectId(userId) });
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    // 1️⃣ Check profile exists
+    const profileExists = await Profile.exists({ userId: userObjectId });
     if (!profileExists) {
       return res.status(404).json({ message: "Profile not found" });
     }
 
-    // 3️⃣ Get follower count (people following this user)
-    const creatorData = await CreatorFollower.findOne(
-      { creatorId: userId },
-      { followerIds: 1 }
-    ).lean();
-    const followerCount = creatorData?.followerIds?.length || 0;
+    // 2️⃣ Followers — count where creatorId = userId
+    const followerCount = await CreatorFollower.countDocuments({
+      creatorId: userObjectId,
+    });
 
-    // 4️⃣ Get following count (people this user follows)
-    const followingData = await Following.findOne(
-      { userId: userId },
-      { followingIds: 1 }
-    ).lean();
-    const followingCount = followingData?.followingIds?.length || 0;
+    // 3️⃣ Following — count where followerId = userId
+    const followingCount = await CreatorFollower.countDocuments({
+      followerId: userObjectId,
+    });
 
-    // 5️⃣ Get total posts count (from Feed schema)
+    // 4️⃣ Posts count
     const postCount = await Feed.countDocuments({
-      createdByAccount: new mongoose.Types.ObjectId(userId),
+      createdByAccount: userObjectId,
       roleRef: "User",
       status: "Published",
     });
 
-    // 6️⃣ Send clean overview
+    // 5️⃣ Response
     return res.status(200).json({
       message: "Profile overview fetched successfully",
       data: {
@@ -1119,6 +1117,7 @@ exports.getProfileOverview = async (req, res) => {
         postCount,
       },
     });
+
   } catch (error) {
     console.error("❌ Error fetching profile overview:", error);
     return res.status(500).json({
@@ -1127,6 +1126,7 @@ exports.getProfileOverview = async (req, res) => {
     });
   }
 };
+
 
 
 

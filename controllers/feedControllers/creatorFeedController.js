@@ -95,7 +95,7 @@ exports.creatorFeedUpload = async (req, res) => {
       scheduledAt: scheduleDate ? new Date(scheduleDate) : null,
       isPosted: scheduleDate ? false : true,
       dec: dec || "",
-      hashtags: hashtags,                
+      hashtags: hashtags,               
     });
 
     await newFeed.save();
