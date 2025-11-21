@@ -83,7 +83,6 @@ exports.userSelectCategory = async (req, res) => {
 };
 
 
-
 exports.userInterestedCategory = async (req, res) => {
   try {
     const { feedId } = req.body;
@@ -92,59 +91,29 @@ exports.userInterestedCategory = async (req, res) => {
     if (!userId) return res.status(400).json({ message: "User ID is required" });
     if (!feedId) return res.status(400).json({ message: "Feed ID is required" });
 
-    // Get categoryId from feed
+    // Get category from feed
     const feed = await Feed.findById(feedId, { category: 1 }).lean();
-    if (!feed || !feed.category) return res.status(404).json({ message: "Feed or category not found" });
+    if (!feed?.category)
+      return res.status(404).json({ message: "Feed or category not found" });
 
     const categoryId = new mongoose.Types.ObjectId(feed.category);
 
-    // Ensure UserCategory doc exists
-    let userCategory = await UserCategory.findOneAndUpdate(
+    // ⚡ SINGLE ATOMIC OPERATION — fastest
+    await UserCategory.updateOne(
       { userId },
-      { $setOnInsert: { userId, interestedCategories: [], nonInterestedCategories: [] } },
-      { new: true, upsert: true }
+
+      {
+        $pull: { nonInterestedCategories: categoryId },     // remove from nonInterested
+        $addToSet: { interestedCategories: categoryId },     // add to interested
+        $set: { [`updatedAtMap.${categoryId}`]: new Date() } // timestamp
+      },
+
+      { upsert: true }
     );
-
-    // ✅ Safely check if already interested
-    const alreadyInterested = (userCategory.interestedCategories || []).some(
-      c => c.categoryId && c.categoryId.toString() === categoryId.toString()
-    );
-    if (alreadyInterested) {
-      return res.status(200).json({
-        message: "You already liked this category",
-        data: userCategory
-      });
-    }
-
-    // If in nonInterested → pull from there first
-    const inNonInterested = (userCategory.nonInterestedCategories || []).some(
-      c => c.categoryId && c.categoryId.toString() === categoryId.toString()
-    );
-
-    if (inNonInterested) {
-      await UserCategory.updateOne(
-        { userId },
-        {
-          $pull: { nonInterestedCategories: { categoryId } },
-          $push: { interestedCategories: { categoryId, updatedAt: new Date() } }
-        }
-      );
-    } else {
-      // Directly push to interested
-      await UserCategory.updateOne(
-        { userId },
-        { $push: { interestedCategories: { categoryId, updatedAt: new Date() } } }
-      );
-    }
-
-    const updatedDoc = await UserCategory.findOne({ userId })
-      .populate("interestedCategories.categoryId", "name")
-      .populate("nonInterestedCategories.categoryId", "name")
-      .lean();
 
     res.status(200).json({
       message: "Category marked as interested successfully",
-      data: updatedDoc
+      categoryId,
     });
 
   } catch (err) {
@@ -158,63 +127,38 @@ exports.userInterestedCategory = async (req, res) => {
 
 
 
+
 exports.userNotInterestedCategory = async (req, res) => {
   try {
-    const { feedId } = req.body; 
+    const { feedId } = req.body;
     const userId = req.Id || req.body.userId;
 
     if (!userId) return res.status(400).json({ message: "User ID is required" });
     if (!feedId) return res.status(400).json({ message: "Feed ID is required" });
 
+    // Get category from feed
     const feed = await Feed.findById(feedId, { category: 1 }).lean();
-    if (!feed || !feed.category) return res.status(404).json({ message: "Feed or category not found" });
+    if (!feed?.category)
+      return res.status(404).json({ message: "Feed or category not found" });
 
     const categoryId = new mongoose.Types.ObjectId(feed.category);
 
-    let userCategory = await UserCategory.findOneAndUpdate(
+    // ⚡ SINGLE ATOMIC OPERATION — fastest
+    await UserCategory.updateOne(
       { userId },
-      { $setOnInsert: { userId, interestedCategories: [], nonInterestedCategories: [] } },
-      { new: true, upsert: true }
-    );
 
-    // Already in nonInterested → return
-    const alreadyNonInterested = (userCategory.nonInterestedCategories || []).some(
-      c => c.categoryId.toString() === categoryId.toString()
-    );
-    if (alreadyNonInterested) {
-      return res.status(200).json({
-        message: "You already unliked this category",
-      });
-    }
+      {
+        $pull: { interestedCategories: categoryId },         // remove from interested
+        $addToSet: { nonInterestedCategories: categoryId },  // add to nonInterested
+        $set: { [`updatedAtMap.${categoryId}`]: new Date() } // timestamp
+      },
 
-    // If in interested → pull from there first
-    const inInterested = (userCategory.interestedCategories || []).some(
-      c => c.categoryId.toString() === categoryId.toString()
+      { upsert: true }
     );
-    if (inInterested) {
-      await UserCategory.updateOne(
-        { userId },
-        {
-          $pull: { interestedCategories: { categoryId } },
-          $push: { nonInterestedCategories: { categoryId, updatedAt: new Date() } }
-        }
-      );
-    } else {
-      // Directly push to nonInterested
-      await UserCategory.updateOne(
-        { userId },
-        { $push: { nonInterestedCategories: { categoryId, updatedAt: new Date() } } }
-      );
-    }
-
-    const updatedDoc = await UserCategory.findOne({ userId })
-      .populate("interestedCategories.categoryId", "name")
-      .populate("nonInterestedCategories.categoryId", "name")
-      .lean();
 
     res.status(200).json({
-      message: "Category marked as not interested successfully",
-      data: updatedDoc
+      message: "Category marked as NOT interested successfully",
+      categoryId,
     });
 
   } catch (err) {
@@ -225,6 +169,7 @@ exports.userNotInterestedCategory = async (req, res) => {
     });
   }
 };
+
 
 
 

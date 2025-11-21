@@ -1,33 +1,51 @@
 const mongoose = require("mongoose");
 
-const UserCategorySchema = new mongoose.Schema({
-  userId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: "User", 
-    required: true, 
-    index: true 
+const UserCategorySchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+      unique: true,
+    },
+
+    /**
+     * 🚀 FAST lists with only ObjectIds
+     * No extra objects → faster queries, less document size
+     */
+    interestedCategories: [
+      { type: mongoose.Schema.Types.ObjectId, ref: "Categories", index: true }
+    ],
+
+    nonInterestedCategories: [
+      { type: mongoose.Schema.Types.ObjectId, ref: "Categories", index: true }
+    ],
+
+    /**
+     * ⚡ OPTIONAL: Track updated times WITHOUT storing large objects
+     * Key → categoryId
+     * Value → timestamp
+     */
+    updatedAtMap: {
+      type: Map,
+      of: Date,
+      default: {},
+    },
+
+    active: { type: Boolean, default: true },
   },
+  { timestamps: true }
+);
 
-  // Categories user is interested in (with timestamp)
-  interestedCategories: [
-    {
-      categoryId: { type: mongoose.Schema.Types.ObjectId, ref: "Categories", required: true },
-      updatedAt: { type: Date, default: Date.now }
-    }
-  ],
+/**
+ * Extra index → high performance when filtering categories
+ */
+UserCategorySchema.index({ interestedCategories: 1 });
+UserCategorySchema.index({ nonInterestedCategories: 1 });
 
-  // Categories user is NOT interested in (with timestamp)
-  nonInterestedCategories: [
-    {
-      categoryId: { type: mongoose.Schema.Types.ObjectId, ref: "Categories", required: true },
-      updatedAt: { type: Date, default: Date.now }
-    }
-  ],
-
-  active: { type: Boolean, default: true }
-}, { timestamps: true });
-
-// Ensure uniqueness per user
-UserCategorySchema.index({ userId: 1 }, { unique: true });
-
-module.exports = mongoose.model("UserCategory", UserCategorySchema, "UserCategorys");
+module.exports = mongoose.model(
+  "UserCategory",
+  UserCategorySchema,
+  "UserCategorys"
+);

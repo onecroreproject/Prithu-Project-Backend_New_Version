@@ -707,11 +707,10 @@ exports.getVisibilitySettingsWeb = async (req, res) => {
 
 
 
-
 exports.getUserProfileDetail = async (req, res) => {
   try {
     const userId = req.Id || req.query.id;
-    console.log(req.query.id)
+
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
     }
@@ -726,7 +725,7 @@ exports.getUserProfileDetail = async (req, res) => {
         coverPhoto profileAvatar modifyAvatar details profileSummary
       `
     )
-      .populate("userId", "userName email")
+      .populate("userId", "userName email _id")
       .lean();
 
     if (!profile) {
@@ -736,7 +735,7 @@ exports.getUserProfileDetail = async (req, res) => {
     // ✅ Extract safe fields with defaults
     const {
       bio = "",
-      profileSummary="",
+      profileSummary = "",
       name = "",
       lastName = "",
       maritalStatus = "",
@@ -768,6 +767,7 @@ exports.getUserProfileDetail = async (req, res) => {
     return res.status(200).json({
       message: "Profile fetched successfully",
       profile: {
+        userId: user._id || userId, // Include user ID in response
         name,
         profileSummary,
         lastName,

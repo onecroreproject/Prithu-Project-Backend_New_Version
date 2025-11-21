@@ -672,7 +672,7 @@ router.post("/profile/toggle-publish", auth,togglePublish);
 router.get("/public/resume/:username", getPublicResume);
 router.get("/user/portfolio/:username",getPublicPortfolio); 
 
-
+router.delete("/user/delete/feed",deleteFeed)
 router.get("/get/user/activity",auth,getMyActivities);
 
 router.get("/get/individual/profile/detail/:username",getProfileByUsername);
