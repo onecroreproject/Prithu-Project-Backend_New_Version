@@ -11,6 +11,7 @@ const ProfileSettings=require("../../models/profileSettingModel");
 const fs = require("fs");
 const path = require("path");
 const { sendTemplateEmail } = require("../../utils/templateMailer"); 
+const {checkAndClearDeactivatedUser}=require("../../controllers/userControllers/userDeleteController");
 
 
 
@@ -24,6 +25,8 @@ exports.createNewUser = async (req, res) => {
     if (!username || !email || !password || !accountType) {
       return res.status(400).json({ message: "All required fields must be provided" });
     }
+
+   
 
     // ✅ Check for existing user
     const existingUser = await User.findOne({
@@ -49,7 +52,7 @@ exports.createNewUser = async (req, res) => {
 
     // ✅ Create new user
     const user = new User({
-      userName: username,
+      userName: username.replace(/\s+/g, "").trim(),
       email,
       passwordHash,
       referralCode: generatedCode,
@@ -85,7 +88,7 @@ exports.createNewUser = async (req, res) => {
     // ✅ Create profile settings
     ProfileSettings.create({
       userId: user._id,
-      userName: username,
+      userName: username.replace(/\s+/g, "").trim(),
       displayName: username,
       phoneNumber: phone,
       whatsAppNumber: whatsapp,
@@ -137,18 +140,23 @@ exports.userLogin = async (req, res) => {
       return res.status(400).json({ error: "Username/Email and password are required" });
     }
 
+
+
     // 2️⃣ Find user
     const user = await User.findOne({
-      $or: [{ userName: identifier }, { email: identifier }],
+    email: identifier ,
     });
     if (!user) {
-      return res.status(400).json({ error: "Invalid username/email or password" });
+      return res.status(400).json({ error: "Invalid username" });
     }
+
+
+    await checkAndClearDeactivatedUser(user._id);
 
     // 3️⃣ Validate password
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
-      return res.status(400).json({ error: "Invalid username/email or password" });
+      return res.status(400).json({ error: "Invalid password" });
     }
 
     // 4️⃣ Check if blocked

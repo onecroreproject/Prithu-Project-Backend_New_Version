@@ -61,7 +61,7 @@ exports.newAdmin = async (req, res) => {
 
       createdAdmin = await ChildAdmin.create({
         childAdminId,
-        userName: username,
+        userName: username.replace(/\s+/g, "").trim(),
         email,
         passwordHash,
         adminType,
@@ -73,7 +73,7 @@ exports.newAdmin = async (req, res) => {
     } else {
       // ✅ 4. Handle Master/Super Admin creation
       createdAdmin = await Admin.create({
-        userName: username,
+        userName: username.replace(/\s+/g, "").trim(),
         email,
         passwordHash,
         adminType,
@@ -85,8 +85,8 @@ exports.newAdmin = async (req, res) => {
     // ✅ 5. Create ProfileSettings (no need for await if not required immediately)
     ProfileSettings.create({
       ...profilePayload,
-      userName: username,
-      displayName: username,
+      userName: username.replace(/\s+/g, "").trim(),
+      displayName: username.replace(/\s+/g, "").trim(),
     }).catch((err) => console.error("Profile creation failed:", err));
 
     // ✅ 6. Return clean response
@@ -94,7 +94,7 @@ exports.newAdmin = async (req, res) => {
       message: `${adminType} registered successfully`,
       admin: {
         id: createdAdmin._id,
-        username: createdAdmin.userName,
+        username: createdAdmin.userName.replace(/\s+/g, "").trim(),
         email: createdAdmin.email,
         adminType: createdAdmin.adminType,
         ...(createdAdmin.childAdminId && {

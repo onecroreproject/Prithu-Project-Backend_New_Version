@@ -923,7 +923,7 @@ exports.getReports = async (req, res) => {
 
 
 exports.deleteUserAndAllRelated = async (req, res) => {
-  const { userId } = req.params;
+  const { userId } = req.params ;
   console.log("🧾 Starting deletion for user:", userId);
 
   if (!mongoose.Types.ObjectId.isValid(userId)) {

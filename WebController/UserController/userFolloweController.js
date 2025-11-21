@@ -7,7 +7,8 @@ const {feedTimeCalculator} =require("../../middlewares/feedTimeCalculator");
 // ✅ Get Following List
 exports.getUserFollowing = async (req, res) => {
   try {
-    const userId = req.Id || req.body.userId;
+    const userId = req.Id || req.query.id;
+    console.log(req.query.id)
     if (!userId) {
       return res.status(400).json({ success: false, message: "User ID required" });
     }
@@ -61,7 +62,7 @@ exports.getUserFollowing = async (req, res) => {
 // ✅ Get Followers List
 exports.getUserFollowers = async (req, res) => {
   try {
-    const userId = req.Id || req.body.userId;
+    const userId = req.Id ||  req.query.id;
     if (!userId) {
       return res.status(400).json({ success: false, message: "User ID required" });
     }

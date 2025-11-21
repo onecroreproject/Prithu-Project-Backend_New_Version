@@ -149,7 +149,7 @@ exports.userProfileDetailUpdate = async (req, res) => {
     }
 
     // ✅ Handle username
-    const userName = req.body.userName?.trim();
+    const userName = req.body.userName?.replace(/\s+/g, "").trim();
     if (userName) updateData.userName = userName;
 
     // ✅ Update or create profile
@@ -297,7 +297,7 @@ if (req.body.socialLinks) {
     }
 
     // ✅ Handle username update
-    const userName = req.body.userName?.trim();
+    const userName = req.body.userName?.replace(/\s+/g, "").trim();
     if (Object.keys(updateData).length === 0 && !userName)
       return res.status(400).json({ message: "No fields provided for update" });
 
@@ -450,7 +450,7 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
     }
 
     // ✅ Handle username update
-    const userName = req.body.userName?.trim();
+    const userName = req.body.userName?.replace(/\s+/g, "").trim();
     if (Object.keys(updateData).length === 0 && !userName)
       return res.status(400).json({ message: "No fields provided for update" });
 
@@ -710,7 +710,8 @@ exports.getVisibilitySettingsWeb = async (req, res) => {
 
 exports.getUserProfileDetail = async (req, res) => {
   try {
-    const userId = req.Id || req.body.userId;
+    const userId = req.Id || req.query.id;
+    console.log(req.query.id)
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
     }
@@ -1076,7 +1077,7 @@ exports.getProfileCompletion = async (req, res) => {
 
 exports.getProfileOverview = async (req, res) => {
   try {
-    const userId = req.Id;
+    const userId = req.Id || req.body.profileUserId;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized: user ID not found" });

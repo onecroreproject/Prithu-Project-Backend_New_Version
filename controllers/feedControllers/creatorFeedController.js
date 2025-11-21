@@ -37,22 +37,18 @@ exports.creatorFeedUpload = async (req, res) => {
     }
 
     const { language, categoryId, type, scheduleDate, dec } = req.body;
-
-    if (!language || !categoryId || !type) {
+console.log(language)
+    if ( !categoryId || !type) {
       return res
         .status(400)
         .json({ message: "Language, categoryId, and type are required" });
     }
 
     // ✅ Extract hashtags
-    console.log(dec)
+  
     const hashtags = extractHashtags(dec); // <-- FIXED
 
-    // normalize language
-    const normalizedLang = getLanguageCode(language);
-    if (!normalizedLang) {
-      return res.status(400).json({ message: "Invalid language" });
-    }
+ 
 
     const categoryDoc = await Categories.findById(categoryId).lean();
     if (!categoryDoc) {
@@ -84,7 +80,7 @@ exports.creatorFeedUpload = async (req, res) => {
     // ✅ Create new feed with hashtags included
     const newFeed = new Feed({
       type,
-      language: normalizedLang,
+      language: language,
       category: categoryId,
       createdByAccount: userId,
       roleRef: userRole,
@@ -128,7 +124,7 @@ exports.creatorFeedUpload = async (req, res) => {
         : "Feed uploaded successfully",
       feed: {
         ...newFeed.toObject(),
-        languageName: getLanguageName(normalizedLang),
+
       },
     });
 

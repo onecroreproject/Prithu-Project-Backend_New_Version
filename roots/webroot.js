@@ -160,6 +160,7 @@ const {
   unFollowAccount,
   getAccountFollowers,
   getUserFollowersData,
+  removeFollower
 } = require('../controllers/followersControllers.js/followerDetailController');
 
 const {
@@ -178,7 +179,9 @@ const{
 
 const{
   getCommentsByFeed,
-  getRepliesByComment,
+  getRepliesForComment,
+  getNestedReplies
+,
 }=require('../controllers/conmmentController')
 
 
@@ -316,6 +319,13 @@ const{
 }=require("../controllers/searchController");
 
 
+const{
+  deactivateUser,
+deleteUserNow
+
+}=require("../controllers/userControllers/userDeleteController")
+
+
 
 
 // /* --------------------- User Authentication --------------------- */
@@ -344,13 +354,9 @@ router.get("/check/email/availability",checkEmailAvailability);
 
 // /* --------------------- User Feed Actions --------------------- */
 router.post('/user/feed/like',auth, likeFeed);
-router.post('/user/comment/like',auth,likeMainComment);
-router.post('/user/replycomment/like',auth,likeReplyComment);
 router.post("/user/feed/dislike",auth,toggleDislikeFeed);
 router.post('/user/feed/save',auth, toggleSaveFeed);
 router.post('/user/feed/download',auth, downloadFeed);
-router.post('/user/feed/comment',auth,postComment);
-router.post('/user/feed/reply/comment',auth,postReplyComment);
 router.post('/user/feed/share',auth, shareFeed);
 router.post('/user/select/category',auth,userSelectCategory);
 router.post('/user/not/intrested',auth,userNotInterestedCategory);
@@ -361,11 +367,22 @@ router.post("/user/intrested/category/begin",auth,saveInterestedCategory);
 router.get('/user/get/saved/feeds',auth, getUserSavedFeeds);
 router.get('/user/download/feeds', auth, getUserDownloadedFeeds);
 router.get('/user/liked/feeds',auth, getUserLikedFeeds);
-router.post('/get/comments/for/feed',auth,getCommentsByFeed);
-router.post('/get/comments/relpy/for/feed',auth,getRepliesByComment);
 router.post('/user/hide/feed',auth,userHideFeed);
 router.get("/user/notintrested/category",auth,getUserCategory);
 router.get("/get/user/detail/at/feed/icon",auth,getUserdetailWithinTheFeed);
+
+/* User Comment API */
+router.post('/user/comment/like',auth,likeMainComment);
+router.post('/user/replycomment/like',auth,likeReplyComment);
+router.post('/user/feed/comment',auth,postComment);
+router.post('/user/feed/reply/comment',auth,postReplyComment);
+
+
+
+router.post('/get/replies/for/comment', auth, getRepliesForComment);
+router.post('/get/comments/for/feed',auth,getCommentsByFeed);
+router.post('/get/nested/replies',auth,getNestedReplies);
+
 
 // /* --------------------- User Subscription --------------------- */
 router.post('/user/plan/subscription',auth,subscribePlan);
@@ -444,6 +461,7 @@ router.post("/user/profile/cover/update",auth,userUpload.single("coverPhoto"),(r
 );
 router.delete("/user/cover/photo/delete",auth,deleteCoverPhoto);
 router.get('/get/profile/detail',auth,getUserProfileDetail);
+router.get('/get/single/profile/detail',getUserProfileDetail);
 
 /* --------------------- User Earnings API --------------------- */
 
@@ -603,14 +621,18 @@ router.get(
 
 /*---------------------Website----------------------------------*/
 router.get("/get/profile/overview",auth,getProfileOverview);
+router.post("/single/get/profile/overview",getProfileOverview);
 router.post("/user/update/visibility/settings",auth,updateFieldVisibilityWeb);
-router.get("/user/update/visibility/settings",auth,getVisibilitySettingsWeb);
+router.get("/user/get/visibility/settings",auth,getVisibilitySettingsWeb);
 
 
 
 router.get("/get/user/post",auth,getUserFeedsWeb);
+router.get("/get/single/user/post",getUserFeedsWeb);
 router.get("/user/following", auth, getUserFollowing);
 router.get("/user/followers", auth, getUserFollowers);
+router.get("/single/user/following",getUserFollowing);
+router.get("/single/user/followers",getUserFollowers);
 router.get("/user/profile/completion",auth,getProfileCompletion);
 
 // ✅ Profile
@@ -637,6 +659,9 @@ router.post("/user/education/certification",auth, addCertification);
 router.put("/user/certification/update/:userId/:certificationId",auth,updateCertification)
 router.delete("/user/eduction/certification/delete/:userId/:certificationId",auth, deleteCertification);
 
+router.patch("/user/deactivate",auth, deactivateUser);
+router.delete("/user/delete",auth, deleteUserNow);
+
 
 router.post("/user/add/education/project",auth, addOrUpdateProject);
 router.put("/user/update/projects/:projectId",auth,addOrUpdateProject)
@@ -653,6 +678,7 @@ router.get("/get/user/activity",auth,getMyActivities);
 router.get("/get/individual/profile/detail/:username",getProfileByUsername);
 router.post("/individual/user/following", getUserFollowing);
 router.post("/individual/user/followers", getUserFollowers);
+router.post("/user/remove/follower",auth,removeFollower);
 
 router.get("/feed/:feedId", getFeedById);
             

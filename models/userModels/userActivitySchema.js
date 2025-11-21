@@ -23,7 +23,8 @@ const UserActivitySchema = new mongoose.Schema(
         "VIEW_PORTFOLIO",
         "LOGIN",
         "LOGOUT",
-        "DOWNLOAD_POST", // ✅ fixed spelling
+        "DOWNLOAD_POST",
+        "REMOVE_FOLLOWER", 
       ],
       required: true,
       index: true,
