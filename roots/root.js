@@ -113,7 +113,7 @@ const {
   getUserSavedFeeds,
   getUserDownloadedFeeds,
   shareFeed,
-  commentLike,
+  likeMainComment,
   getUserLikedFeeds,
   userHideFeed,
   getUserCategory,
@@ -174,7 +174,7 @@ const{
 
 const{
   getCommentsByFeed,
-  getRepliesByComment,
+  getRepliesForComment,
 }=require('../controllers/conmmentController')
 
 
@@ -317,7 +317,7 @@ router.get("/check/email/availability",checkEmailAvailability);
 
 // /* --------------------- User Feed Actions --------------------- */
 router.post('/user/feed/like',auth, likeFeed);
-router.post('/user/comment/like',auth,commentLike);
+router.post('/user/comment/like',auth,likeMainComment);
 router.post("/user/feed/dislike",auth,toggleDislikeFeed);
 router.post('/user/feed/save',auth, toggleSaveFeed);
 router.post('/user/feed/download',auth, downloadFeed);
@@ -334,7 +334,7 @@ router.get('/user/get/saved/feeds',auth, getUserSavedFeeds);
 router.get('/user/download/feeds', auth, getUserDownloadedFeeds);
 router.get('/user/liked/feeds',auth, getUserLikedFeeds);
 router.post('/get/comments/for/feed',auth,getCommentsByFeed);
-router.post('/get/comments/relpy/for/feed',auth,getRepliesByComment);
+router.post('/get/comments/relpy/for/feed',auth,getRepliesForComment);
 router.post('/user/hide/feed',auth,userHideFeed);
 router.get("/user/notintrested/category",auth,getUserCategory);
 router.get("/get/user/detail/at/feed/icon",auth,getUserdetailWithinTheFeed);

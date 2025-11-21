@@ -16,7 +16,7 @@ const Feed =require("../../models/feedModel.js");
 const Notification = require("../../models/notificationModel.js");
 const { createAndSendNotification } = require("../../middlewares/helper/socketNotification.js");
 const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
-
+const idToString = (id) => (id ? id.toString() : null);
 
 
 exports.likeFeed = async (req, res) => {
@@ -420,96 +420,45 @@ if (feed && feed.createdByAccount.toString() !== userId.toString()) {
 };
 
 
-exports.commentLike = async (req, res) => {
-  const { commentId, replyCommentId } = req.body;
-  const userIdRaw = req.Id;
-console.log({ commentId, replyCommentId })
-  if (!userIdRaw) return res.status(401).json({ message: "Unauthorized" });
-
-  try {
-    const userId = new mongoose.Types.ObjectId(userIdRaw);
-
-    // Build filter
-    const filter = { userId };
-
-    if (commentId) filter.commentId = new mongoose.Types.ObjectId(commentId);
-    if (replyCommentId) filter.replyCommentId = new mongoose.Types.ObjectId(replyCommentId);
-
-    // Delete fields that should not exist
-    if (!commentId) delete filter.commentId;
-    if (!replyCommentId) delete filter.replyCommentId;
-
-    console.log("FINAL FILTER:", filter);
-
-    // Toggle like
-    const existing = await CommentLike.findOne(filter);
-
-    if (existing) {
-      await CommentLike.deleteOne(filter);
-      return res.json({ liked: false, message: "Unliked" });
-    }
-
-    await CommentLike.create(filter);
-
-    return res.json({ liked: true, message: "Liked" });
-
-  } catch (err) {
-    console.error("Toggle like error:", err);
-    return res.status(500).json({ message: "Server error" });
-  }
-};
-
-
-
-
-// ==================================
-//  TOGGLE LIKE FOR REPLY COMMENT
-// ==================================
 exports.likeReplyComment = async (req, res) => {
-  const { replyCommentId } = req.body;
-  const userIdRaw = req.Id;
-
-  if (!userIdRaw)
-    return res.status(401).json({ message: "Unauthorized" });
-
-  if (!replyCommentId)
-    return res.status(400).json({ message: "replyCommentId is required" });
-
   try {
-    const userId = new mongoose.Types.ObjectId(userIdRaw);
+    const { replyCommentId } = req.body;
+    const userIdRaw = req.Id;
 
-    const filter = {
-      userId,
-      replyCommentId: new mongoose.Types.ObjectId(replyCommentId),
-    };
+    if (!userIdRaw) return res.status(401).json({ message: "Unauthorized" });
+    if (!replyCommentId) return res.status(400).json({ message: "replyCommentId is required" });
 
-    // Check if already liked
-    const existing = await CommentLike.findOne(filter);
+    const userId =new mongoose.Types.ObjectId(userIdRaw);
+    const replyId =new mongoose.Types.ObjectId(replyCommentId);
+
+    // check if already liked
+    const existing = await UserReplyComment.findOne({ _id: replyId, likes: userId }).lean();
 
     if (existing) {
-      // Unlike reply
-      await CommentLike.deleteOne(filter);
-      return res.json({ liked: false, message: "Reply unliked" });
+      // unlike
+      const updated = await UserReplyComment.findByIdAndUpdate(replyId, {
+        $pull: { likes: userId },
+        $inc: { likeCount: -1 }
+      }, { new: true }).lean();
+
+      return res.json({ liked: false, likeCount: updated ? (updated.likeCount || (Array.isArray(updated.likes) ? updated.likes.length : 0)) : 0 });
     }
 
-    // Like reply
-    await CommentLike.create(filter);
+    // like
+    const updated = await UserReplyComment.findByIdAndUpdate(replyId, {
+      $addToSet: { likes: userId },
+      $inc: { likeCount: 1 }
+    }, { new: true }).lean();
 
-    return res.json({ liked: true, message: "Reply liked" });
-
+    return res.json({ liked: true, likeCount: updated ? (updated.likeCount || (Array.isArray(updated.likes) ? updated.likes.length : 0)) : 1 });
   } catch (err) {
-    console.error("Reply Comment Like Error:", err);
+    console.error("likeReplyComment error:", err);
     return res.status(500).json({ message: "Server error" });
   }
 };
 
 
 
-
-
-// ===============================
-//  TOGGLE LIKE FOR MAIN COMMENT
-// ===============================
 exports.likeMainComment = async (req, res) => {
   const { commentId } = req.body;
   const userIdRaw = req.Id;
@@ -549,66 +498,100 @@ exports.likeMainComment = async (req, res) => {
 };
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 exports.postReplyComment = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
-    const { commentText, parentCommentId } = req.body;
-    console.log({ commentText, parentCommentId } )
+    const { commentText, parentCommentId, parentReplyId } = req.body;
+    
+    console.log({ commentText, parentCommentId, parentReplyId });
+
     if (!userId || !commentText?.trim()) {
       return res.status(400).json({ message: "Invalid input" });
     }
 
-    if (parentCommentId && !(await UserComment.exists({ _id: parentCommentId }))) {
-      return res.status(400).json({ message: "Parent comment not found" });
+    let finalParentCommentId = parentCommentId;
+    let notificationReceiverId = null;
+    let feedId = null;
+
+    // If this is a nested reply (reply to another reply)
+    if (parentReplyId) {
+      const parentReply = await UserReplyComment.findById(parentReplyId)
+        .select("userId parentCommentId")
+        .lean();
+      
+      if (!parentReply) {
+        return res.status(400).json({ message: "Parent reply not found" });
+      }
+      
+      finalParentCommentId = parentReply.parentCommentId;
+      notificationReceiverId = parentReply.userId;
+    } else {
+      // Regular reply to main comment
+      if (!parentCommentId) {
+        return res.status(400).json({ message: "Parent comment ID is required" });
+      }
+      
+      const parentComment = await UserComment.findById(parentCommentId)
+        .select("userId feedId")
+        .lean();
+      
+      if (!parentComment) {
+        return res.status(400).json({ message: "Parent comment not found" });
+      }
+      
+      notificationReceiverId = parentComment.userId;
+      feedId = parentComment.feedId;
     }
 
+    // Create the reply
     const newReply = await UserReplyComment.create({
       userId,
       replyText: commentText.trim(),
-      parentCommentId: parentCommentId || null,
+      parentCommentId: finalParentCommentId,
+      parentReplyId: parentReplyId || undefined, // Only set if it's a nested reply
       createdAt: new Date(),
     });
 
+    // Get user profile for response
     const userProfile = await ProfileSettings.findOne({ userId })
       .select("userName profileAvatar")
       .lean();
 
-    // 🔹 Notify parent comment owner
-    const parentComment = await UserComment.findById(parentCommentId).select("userId feedId").lean();
-    if (parentComment && parentComment.userId.toString() !== userId.toString()) {
-      const feed = await Feeds.findById(parentComment.feedId).select("contentUrl").lean();
-      await createAndSendNotification({
-        senderId: userId,
-        receiverId: parentComment.userId,
-        type: "COMMENT",
-        title: "New Reply 💬",
-        message: commentText.slice(0, 50) + "...",
-        entityId: parentComment.feedId,
-        entityType: "Comment",
-        image: feed?.contentUrl || "",
-      });
+    // 🔹 Send notification if receiver is different from sender
+    if (notificationReceiverId && notificationReceiverId.toString() !== userId.toString()) {
+      // Get feed ID if not already available
+      if (!feedId) {
+        const parentComment = await UserComment.findById(finalParentCommentId)
+          .select("feedId")
+          .lean();
+        feedId = parentComment?.feedId;
+      }
+      
+      if (feedId) {
+        const feed = await Feeds.findById(feedId).select("contentUrl").lean();
+        
+        await createAndSendNotification({
+          senderId: userId,
+          receiverId: notificationReceiverId,
+          type: "COMMENT",
+          title: parentReplyId ? "New Reply to Your Comment 💬" : "New Reply 💬",
+          message: commentText.slice(0, 50) + "...",
+          entityId: feedId,
+          entityType: "Comment",
+          image: feed?.contentUrl || "",
+        });
+      }
     }
 
     res.status(201).json({
       message: "Reply posted successfully",
-      comment: {
+      reply: {
         ...newReply.toObject(),
         timeAgo: feedTimeCalculator(newReply.createdAt),
         username: userProfile?.userName || "Unknown User",
         avatar: userProfile?.profileAvatar || null,
+        replyId: newReply._id,
+        isNested: !!parentReplyId,
       },
     });
   } catch (err) {
@@ -616,6 +599,9 @@ exports.postReplyComment = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+
+
 
 
 
@@ -650,66 +636,72 @@ exports.postView = async (req, res) => {
 exports.getUserSavedFeeds = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
+    
 
+    // 1️⃣ Validate
     if (!userId) {
-      return res.status(400).json({ message: "User ID is required" });
+      return res.status(400).json({ message: "userId or accountId is required" });
     }
 
-
-    // 1️⃣ Get user's saved feeds
+    // 2️⃣ Get actions doc for this user/account
     const userActions = await UserFeedActions.findOne({ userId }).lean();
-    if (!userActions) {
-      return res.status(404).json({ message: "No actions found for this user" });
-    }
 
-    const savedFeedIds = userActions.savedFeeds.map(feed => feed.feedId);
-    if (savedFeedIds.length === 0) {
+    if (!userActions || userActions.savedFeeds.length === 0) {
       return res.status(200).json({ savedFeeds: [] });
     }
 
-    // 2️⃣ Fetch feed details
+    const savedFeedIds = userActions.savedFeeds.map((f) => f.feedId);
+
+    // 3️⃣ Fetch feed details (FAST — uses _id index)
     const feeds = await Feeds.find({ _id: { $in: savedFeedIds } })
-      .select("contentUrl type")
+      .select("_id type contentUrl")
       .lean();
 
-    // 3️⃣ Aggregate like counts for saved feeds
+    // 4️⃣ FAST like count using aggregate with indexed field
     const likesAggregation = await UserFeedActions.aggregate([
       { $unwind: "$likedFeeds" },
-      { $match: { "likedFeeds.feedId": { $in: savedFeedIds } } },
-      { 
+      {
+        $match: {
+          "likedFeeds.feedId": { $in: savedFeedIds },
+        },
+      },
+      {
         $group: {
           _id: "$likedFeeds.feedId",
-          likeCount: { $sum: 1 }
-        }
-      }
+          likeCount: { $sum: 1 },
+        },
+      },
     ]);
 
-    // 4️⃣ Map feed details with savedAt, likeCount, and full content URL
-    const result = feeds.map(feed => {
-      const savedInfo = userActions.savedFeeds.find(f => f.feedId.toString() === feed._id.toString());
-      const likeInfo = likesAggregation.find(like => like._id.toString() === feed._id.toString());
+    // Build a map for O(1) lookup
+    const likeMap = {};
+    likesAggregation.forEach((l) => {
+      likeMap[l._id.toString()] = l.likeCount;
+    });
 
-      // Determine folder based on type
-      const folder = feed.type === "video" ? "videos" : "images";
-      const fullContentUrl = feed.contentUrl
-        ? feed.contentUrl
-        : null;
+    // 5️⃣ Final response combining savedAt + feed data + likeCount
+    const result = feeds.map((feed) => {
+      const savedData = userActions.savedFeeds.find(
+        (f) => f.feedId.toString() === feed._id.toString()
+      );
 
       return {
         _id: feed._id,
-        contentUrl: fullContentUrl,
         type: feed.type,
-        savedAt: savedInfo?.savedAt,
-        likeCount: likeInfo ? likeInfo.likeCount : 0
+        contentUrl: feed.contentUrl || null,
+        savedAt: savedData?.savedAt,
+        likeCount: likeMap[feed._id.toString()] || 0,
       };
     });
 
     return res.status(200).json({ savedFeeds: result });
+
   } catch (error) {
-    console.error(error);
+    console.error("❌ Error getUserSavedFeeds:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
+
 
 
 

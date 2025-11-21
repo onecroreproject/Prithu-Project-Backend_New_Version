@@ -36,6 +36,7 @@ const notificationSchema = new mongoose.Schema(
         "MENTION",
         "ADMIN_ANNOUNCEMENT",
         "SYSTEM_ALERT",
+        "REMOVED_FROM_FOLLOWERS",
       ],
       required: true,
     },
@@ -47,7 +48,7 @@ const notificationSchema = new mongoose.Schema(
     },
     entityType: {
       type: String,
-      enum: ["Post", "Comment","Follow","Unfollow", null,"Feed"],
+      enum: ["Post", "Comment","Follow","Unfollow", null,"Feed","RemoveFollower"],
       default: null,
     },
 

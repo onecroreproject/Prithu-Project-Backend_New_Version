@@ -1,10 +1,10 @@
 const UserComment = require("../models/userCommentModel");
-const UserReplyComment = require("../models/userRepliesModel");
+const Reply = require("../models/userRepliesModel");
 const CommentLike = require("../models/commentsLikeModel");
 const { feedTimeCalculator } = require("../middlewares/feedTimeCalculator");
 const ProfileSettings=require('../models/profileSettingModel');
 const mongoose=require("mongoose")
-
+const idToString = (id) => (id ? id.toString() : null);
 
 
 
@@ -58,7 +58,7 @@ exports.getCommentsByFeed = async (req, res) => {
     /* ======================================================
        4. Replies count
     ======================================================= */
-    const replyAgg = await UserReplyComment.aggregate([
+    const replyAgg = await Reply.aggregate([
       { $match: { parentCommentId: { $in: commentIds } } },
       { $group: { _id: "$parentCommentId", count: { $sum: 1 } } }
     ]);
@@ -109,101 +109,136 @@ exports.getCommentsByFeed = async (req, res) => {
 
 
 
-
-
-
-exports.getRepliesByComment = async (req, res) => {
+exports.getRepliesForComment = async (req, res) => {
   try {
     const { parentCommentId } = req.body;
-    const currentUserId = req.Id || req.body.userId;
+    const userIdRaw = req.Id; // your middleware sets req.Id (string/object)
+    if (!parentCommentId) {
+      return res.status(400).json({ message: "parentCommentId is required" });
+    }
 
-    if (!parentCommentId)
-      return res.status(400).json({ message: "Parent Comment ID required" });
+    // Fetch all replies for this comment (including nested)
+    const replies = await Reply.find({ parentCommentId: new mongoose.Types.ObjectId(parentCommentId) })
+      .sort({ createdAt: 1 })
+      .lean();
 
-    const replies = await UserReplyComment.aggregate([
-      {
-        $match: {
-          parentCommentId: new mongoose.Types.ObjectId(parentCommentId)
-        }
-      },
-      { $sort: { createdAt: -1 } },
+    if (!replies || replies.length === 0) {
+      return res.json({ replies: [] });
+    }
 
-      // LIKE COUNT for each reply
-      {
-        $lookup: {
-          from: "CommentLikes",       // FIXED
-          let: { replyId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ["$replyCommentId", "$$replyId"] }
-              }
-            },
-            { $count: "count" }
-          ],
-          as: "likeData"
-        }
-      },
-      {
-        $addFields: {
-          likeCount: {
-            $ifNull: [{ $arrayElemAt: ["$likeData.count", 0] }, 0]
-          }
-        }
-      },
-      { $project: { likeData: 0 } }
-    ]);
-
-    if (!replies.length) return res.status(200).json({ replies: [] });
-
-    // Fetch user profiles
-    const replyUserIds = replies.map(r => r.userId);
-
-    const profiles = await ProfileSettings.find({
-      userId: { $in: replyUserIds }
-    }).select("userId userName profileAvatar").lean();
+    // Batch fetch profiles
+    const userIds = [...new Set(replies.map(r => idToString(r.userId)).filter(Boolean))];
+    const profiles = await ProfileSettings.find({ userId: { $in: userIds.map(id =>new mongoose.Types.ObjectId(id)) } })
+      .select("userId userName profileAvatar")
+      .lean();
 
     const profileMap = {};
     profiles.forEach(p => {
-      profileMap[p.userId.toString()] = {
-        username: p.userName,
-        avatar: p.profileAvatar
-      };
+      profileMap[idToString(p.userId)] = p;
     });
 
-    // Which replies the current user liked
-    const userObjectId = new mongoose.Types.ObjectId(currentUserId);
+    // Build a quick parent->children map to compute nestedCount for immediate children
+    const childrenMap = {};
+    replies.forEach((r) => {
+      const parentReplyKey = idToString(r.parentReplyId) || null;
+      if (!childrenMap[parentReplyKey]) childrenMap[parentReplyKey] = [];
+      childrenMap[parentReplyKey].push(r);
+    });
 
-    const userLikedReplies = await CommentLike.find({
-      userId: userObjectId,
-      replyCommentId: { $in: replies.map(r => r._id) }
-    }).select("replyCommentId");
+    // userId string for checking likes
+    const userIdStr = userIdRaw ? idToString(userIdRaw) : null;
 
-    const userLikedReplyIds = new Set(
-      userLikedReplies.map(r => r.replyCommentId.toString())
-    );
+    // Map replies to response shape
+    const finalReplies = replies.map((reply) => {
+      const uid = idToString(reply.userId);
+      const profile = profileMap[uid] || {};
+      const rIdStr = idToString(reply._id);
+      const nestedCount = (childrenMap[rIdStr] || []).length;
 
-    // Format response
-    const formattedReplies = replies.map(r => {
-      const profile = profileMap[r.userId?.toString()] || {};
+      // compute isLiked (reply.likes is array of ObjectIds)
+      const isLiked = userIdStr ? (Array.isArray(reply.likes) && reply.likes.map(idToString).includes(userIdStr)) : false;
+
       return {
-        replyId: r._id,
-        replyText: r.replyText,
-        likeCount: r.likeCount,
-        isLiked: userLikedReplyIds.has(r._id.toString()),
-        timeAgo: feedTimeCalculator(r.createdAt),
-        username: profile.username || "Unknown User",
-        avatar: profile.avatar
+        replyId: reply._id,
+        parentReplyId: reply.parentReplyId || null,
+        commentId: reply.parentCommentId,
+        replyText: reply.replyText,
+        username: profile?.userName || "Unknown User",
+        avatar: profile?.profileAvatar || null,
+        likeCount: reply.likeCount || (Array.isArray(reply.likes) ? reply.likes.length : 0),
+        isLiked,
+        timeAgo: feedTimeCalculator(reply.createdAt),
+        nestedCount,
       };
     });
 
-    res.status(200).json({ replies: formattedReplies });
-
-  } catch (error) {
-    console.error("Error in getRepliesByComment:", error);
-    return res.status(500).json({ message: "Server error", error: error.message });
+    return res.json({ replies: finalReplies });
+  } catch (err) {
+    console.error("Get replies error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
+
+
+
+
+
+
+
+exports.getNestedReplies = async (req, res) => {
+  try {
+    const { parentReplyId } = req.body;
+    const userIdRaw = req.Id;
+
+    if (!parentReplyId) {
+      return res.status(400).json({ message: "parentReplyId is required" });
+    }
+
+    const nestedReplies = await Reply.find({ parentReplyId:new mongoose.Types.ObjectId(parentReplyId) })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    if (!nestedReplies || nestedReplies.length === 0) {
+      return res.json({ replies: [] });
+    }
+
+    // batch fetch profiles
+    const userIds = [...new Set(nestedReplies.map(r => idToString(r.userId)).filter(Boolean))];
+    const profiles = await ProfileSettings.find({ userId: { $in: userIds.map(id =>new mongoose.Types.ObjectId(id)) } })
+      .select("userId userName profileAvatar")
+      .lean();
+    const profileMap = {};
+    profiles.forEach(p => profileMap[idToString(p.userId)] = p);
+
+    const userIdStr = userIdRaw ? idToString(userIdRaw) : null;
+
+    const final = nestedReplies.map((reply) => {
+      const uid = idToString(reply.userId);
+      const profile = profileMap[uid] || {};
+      const isLiked = userIdStr ? (Array.isArray(reply.likes) && reply.likes.map(idToString).includes(userIdStr)) : false;
+
+      return {
+        replyId: reply._id,
+        parentReplyId: reply.parentReplyId || null,
+        commentId: reply.parentCommentId,
+        replyText: reply.replyText,
+        username: profile?.userName || "Unknown User",
+        avatar: profile?.profileAvatar || null,
+        likeCount: reply.likeCount || (Array.isArray(reply.likes) ? reply.likes.length : 0),
+        isLiked,
+        timeAgo: feedTimeCalculator(reply.createdAt),
+      };
+    });
+
+    return res.json({ replies: final });
+  } catch (err) {
+    console.error("Get nested replies error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+
 
 
 
