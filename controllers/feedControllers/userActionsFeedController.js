@@ -1,18 +1,18 @@
 const UserFeedActions = require("../../models/userFeedInterSectionModel.js");
 const Feeds = require("../../models/feedModel.js");
 const { getActiveUserAccount } = require('../../middlewares/creatorAccountactiveStatus.js');
-const UserComment =require("../../models/userCommentModel.js");
-const UserReplyComment=require('../../models/userRepliesModel')
+const UserComment = require("../../models/userCommentModel.js");
+const UserReplyComment = require('../../models/userRepliesModel')
 const CommentLike = require("../../models/commentsLikeModel.js");
-const path=require('path')
-const User=require('../../models/userModels/userModel');
+const path = require('path')
+const User = require('../../models/userModels/userModel');
 const mongoose = require("mongoose");
-const ProfileSettings=require('../../models/profileSettingModel');
+const ProfileSettings = require('../../models/profileSettingModel');
 const { feedTimeCalculator } = require("../../middlewares/feedTimeCalculator");
-const UserCategory=require('../../models/userModels/userCategotyModel.js');
-const Category=require('../../models/categorySchema.js');
-const HiddenPost=require("../../models/userModels/hiddenPostSchema.js");
-const Feed =require("../../models/feedModel.js");
+const UserCategory = require('../../models/userModels/userCategotyModel.js');
+const Category = require('../../models/categorySchema.js');
+const HiddenPost = require("../../models/userModels/hiddenPostSchema.js");
+const Feed = require("../../models/feedModel.js");
 const Notification = require("../../models/notificationModel.js");
 const { createAndSendNotification } = require("../../middlewares/helper/socketNotification.js");
 const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
@@ -35,7 +35,7 @@ exports.likeFeed = async (req, res) => {
 
     let updatedDoc, message, isLike;
 
-     // record activity
+    // record activity
     await logUserActivity({
       userId,
       actionType: "LIKE_POST",
@@ -62,26 +62,26 @@ exports.likeFeed = async (req, res) => {
       isLike = true;
     }
 
-   // 🔹 Create notification only if liked
-if (isLike) {
-  const feed = await Feeds.findById(feedId)
-    .select("createdByAccount contentUrl roleRef")
-    .lean();
+    // 🔹 Create notification only if liked
+    if (isLike) {
+      const feed = await Feeds.findById(feedId)
+        .select("createdByAccount contentUrl roleRef")
+        .lean();
 
-  if (feed && feed.createdByAccount.toString() !== userId.toString()) {
-    await createAndSendNotification({
-      senderId: userId,
-      receiverId: feed.createdByAccount,
-      type: "LIKE_POST",
-      title: "New Like ❤️",
-      message: "Someone liked your post.",
-      entityId: feed._id,
-      entityType: "Feed",
-      image: feed.contentUrl || "",
-      roleRef: feed.roleRef || "User", // optional, for context
-    });
-  }
-}
+      if (feed && feed.createdByAccount.toString() !== userId.toString()) {
+        await createAndSendNotification({
+          senderId: userId,
+          receiverId: feed.createdByAccount,
+          type: "LIKE_POST",
+          title: "New Like ❤️",
+          message: "",
+          entityId: feed._id,
+          entityType: "Feed",
+          image: feed.contentUrl || "",
+          roleRef: feed.roleRef || "User", // optional, for context
+        });
+      }
+    }
 
 
     res.status(200).json({
@@ -374,13 +374,13 @@ exports.postComment = async (req, res) => {
     const userProfile = await ProfileSettings.findOne({ userId })
       .select("userName profileAvatar")
       .lean();
-// 🔹 Notify feed owner
-const feed = await Feeds.findById(feedId)
-  .select("createdByAccount contentUrl roleRef")
-  .lean();
+    // 🔹 Notify feed owner
+    const feed = await Feeds.findById(feedId)
+      .select("createdByAccount contentUrl roleRef")
+      .lean();
 
 
-  await logUserActivity({
+    await logUserActivity({
       userId,
       actionType: "COMMENT",
       targetId: feedId,
@@ -389,19 +389,19 @@ const feed = await Feeds.findById(feedId)
     });
 
 
-if (feed && feed.createdByAccount.toString() !== userId.toString()) {
-  await createAndSendNotification({
-    senderId: userId,
-    receiverId: feed.createdByAccount,
-    type: "COMMENT",
-    title: "New Comment 💬",
-    message: `${commentText.slice(0, 50)}...`,
-    entityId: feed._id,
-    entityType: "Feed",
-    image: feed.contentUrl || "",
-    roleRef: feed.roleRef || "User", // optional
-  });
-}
+    if (feed && feed.createdByAccount.toString() !== userId.toString()) {
+      await createAndSendNotification({
+        senderId: userId,
+        receiverId: feed.createdByAccount,
+        type: "COMMENT",
+        title: "New Comment 💬",
+        message: `${commentText.slice(0, 50)}...`,
+        entityId: feed._id,
+        entityType: "Feed",
+        image: feed.contentUrl || "",
+        roleRef: feed.roleRef || "User", // optional
+      });
+    }
 
 
     res.status(201).json({
@@ -428,8 +428,8 @@ exports.likeReplyComment = async (req, res) => {
     if (!userIdRaw) return res.status(401).json({ message: "Unauthorized" });
     if (!replyCommentId) return res.status(400).json({ message: "replyCommentId is required" });
 
-    const userId =new mongoose.Types.ObjectId(userIdRaw);
-    const replyId =new mongoose.Types.ObjectId(replyCommentId);
+    const userId = new mongoose.Types.ObjectId(userIdRaw);
+    const replyId = new mongoose.Types.ObjectId(replyCommentId);
 
     // check if already liked
     const existing = await UserReplyComment.findOne({ _id: replyId, likes: userId }).lean();
@@ -463,7 +463,7 @@ exports.likeMainComment = async (req, res) => {
   const { commentId } = req.body;
   const userIdRaw = req.Id;
 
-  if (!userIdRaw) 
+  if (!userIdRaw)
     return res.status(401).json({ message: "Unauthorized" });
 
   if (!commentId)
@@ -502,7 +502,7 @@ exports.postReplyComment = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
     const { commentText, parentCommentId, parentReplyId } = req.body;
-    
+
     console.log({ commentText, parentCommentId, parentReplyId });
 
     if (!userId || !commentText?.trim()) {
@@ -518,11 +518,11 @@ exports.postReplyComment = async (req, res) => {
       const parentReply = await UserReplyComment.findById(parentReplyId)
         .select("userId parentCommentId")
         .lean();
-      
+
       if (!parentReply) {
         return res.status(400).json({ message: "Parent reply not found" });
       }
-      
+
       finalParentCommentId = parentReply.parentCommentId;
       notificationReceiverId = parentReply.userId;
     } else {
@@ -530,15 +530,15 @@ exports.postReplyComment = async (req, res) => {
       if (!parentCommentId) {
         return res.status(400).json({ message: "Parent comment ID is required" });
       }
-      
+
       const parentComment = await UserComment.findById(parentCommentId)
         .select("userId feedId")
         .lean();
-      
+
       if (!parentComment) {
         return res.status(400).json({ message: "Parent comment not found" });
       }
-      
+
       notificationReceiverId = parentComment.userId;
       feedId = parentComment.feedId;
     }
@@ -566,10 +566,10 @@ exports.postReplyComment = async (req, res) => {
           .lean();
         feedId = parentComment?.feedId;
       }
-      
+
       if (feedId) {
         const feed = await Feeds.findById(feedId).select("contentUrl").lean();
-        
+
         await createAndSendNotification({
           senderId: userId,
           receiverId: notificationReceiverId,
@@ -636,7 +636,7 @@ exports.postView = async (req, res) => {
 exports.getUserSavedFeeds = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
-    
+
 
     // 1️⃣ Validate
     if (!userId) {
@@ -848,36 +848,50 @@ exports.userHideFeed = async (req, res) => {
       return res.status(400).json({ message: "User ID and Post ID are required" });
     }
 
-    // ✅ Check if post and user exist
-    const [user, post] = await Promise.all([
-      User.findById(userId),
-      Feed.findById(postId)
-    ]);
-
-    if (!user) return res.status(404).json({ message: "User not found" });
-    if (!post) return res.status(404).json({ message: "Feed not found" });
-
-    // ✅ Check if already hidden
-    const alreadyHidden = await HiddenPost.findOne({ userId, postId });
-    if (alreadyHidden) {
-      return res.status(400).json({ message: "Post already hidden" });
+    // 1️⃣ Check if hidden already (very fast when index exists)
+    const already = await HiddenPost.findOne({ userId, postId }).lean();
+    if (already) {
+      return res.status(200).json({ message: "Post already hidden" });
     }
 
-    // ✅ Create new hidden post entry
+    // 2️⃣ Confirm user exists (light query)
+    const userExists = await User.exists({ _id: userId });
+    if (!userExists) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // 3️⃣ Confirm feed exists (light query)
+    const feedExists = await Feed.exists({ _id: postId });
+    if (!feedExists) {
+      return res.status(404).json({ message: "Feed not found" });
+    }
+
+    // 4️⃣ Hide post
     await HiddenPost.create({ userId, postId });
 
-    res.status(200).json({ message: "Post hidden successfully" });
+    return res.status(200).json({ message: "Post hidden successfully" });
+
   } catch (err) {
     console.error("Error hiding post:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
+
+    // Handle duplicate index error safely
+    if (err.code === 11000) {
+      return res.status(200).json({ message: "Post already hidden" });
+    }
+
+    return res.status(500).json({
+      message: "Server error",
+      error: err.message,
+    });
   }
 };
 
 
+
 exports.getUserCategory = async (req, res) => {
   try {
-    const userId= req.Id || req.body.userId  ;
-    
+    const userId = req.Id || req.body.userId;
+
 
     if (!userId) {
       return res.status(400).json({ message: "User ID not found in token" });

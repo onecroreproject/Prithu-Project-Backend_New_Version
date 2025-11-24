@@ -120,6 +120,7 @@ exports.getNotifications = async (req, res) => {
               userName: senderProfile.userName,
               displayName: senderProfile.displayName,
               profileAvatar: senderProfile.profileAvatar,
+              id: senderProfile.userId,
             }
           : null,
         feedInfo: n.feedInfo || null,

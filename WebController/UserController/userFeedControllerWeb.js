@@ -7,7 +7,7 @@ const {feedTimeCalculator} =require("../../middlewares/feedTimeCalculator");
 
 exports.getUserFeedsWeb = async (req, res) => {
   try {
-    const userId = req.Id || req.query.id; // Assuming middleware sets req.Id
+    const userId = req.Id || req.query.id; 
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
     }

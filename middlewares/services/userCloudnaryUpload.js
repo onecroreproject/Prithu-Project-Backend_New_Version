@@ -75,18 +75,19 @@ const userUploadToCloudinary = async (req, res, next) => {
   if (!req.file) return next();
 
   try {
-    // ✅ Restrict cover uploads to images only
+    // ❌ Still restrict cover uploads to image only (keep this)
     if (req.uploadType === "cover" && !req.file.mimetype.startsWith("image/")) {
       return res.status(400).json({
         message: "Only image files are allowed for cover photo",
       });
     }
 
+    // Create buffer stream
     const bufferStream = new Readable();
     bufferStream.push(req.file.buffer);
     bufferStream.push(null);
 
-    // ✅ Folder logic (existing + cover support)
+    // Folder logic
     let folder = "others";
 
     if (req.baseUrl.includes("feed")) {
@@ -97,35 +98,19 @@ const userUploadToCloudinary = async (req, res, next) => {
       folder = "profile/images";
     }
 
-    // ✅ If route specifically set uploadType = 'cover'
     if (req.uploadType === "cover") {
       folder = "profile/cover";
     }
 
     const isVideo = req.file.mimetype.startsWith("video/");
-    let transformation = [];
 
-    // ✅ Apply resizing only for images
-    if (!isVideo) {
-      if (req.uploadType === "cover") {
-        transformation = [
-          { width: 1500, height: 500, crop: "fill", gravity: "center" },
-        ];
-      } else {
-        transformation = [{ width: 500, height: 500, crop: "limit" }];
-      }
-    }
-
+    // ⛔ NO TRANSFORMATION — ORIGINAL QUALITY UPLOAD
     const result = await new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         {
           folder,
           resource_type: isVideo ? "video" : "image",
-          quality: "auto:good",
-          fetch_format: "auto",
-          transformation,
-          eager: isVideo ? [{ format: "mp4", quality: "auto" }] : [],
-          eager_async: isVideo,
+          // No auto-format, no compression, no resizing
         },
         (error, result) => {
           if (error) return reject(error);
@@ -135,7 +120,7 @@ const userUploadToCloudinary = async (req, res, next) => {
       bufferStream.pipe(stream);
     });
 
-    // ✅ Attach everything for next middleware/controller
+    // Attach to req
     req.cloudinaryFile = {
       url: result.secure_url,
       public_id: result.public_id,
@@ -144,13 +129,14 @@ const userUploadToCloudinary = async (req, res, next) => {
       mimetype: req.file.mimetype,
       originalname: req.file.originalname,
     };
-console.log()
+
     next();
   } catch (err) {
     console.error("Cloudinary upload error:", err);
     return res.status(500).json({ message: "Upload failed" });
   }
 };
+
 
 // ✅ Delete from Cloudinary
 const userDeleteFromCloudinary = async (public_id) => {

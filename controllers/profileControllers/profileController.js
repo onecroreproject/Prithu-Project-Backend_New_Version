@@ -673,26 +673,104 @@ exports.updateFieldVisibilityWeb = async (req, res) => {
 // ===========================================================
 exports.getVisibilitySettingsWeb = async (req, res) => {
   try {
-    const userId = req.Id;
+    const userId = req.Id ;  // Ensure your auth middleware sets req.Id
     const role = req.role;
 
-    let profileQuery = {};
-    if (role === "Admin") profileQuery = { adminId: userId };
-    else if (role === "Child_Admin") profileQuery = { childAdminId: userId };
-    else if (role === "User") profileQuery = { userId: userId };
-    else return res.status(403).json({ message: "Unauthorized role" });
+    if (!userId || !role) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing user ID or role",
+      });
+    }
 
+    // 🧹 Role → field mapping (clean)
+    const roleMap = {
+      Admin: { adminId: userId },
+      Child_Admin: { childAdminId: userId },
+      User: { userId: userId },
+    };
+
+    // ❌ If role doesn't exist in map → unauthorized
+    const profileQuery = roleMap[role];
+    if (!profileQuery) {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized role",
+      });
+    }
+
+    // 🔍 Fetch profile + visibility in one query
     const profile = await ProfileSettings.findOne(profileQuery).populate("visibility");
-    if (!profile || !profile.visibility)
-      return res.status(404).json({ message: "Visibility settings not found" });
+
+    if (!profile?.visibility) {
+      return res.status(404).json({
+        success: false,
+        message: "Visibility settings not found",
+      });
+    }
 
     return res.json({
       success: true,
       visibility: profile.visibility,
     });
+
   } catch (err) {
     console.error("❌ Get Visibility Web Error:", err);
-    return res.status(500).json({ message: "Server error", error: err.message });
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: err.message,
+    });
+  }
+};
+
+
+
+
+
+exports.getUserVisibilityByUserId = async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    // Validate input
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
+
+    // 🔍 Fetch the ProfileSettings of this user
+    const profile = await ProfileSettings.findOne({ userId }).populate("visibility");
+
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        message: "Profile settings not found for this user",
+      });
+    }
+
+    if (!profile.visibility) {
+      return res.status(404).json({
+        success: false,
+        message: "Visibility settings not found",
+      });
+    }
+
+    // Success
+    return res.status(200).json({
+      success: true,
+      visibility: profile.visibility,
+    });
+
+  } catch (err) {
+    console.error("❌ Error getting user visibility:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: err.message,
+    });
   }
 };
 
@@ -711,7 +789,7 @@ exports.getVisibilitySettingsWeb = async (req, res) => {
 exports.getUserProfileDetail = async (req, res) => {
   try {
     const userId = req.Id || req.query.id;
-    console.log(req.query.id)
+
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
     }
@@ -726,7 +804,7 @@ exports.getUserProfileDetail = async (req, res) => {
         coverPhoto profileAvatar modifyAvatar details profileSummary
       `
     )
-      .populate("userId", "userName email")
+      .populate("userId", "userName email _id")
       .lean();
 
     if (!profile) {
@@ -736,7 +814,7 @@ exports.getUserProfileDetail = async (req, res) => {
     // ✅ Extract safe fields with defaults
     const {
       bio = "",
-      profileSummary="",
+      profileSummary = "",
       name = "",
       lastName = "",
       maritalStatus = "",
@@ -768,6 +846,7 @@ exports.getUserProfileDetail = async (req, res) => {
     return res.status(200).json({
       message: "Profile fetched successfully",
       profile: {
+        userId: user._id || userId, // Include user ID in response
         name,
         profileSummary,
         lastName,
