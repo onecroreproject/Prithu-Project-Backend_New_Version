@@ -1,20 +1,20 @@
 const Feed = require('../../models/feedModel');
 const User = require('../../models/userModels/userModel');
 const { feedTimeCalculator } = require('../../middlewares/feedTimeCalculator');
-const UserFeedActions =require('../../models/userFeedInterSectionModel.js');
-const Account =require("../../models/accountSchemaModel.js");
+const UserFeedActions = require('../../models/userFeedInterSectionModel.js');
+const Account = require("../../models/accountSchemaModel.js");
 const mongoose = require("mongoose");
 const UserComment = require("../../models/userCommentModel.js");
 const UserView = require("../../models/userModels/userViewFeedsModel.js");
-const UserLanguage=require('../../models/userModels/userLanguageModel.js');
-const  UserCategory=require('../../models/userModels/userCategotyModel.js');
-const ProfileSettings=require('../../models/profileSettingModel');
+const UserLanguage = require('../../models/userModels/userLanguageModel.js');
+const UserCategory = require('../../models/userModels/userCategotyModel.js');
+const ProfileSettings = require('../../models/profileSettingModel');
 const { applyFrame } = require("../../middlewares/helper/AddFrame/addFrame.js");
-const {extractThemeColor}=require("../../middlewares/helper/extractThemeColor.js");
+const { extractThemeColor } = require("../../middlewares/helper/extractThemeColor.js");
 const ImageStats = require("../../models/userModels/MediaSchema/imageViewModel.js");
 const VideoStats = require("../../models/userModels/MediaSchema/videoViewStatusModel");
 const cloudinary = require("cloudinary").v2;
-const HiddenPost=require("../../models/userModels/hiddenPostSchema.js")
+const HiddenPost = require("../../models/userModels/hiddenPostSchema.js")
 
 
 
@@ -340,6 +340,159 @@ exports.getAllFeedsByUserId = async (req, res) => {
 };
 
 
+/**
+ * ✅ Get a single feed by feedId
+ * Used when navigating from notifications
+ */
+exports.getSingleFeedById = async (req, res) => {
+  try {
+    const rawUserId = req.Id || req.body.userId;
+    const feedId = req.params.feedId;
+
+    if (!rawUserId)
+      return res.status(404).json({ message: "User ID Required" });
+
+    if (!feedId)
+      return res.status(400).json({ message: "Feed ID is required" });
+
+    const userId = new mongoose.Types.ObjectId(rawUserId);
+    const feedObjectId = new mongoose.Types.ObjectId(feedId);
+
+    // SAME PIPELINE AS getAllFeedsByUserId BUT MATCH ONE FEED
+    const result = await Feed.aggregate([
+      { $match: { _id: feedObjectId } },
+
+      // ----- SAME LOOKUPS -----
+      { $lookup: { from: "Admin", localField: "createdByAccount", foreignField: "_id", as: "admin" } },
+      { $lookup: { from: "Child_Admin", localField: "createdByAccount", foreignField: "_id", as: "childAdmin" } },
+      { $lookup: { from: "User", localField: "createdByAccount", foreignField: "_id", as: "user" } },
+
+      {
+        $addFields: {
+          accountData: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$roleRef", "Admin"] }, then: { $arrayElemAt: ["$admin", 0] } },
+                { case: { $eq: ["$roleRef", "Child_Admin"] }, then: { $arrayElemAt: ["$childAdmin", 0] } },
+                { case: { $eq: ["$roleRef", "User"] }, then: { $arrayElemAt: ["$user", 0] } }
+              ],
+              default: null
+            }
+          }
+        }
+      },
+
+      {
+        $lookup: {
+          from: "ProfileSettings",
+          let: {
+            adminId: { $cond: [{ $eq: ["$roleRef", "Admin"] }, "$createdByAccount", null] },
+            userId: { $cond: [{ $eq: ["$roleRef", "User"] }, "$createdByAccount", null] },
+            childAdminId: { $cond: [{ $eq: ["$roleRef", "Child_Admin"] }, "$createdByAccount", null] }
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $eq: ["$adminId", "$$adminId"] },
+                    { $eq: ["$childAdminId", "$$childAdminId"] },
+                    { $eq: ["$userId", "$$userId"] }
+                  ]
+                }
+              }
+            },
+            { $limit: 1 },
+            { $project: { userName: 1, profileAvatar: 1, modifyAvatar: 1 } }
+          ],
+          as: "profile"
+        }
+      },
+
+      { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
+
+      // ---------- COUNTS ----------
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: { path: "$likedFeeds", preserveNullAndEmptyArrays: true } },
+            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" }
+          ],
+          as: "likesCount"
+        }
+      },
+      {
+        $lookup: {
+          from: "UserComments",
+          let: { feedId: "$_id" },
+          pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } }, { $count: "count" }],
+          as: "commentsCount"
+        }
+      },
+
+      // ---------- ACTIONS ----------
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$userId", userId] } } },
+            {
+              $project: {
+                isLiked: {
+                  $in: ["$$feedId", { $map: { input: "$likedFeeds", in: "$$this.feedId" } }]
+                },
+                isSaved: {
+                  $in: ["$$feedId", { $map: { input: "$savedFeeds", in: "$$this.feedId" } }]
+                }
+              }
+            }
+          ],
+          as: "userActions"
+        }
+      },
+
+      {
+        $project: {
+          feedId: "$_id",
+          type: 1,
+          contentUrl: 1,
+          createdByAccount: 1,
+          createdAt: 1,
+          dec: 1,
+          category: 1,
+          language: 1,
+
+          userName: "$profile.userName",
+          profileAvatar: "$profile.profileAvatar",
+
+          likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCount.count", 0] }, 0] },
+          commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCount.count", 0] }, 0] },
+
+          isLiked: { $arrayElemAt: ["$userActions.isLiked", 0] },
+          isSaved: { $arrayElemAt: ["$userActions.isSaved", 0] },
+        }
+      }
+    ]);
+
+    if (!result.length) {
+      return res.status(404).json({ message: "Feed not found" });
+    }
+
+    res.status(200).json({
+      message: "Feed retrieved successfully",
+      feed: result[0]
+    });
+
+  } catch (err) {
+    console.error("Error in getSingleFeedById:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
 
 
 
@@ -476,7 +629,7 @@ exports.getFeedsByAccountId = async (req, res) => {
         commentsCount: commentsCount[fid] || 0,
         isLiked: likedFeedIds.includes(fid),
         isSaved: savedFeedIds.includes(fid),
-        isDisliked: dislikedFeedIds.includes(fid), 
+        isDisliked: dislikedFeedIds.includes(fid),
         userName: profile?.userName || "Unknown",
         profileAvatar: profile?.profileAvatar,
       };
@@ -492,6 +645,314 @@ exports.getFeedsByAccountId = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+
+
+exports.getFeedsByCreator = async (req, res) => {
+  try {
+    const feedId = req.params.feedId;
+    const rawUserId = req.Id || req.body.userId;
+
+    if (!feedId) return res.status(400).json({ message: "Feed ID required" });
+    if (!rawUserId) return res.status(404).json({ message: "User ID Required" });
+
+    const userId = new mongoose.Types.ObjectId(rawUserId);
+
+    /* -----------------------------------------------------
+       1️⃣ Get feed → extract creator ID
+    ------------------------------------------------------*/
+    const feed = await Feed.findById(feedId).lean();
+    if (!feed) return res.status(404).json({ message: "Feed not found" });
+
+    const creatorId = feed.createdByAccount;
+
+    /* -----------------------------------------------------
+       2️⃣ Fetch hidden posts & uninterested categories of logged user
+    ------------------------------------------------------*/
+    const hiddenPosts = await HiddenPost.find({ userId })
+      .select("postId -_id")
+      .lean();
+
+    const hiddenPostIds = hiddenPosts.map((h) => h.postId);
+
+    const userCategories = await UserCategory.findOne({ userId })
+      .select("nonInterestedCategories")
+      .lean();
+
+    const notInterestedCategoryIds =
+      userCategories?.nonInterestedCategories || [];
+
+    /* -----------------------------------------------------
+       3️⃣ MAIN PIPELINE (same as home feed, only changed match)
+    ------------------------------------------------------*/
+    const feeds = await Feed.aggregate([
+      {
+        $match: {
+          createdByAccount: new mongoose.Types.ObjectId(creatorId),
+          _id: { $nin: hiddenPostIds },
+          category: { $nin: notInterestedCategoryIds },
+          $or: [
+            { isScheduled: { $ne: true } },
+            {
+              $and: [
+                { isScheduled: true },
+                { scheduleDate: { $lte: new Date() } },
+              ],
+            },
+          ],
+        },
+      },
+      { $sort: { createdAt: -1 } },
+
+      /* ========================= PROFILE (Admin / User / ChildAdmin) ========================= */
+      { $lookup: { from: "Admin", localField: "createdByAccount", foreignField: "_id", as: "admin" } },
+      { $lookup: { from: "Child_Admin", localField: "createdByAccount", foreignField: "_id", as: "childAdmin" } },
+      { $lookup: { from: "User", localField: "createdByAccount", foreignField: "_id", as: "user" } },
+
+      {
+        $addFields: {
+          accountData: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$roleRef", "Admin"] }, then: { $arrayElemAt: ["$admin", 0] } },
+                { case: { $eq: ["$roleRef", "Child_Admin"] }, then: { $arrayElemAt: ["$childAdmin", 0] } },
+                { case: { $eq: ["$roleRef", "User"] }, then: { $arrayElemAt: ["$user", 0] } }
+              ],
+              default: null
+            }
+          }
+        }
+      },
+
+      /* ========================= PROFILE SETTINGS ========================= */
+      {
+        $lookup: {
+          from: "ProfileSettings",
+          let: {
+            adminId: { $cond: [{ $eq: ["$roleRef", "Admin"] }, "$createdByAccount", null] },
+            userId: { $cond: [{ $eq: ["$roleRef", "User"] }, "$createdByAccount", null] },
+            childAdminId: { $cond: [{ $eq: ["$roleRef", "Child_Admin"] }, "$createdByAccount", null] }
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $eq: ["$adminId", "$$adminId"] },
+                    { $eq: ["$childAdminId", "$$childAdminId"] },
+                    { $eq: ["$userId", "$$userId"] }
+                  ]
+                }
+              }
+            },
+            { $limit: 1 },
+            { $project: { userName: 1, profileAvatar: 1, modifyAvatar: 1 } }
+          ],
+          as: "profile"
+        }
+      },
+
+      { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
+
+      /* ========================= LIKES COUNT ========================= */
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: { path: "$likedFeeds", preserveNullAndEmptyArrays: true } },
+            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" }
+          ],
+          as: "likesCount"
+        }
+      },
+
+      /* ========================= DISLIKE COUNT ========================= */
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: { path: "$disLikeFeeds", preserveNullAndEmptyArrays: true } },
+            { $match: { $expr: { $eq: ["$disLikeFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" }
+          ],
+          as: "dislikesCount"
+        }
+      },
+
+      /* ========================= DOWNLOAD COUNT ========================= */
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: { path: "$downloadedFeeds", preserveNullAndEmptyArrays: true } },
+            { $match: { $expr: { $eq: ["$downloadedFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" }
+          ],
+          as: "downloadsCount"
+        }
+      },
+
+      /* ========================= SHARES COUNT ========================= */
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: { path: "$sharedFeeds", preserveNullAndEmptyArrays: true } },
+            { $match: { $expr: { $eq: ["$sharedFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" }
+          ],
+          as: "sharesCount"
+        }
+      },
+
+      /* ========================= VIEWS & COMMENTS COUNT ========================= */
+      {
+        $lookup: {
+          from: "UserViews",
+          let: { feedId: "$_id" },
+          pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } }, { $count: "count" }],
+          as: "viewsCount"
+        }
+      },
+
+      {
+        $lookup: {
+          from: "UserComments",
+          let: { feedId: "$_id" },
+          pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } }, { $count: "count" }],
+          as: "commentsCount"
+        }
+      },
+
+      /* ========================= USER ACTIONS ========================= */
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$userId", userId] } } },
+            {
+              $project: {
+                isLiked: {
+                  $in: ["$$feedId", { $map: { input: "$likedFeeds", as: "f", in: "$$f.feedId" } }]
+                },
+                isSaved: {
+                  $in: ["$$feedId", { $map: { input: "$savedFeeds", as: "f", in: "$$f.feedId" } }]
+                },
+                isDisliked: {
+                  $in: ["$$feedId", { $map: { input: "$disLikeFeeds", as: "f", in: "$$f.feedId" } }]
+                }
+              }
+            }
+          ],
+          as: "userActions"
+        }
+      },
+
+      /* ========================= FOLLOW STATUS CHECK ========================= */
+      {
+        $lookup: {
+          from: "Follows",
+          let: { creatorId: "$createdByAccount" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$creatorId", "$$creatorId"] },
+                    { $eq: ["$followerId", userId] }
+                  ]
+                }
+              }
+            },
+            { $limit: 1 }
+          ],
+          as: "followInfo"
+        }
+      },
+
+      {
+        $addFields: {
+          isFollowing: { $gt: [{ $size: "$followInfo" }, 0] }
+        }
+      },
+
+      /* ========================= FINAL PROJECTION ========================= */
+      {
+        $project: {
+          feedId: "$_id",
+          type: 1,
+          language: 1,
+          category: 1,
+          contentUrl: 1,
+          roleRef: 1,
+          createdByAccount: 1,
+          createdAt: 1,
+          dec: 1,
+
+          userName: "$profile.userName",
+          profileAvatar: "$profile.profileAvatar",
+          modifyAvatarFromProfile: "$profile.modifyAvatar",
+
+          likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCount.count", 0] }, 0] },
+          dislikesCount: { $ifNull: [{ $arrayElemAt: ["$dislikesCount.count", 0] }, 0] },
+          downloadsCount: { $ifNull: [{ $arrayElemAt: ["$downloadsCount.count", 0] }, 0] },
+          shareCount: { $ifNull: [{ $arrayElemAt: ["$sharesCount.count", 0] }, 0] },
+          viewsCount: { $ifNull: [{ $arrayElemAt: ["$viewsCount.count", 0] }, 0] },
+          commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCount.count", 0] }, 0] },
+
+          isLiked: { $arrayElemAt: ["$userActions.isLiked", 0] },
+          isSaved: { $arrayElemAt: ["$userActions.isSaved", 0] },
+          isDisliked: { $arrayElemAt: ["$userActions.isDisliked", 0] },
+
+          isFollowing: 1,
+          themeColor: 1
+        }
+      }
+    ]);
+
+    /* ========================= POST PROCESSING ========================= */
+    const enrichedFeeds = await Promise.all(
+      feeds.map(async (feed) => {
+        const avatarToUse =
+          feed.modifyAvatarFromProfile ||
+          feed.profileAvatar ||
+          process.env.DEFAULT_AVATAR;
+
+        const themeColor = feed.themeColor || {
+          primary: "#fff",
+          secondary: "#ccc",
+          accent: "#999",
+          text: "#000",
+          gradient: "linear-gradient(135deg,#fff,#ccc,#999)"
+        };
+
+        return {
+          ...feed,
+          avatarToUse,
+          themeColor,
+          timeAgo: feedTimeCalculator(feed.createdAt)
+        };
+      })
+    );
+
+    res.status(200).json({
+      message: "Creator feeds loaded",
+      creatorId,
+      feeds: enrichedFeeds
+    });
+
+  } catch (err) {
+    console.error("Error in getFeedsByCreator:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
 
 
 
@@ -563,7 +1024,7 @@ exports.getUserHidePost = async (req, res) => {
 exports.getUserInfoAssociatedFeed = async (req, res) => {
   try {
     let feedId = req.params.feedId || req.body.feedId;
-    const userId = req.Id || req.body.userId; 
+    const userId = req.Id || req.body.userId;
 
     if (!feedId) {
       return res.status(400).json({ message: "feedId is required" });
@@ -990,90 +1451,90 @@ exports.getFeedById = async (req, res) => {
 
 
 exports.deleteFeed = async (req, res) => {
-    try {
-        const {feedId}  = req.body;
+  try {
+    const { feedId } = req.body;
 
-        console.log(req);
+    console.log(req);
 
-        if (!feedId) {
-            return res.status(400).json({
-                success: false,
-                message: "feedId is required in body",
-            });
-        }
-
-        // ---------------------------------------------
-        // 1️⃣ Fetch Feed (needed for cloudinaryId)
-        // ---------------------------------------------
-        const feed = await Feed.findById(feedId).lean(); // lean = faster
-
-        if (!feed) {
-            return res.status(404).json({
-                success: false,
-                message: "Feed not found",
-            });
-        }
-
-        // ---------------------------------------------
-        // 2️⃣ Prepare parallel delete tasks
-        // ---------------------------------------------
-        const deleteTasks = [];
-
-        // Cloudinary delete (non-blocking)
-        if (feed.cloudinaryId) {
-            deleteTasks.push(
-                cloudinary.uploader
-                    .destroy(feed.cloudinaryId)
-                    .catch((err) => console.log("⚠ Cloudinary delete error:", err.message))
-            );
-        }
-
-        // Feed document
-        deleteTasks.push(Feed.findByIdAndDelete(feedId));
-
-        // Comments
-        deleteTasks.push(UserComment.deleteMany({ feedId }));
-
-        // Feed actions
-        deleteTasks.push(
-            UserFeedActions.updateMany(
-                {},
-                {
-                    $pull: {
-                        likedFeeds: { feedId },
-                        savedFeeds: { feedId },
-                        downloadedFeeds: { feedId },
-                        disLikeFeeds: { feedId },
-                        sharedFeeds: { feedId },
-                    },
-                }
-            )
-        );
-
-        // Views
-        deleteTasks.push(UserView.deleteMany({ feedId }));
-
-        // ---------------------------------------------
-        // 3️⃣ Execute all tasks in parallel
-        // ---------------------------------------------
-        await Promise.all(deleteTasks);
-
-        // ---------------------------------------------
-        // 4️⃣ Response
-        // ---------------------------------------------
-        return res.status(200).json({
-            success: true,
-            message: "Feed and all related data deleted successfully",
-        });
-
-    } catch (error) {
-        console.error("❌ Delete Feed Error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Server error while deleting feed",
-            error: error.message,
-        });
+    if (!feedId) {
+      return res.status(400).json({
+        success: false,
+        message: "feedId is required in body",
+      });
     }
+
+    // ---------------------------------------------
+    // 1️⃣ Fetch Feed (needed for cloudinaryId)
+    // ---------------------------------------------
+    const feed = await Feed.findById(feedId).lean(); // lean = faster
+
+    if (!feed) {
+      return res.status(404).json({
+        success: false,
+        message: "Feed not found",
+      });
+    }
+
+    // ---------------------------------------------
+    // 2️⃣ Prepare parallel delete tasks
+    // ---------------------------------------------
+    const deleteTasks = [];
+
+    // Cloudinary delete (non-blocking)
+    if (feed.cloudinaryId) {
+      deleteTasks.push(
+        cloudinary.uploader
+          .destroy(feed.cloudinaryId)
+          .catch((err) => console.log("⚠ Cloudinary delete error:", err.message))
+      );
+    }
+
+    // Feed document
+    deleteTasks.push(Feed.findByIdAndDelete(feedId));
+
+    // Comments
+    deleteTasks.push(UserComment.deleteMany({ feedId }));
+
+    // Feed actions
+    deleteTasks.push(
+      UserFeedActions.updateMany(
+        {},
+        {
+          $pull: {
+            likedFeeds: { feedId },
+            savedFeeds: { feedId },
+            downloadedFeeds: { feedId },
+            disLikeFeeds: { feedId },
+            sharedFeeds: { feedId },
+          },
+        }
+      )
+    );
+
+    // Views
+    deleteTasks.push(UserView.deleteMany({ feedId }));
+
+    // ---------------------------------------------
+    // 3️⃣ Execute all tasks in parallel
+    // ---------------------------------------------
+    await Promise.all(deleteTasks);
+
+    // ---------------------------------------------
+    // 4️⃣ Response
+    // ---------------------------------------------
+    return res.status(200).json({
+      success: true,
+      message: "Feed and all related data deleted successfully",
+    });
+
+  } catch (error) {
+    console.error("❌ Delete Feed Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while deleting feed",
+      error: error.message,
+    });
+  }
 };
 
 

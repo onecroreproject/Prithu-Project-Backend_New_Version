@@ -294,6 +294,42 @@ exports.removeFollower = async (req, res) => {
 };
 
 
+
+
+exports.checkFollowStatus = async (req, res) => {
+  try {
+    const { creatorId } = req.body;
+    const followerId=req.Id;
+
+    if (!creatorId || !followerId) {
+      return res.status(400).json({
+        success: false,
+        message: "creatorId and followerId are required",
+      });
+    }
+
+    // Check if follow relationship exists
+    const follow = await CreatorFollower.findOne({ creatorId, followerId });
+
+    const isFollowing = !!follow;
+
+    return res.status(200).json({
+      success: true,
+      isFollowing,
+    });
+
+  } catch (err) {
+    console.error("❌ Follow Status Error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: err.message,
+    });
+  }
+};
+
+
  
  
  

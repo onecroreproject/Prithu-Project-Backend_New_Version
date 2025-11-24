@@ -30,7 +30,8 @@ const {
   getUserInfoAssociatedFeed,
   getUserHidePost,
   getTrendingFeeds,
-  getFeedById,
+  getSingleFeedById,
+  getFeedsByCreator,
   deleteFeed,
 } = require('../controllers/feedControllers/feedsController');
 
@@ -90,6 +91,7 @@ const {
   updateFieldVisibilityWeb,
   getProfileCompletion,
   getProfileByUsername,
+  getUserVisibilityByUserId,
   } = require('../controllers/profileControllers/profileController');
 
 const {
@@ -161,6 +163,7 @@ const {
   getAccountFollowers,
   getUserFollowersData,
   removeFollower
+,checkFollowStatus
 } = require('../controllers/followersControllers.js/followerDetailController');
 
 const {
@@ -624,6 +627,7 @@ router.get("/get/profile/overview",auth,getProfileOverview);
 router.post("/single/get/profile/overview",getProfileOverview);
 router.post("/user/update/visibility/settings",auth,updateFieldVisibilityWeb);
 router.get("/user/get/visibility/settings",auth,getVisibilitySettingsWeb);
+router.post("/individual/user/visibility/settings",getUserVisibilityByUserId);
 
 
 
@@ -680,9 +684,13 @@ router.post("/individual/user/following", getUserFollowing);
 router.post("/individual/user/followers", getUserFollowers);
 router.post("/user/remove/follower",auth,removeFollower);
 
-router.get("/feed/:feedId", getFeedById);
+router.get("/get/single/feed/:feedId", auth,getSingleFeedById);
+
+router.get("/get/feeds/by/creator/:feedId",auth,getFeedsByCreator);
             
 router.get("/global/search",globalSearch);
+
+router.post("/check/follow/status", auth,checkFollowStatus);
 
 
 router.get("/get/user/birthday", getUpcomingBirthdays);
