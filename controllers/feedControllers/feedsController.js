@@ -340,6 +340,276 @@ exports.getAllFeedsByUserId = async (req, res) => {
 };
 
 
+
+
+
+/* ------------------------------------------------
+   CLEAN TAG VALUE (“#Music” → “music”)
+--------------------------------------------------- */
+function normalizeTag(str) {
+  if (!str) return "";
+  return str.trim().replace(/^#+/, "").toLowerCase();
+}
+
+
+
+/* ------------------------------------------------
+   MAIN FUNCTION
+--------------------------------------------------- */
+
+exports.getFeedsByHashtag = async (req, res) => {
+  try {
+    const rawUserId = req.Id || req.body.userId;
+    const tagRaw = req.params.tag;
+
+    if (!rawUserId)
+      return res.status(400).json({ message: "User ID required" });
+
+    const tag = normalizeTag(tagRaw);
+    if (!tag) return res.status(400).json({ message: "Hashtag required" });
+
+    const userId = new mongoose.Types.ObjectId(rawUserId);
+
+    const page = Math.max(1, Number(req.query.page || 1));
+    const limit = Math.max(5, Math.min(50, Number(req.query.limit || 10)));
+    const skip = (page - 1) * limit;
+
+    /* -------------------------------------------------
+       1) Hidden Posts
+    -------------------------------------------------- */
+    const hiddenPosts = await HiddenPost.find({ userId })
+      .select("postId -_id")
+      .lean();
+    const hiddenPostIds = hiddenPosts.map((x) => x.postId);
+
+    /* -------------------------------------------------
+       2) User "Not Interested" Categories
+    -------------------------------------------------- */
+    const userCat = await UserCategory.findOne({ userId }).lean();
+    const notCats = userCat?.nonInterestedCategories || [];
+
+    /* -------------------------------------------------
+       3) AGGREGATION PIPELINE
+    -------------------------------------------------- */
+    const pipeline = [
+      {
+        $match: {
+          _id: { $nin: hiddenPostIds },
+          category: { $nin: notCats },
+          hashtags: { $in: [tag] },
+          $or: [
+            { isScheduled: { $ne: true } },
+            { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] }
+          ],
+          status: "Published"
+        }
+      },
+
+      { $sort: { createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+
+      /* -------------------------------------------------
+         ACCOUNT LOOKUP (Admin / Child_Admin / User)
+      -------------------------------------------------- */
+      { $lookup: { from: "Admin", localField: "createdByAccount", foreignField: "_id", as: "admin" } },
+      { $lookup: { from: "Child_Admin", localField: "createdByAccount", foreignField: "_id", as: "childAdmin" } },
+      { $lookup: { from: "User", localField: "createdByAccount", foreignField: "_id", as: "user" } },
+
+      {
+        $addFields: {
+          accountData: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$roleRef", "Admin"] }, then: { $arrayElemAt: ["$admin", 0] } },
+                { case: { $eq: ["$roleRef", "Child_Admin"] }, then: { $arrayElemAt: ["$childAdmin", 0] } },
+                { case: { $eq: ["$roleRef", "User"] }, then: { $arrayElemAt: ["$user", 0] } }
+              ],
+              default: null
+            }
+          }
+        }
+      },
+
+      /* -------------------------------------------------
+         PROFILE SETTINGS
+      -------------------------------------------------- */
+      {
+        $lookup: {
+          from: "ProfileSettings",
+          let: {
+            adminId: { $cond: [{ $eq: ["$roleRef", "Admin"] }, "$createdByAccount", null] },
+            childAdminId: { $cond: [{ $eq: ["$roleRef", "Child_Admin"] }, "$createdByAccount", null] },
+            userId: { $cond: [{ $eq: ["$roleRef", "User"] }, "$createdByAccount", null] },
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $eq: ["$adminId", "$$adminId"] },
+                    { $eq: ["$childAdminId", "$$childAdminId"] },
+                    { $eq: ["$userId", "$$userId"] }
+                  ]
+                }
+              }
+            },
+            { $project: { userName: 1, profileAvatar: 1, modifyAvatar: 1 } },
+            { $limit: 1 }
+          ],
+          as: "profile"
+        }
+      },
+
+      { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
+
+      /* -------------------------------------------------
+         LIKE / DISLIKE / SAVE / VIEW / COMMENT COUNTS
+      -------------------------------------------------- */
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { fid: "$_id" },
+          pipeline: [
+            { $unwind: "$likedFeeds" },
+            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$fid"] } } },
+            { $count: "count" }
+          ],
+          as: "likesCount"
+        }
+      },
+
+      {
+        $lookup: {
+          from: "UserComments",
+          let: { fid: "$_id" },
+          pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$fid"] } } }, { $count: "count" }],
+          as: "commentsCount"
+        }
+      },
+
+      {
+        $lookup: {
+          from: "UserViews",
+          let: { fid: "$_id" },
+          pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$fid"] } } }, { $count: "count" }],
+          as: "viewsCount"
+        }
+      },
+
+      /* -------------------------------------------------
+         CURRENT USER ACTION FLAGS
+      -------------------------------------------------- */
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { fid: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$userId", userId] } } },
+            {
+              $project: {
+                isLiked: { $in: ["$$fid", { $map: { input: "$likedFeeds", as: "i", in: "$$i.feedId" } }] },
+                isSaved: { $in: ["$$fid", { $map: { input: "$savedFeeds", as: "i", in: "$$i.feedId" } }] },
+                isDisliked: { $in: ["$$fid", { $map: { input: "$disLikeFeeds", as: "i", in: "$$i.feedId" } }] },
+              }
+            }
+          ],
+          as: "userActions"
+        }
+      },
+
+      /* -------------------------------------------------
+         FOLLOW CHECK
+      -------------------------------------------------- */
+      {
+        $lookup: {
+          from: "Follows",
+          let: { creatorId: "$createdByAccount" },
+          pipeline: [
+            { $match: { $expr: { $and: [{ $eq: ["$creatorId", "$$creatorId"] }, { $eq: ["$followerId", userId] }] } } },
+            { $limit: 1 }
+          ],
+          as: "followInfo"
+        }
+      },
+
+      /* -------------------------------------------------
+         FINAL PROJECTION
+      -------------------------------------------------- */
+      {
+        $project: {
+          feedId: "$_id",
+          type: 1,
+          contentUrl: 1,
+          dec: 1,
+          category: 1,
+          hashtags: 1,
+          createdAt: 1,
+          duration: 1,
+          roleRef: 1,
+          createdByAccount: 1,
+
+          userName: "$profile.userName",
+          profileAvatar: "$profile.profileAvatar",
+          modifyAvatarFromProfile: "$profile.modifyAvatar",
+
+          likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCount.count", 0] }, 0] },
+          commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCount.count", 0] }, 0] },
+          viewsCount: { $ifNull: [{ $arrayElemAt: ["$viewsCount.count", 0] }, 0] },
+
+          isLiked: { $arrayElemAt: ["$userActions.isLiked", 0] },
+          isSaved: { $arrayElemAt: ["$userActions.isSaved", 0] },
+          isDisliked: { $arrayElemAt: ["$userActions.isDisliked", 0] },
+
+          isFollowing: { $gt: [{ $size: "$followInfo" }, 0] },
+
+          themeColor: 1
+        }
+      }
+    ];
+
+    /* -------------------------------------------------
+       EXECUTE PIPELINE
+    -------------------------------------------------- */
+    const feeds = await Feed.aggregate(pipeline);
+
+    /* -------------------------------------------------
+       CLEAN FINAL FEED FORMAT
+    -------------------------------------------------- */
+    const finalFeeds = feeds.map((f) => ({
+      ...f,
+      avatarToUse:
+        f.modifyAvatarFromProfile ||
+        f.profileAvatar ||
+        process.env.DEFAULT_AVATAR,
+
+      timeAgo: feedTimeCalculator(f.createdAt),
+
+      themeColor:
+        f.themeColor ||
+        {
+          primary: "#fff",
+          secondary: "#ccc",
+          accent: "#999",
+          text: "#000",
+          gradient: "linear-gradient(135deg,#fff,#ccc,#999)"
+        }
+    }));
+
+    return res.json({
+      success: true,
+      tag,
+      page,
+      limit,
+      feeds: finalFeeds
+    });
+  } catch (error) {
+    console.error("🔥 Hashtag Feed Error:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+
 /**
  * ✅ Get a single feed by feedId
  * Used when navigating from notifications
