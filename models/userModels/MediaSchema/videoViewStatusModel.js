@@ -2,16 +2,45 @@ const mongoose = require("mongoose");
 
 const videoStatsSchema = new mongoose.Schema(
   {
-    videoId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed", required: true, unique: true },
-    totalViews: { type: Number, default: 0 },
-    totalDuration: { type: Number, default: 0 }, // ✅ total watch duration for this video
-    uniqueUsers: { type: Number, default: 0 },   // optional unique users count
-    lastViewed: { type: Date },
+    videoId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Feed",
+      required: true,
+      unique: true,         // ensures one stats document per video
+      index: true,          // faster lookups
+    },
+
+    totalViews: {
+      type: Number,
+      default: 0,
+      index: true,          // supports sorting for trending/most viewed videos
+    },
+
+    totalDuration: {
+      type: Number,
+      default: 0,
+      // total user watch-time in seconds (or ms)
+    },
+
+    uniqueUsers: {
+      type: Number,
+      default: 0,
+    },
+
+    lastViewed: {
+      type: Date,
+      index: true,          // helps find recently viewed videos
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    minimize: true,           // removes empty fields
+  }
 );
 
-// Index for "most viewed videos"
-videoStatsSchema.index({ totalViews: -1 });
+/* 🔥 Compound Index (Best for Trending Queries)
+   - Sorts by views first, then recent activity
+*/
+videoStatsSchema.index({ totalViews: -1, lastViewed: -1 });
 
-module.exports = mongoose.model("VideoStats", videoStatsSchema, "VideoStats");
+module.exports = mongoose.model("VideoStats", videoStatsSchema,"VideoStats");

@@ -933,3 +933,36 @@ exports.getUserCategory = async (req, res) => {
 
 
 
+
+
+exports.removeNonInterestedCategory = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { categoryId } = req.body;
+
+    if (!categoryId) {
+      return res.status(400).json({ message: "categoryId is required" });
+    }
+
+    await UserCategory.updateOne(
+      { userId },
+      {
+        $pull: { nonInterestedCategories: categoryId },
+        $set: { [`updatedAtMap.${categoryId}`]: new Date() },
+      }
+    );
+
+    return res.status(200).json({
+      message: "Category removed from Not Interested",
+      categoryId,
+    });
+
+  } catch (err) {
+    console.error("❌ Error removing nonInterested category:", err);
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+
+
+

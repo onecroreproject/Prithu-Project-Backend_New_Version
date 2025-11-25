@@ -33,6 +33,8 @@ const {
   getSingleFeedById,
   getFeedsByCreator,
   deleteFeed,
+  getFeedsByHashtag,
+ 
 } = require('../controllers/feedControllers/feedsController');
 
 const {
@@ -61,6 +63,8 @@ const{
   userSelectCategory,
   userNotInterestedCategory,
   userInterestedCategory,
+  getNonInterestedCategories,
+  removeNonInterestedCategory
 }=require('../controllers/userControllers/userCategoryController')
 
 const {
@@ -327,6 +331,18 @@ const{
 deleteUserNow
 
 }=require("../controllers/userControllers/userDeleteController")
+
+
+const{
+  getTrendingHashtags,
+}=require("../controllers/hashTagController");
+
+
+
+const{
+  getHiddenPosts,
+  removeHiddenPost,
+}=require("../controllers/userControllers/hiddenPostController");
 
 
 
@@ -692,6 +708,14 @@ router.get("/global/search",globalSearch);
 
 router.post("/check/follow/status", auth,checkFollowStatus);
 
+router.get("/get/trending/hashtag", getTrendingHashtags);
+
+router.get("/get/hidden-posts", auth, getHiddenPosts);
+router.post("/remove/hidden-post",auth,removeHiddenPost);
+router.post("/remove/non-interested-category", auth, removeNonInterestedCategory);
+router.get("/get/non-interested-categories", auth, getNonInterestedCategories);
+
+router.get("/get/feeds/by/hashtag/:tag",auth, getFeedsByHashtag);
 
 router.get("/get/user/birthday", getUpcomingBirthdays);
 

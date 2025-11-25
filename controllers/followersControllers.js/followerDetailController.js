@@ -1,4 +1,4 @@
-const Follower = require("../../models/userFollowingModel");
+
 const mongoose = require("mongoose");
 const CreatorFollower = require("../../models/creatorFollowerModel");
 const Feed = require("../../models/feedModel");

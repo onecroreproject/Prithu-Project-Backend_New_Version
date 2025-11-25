@@ -15,7 +15,7 @@ const redisClient=require("../../Config/redisConfig.js")
 
 
 const extractHashtags = (text) => {
-  const regex = /#(\w+)/g;
+  const regex = /#([\p{L}\p{N}_]+)/gu;
   const tags = text?.match(regex);
   if (!tags) return [];
   return tags.map(t => t.slice(1).toLowerCase());

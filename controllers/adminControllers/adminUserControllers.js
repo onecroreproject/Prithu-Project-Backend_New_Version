@@ -586,7 +586,7 @@ exports.getUserAnalyticalData = async (req, res) => {
 
     const selectedUser = {
       userName: userProfile?.userName || "Unknown User",
-      userAvatar: userProfile?.profileAvatar || "/default-avatar.png",
+      userAvatar: userProfile?.profileAvatar || "",
     };
 
     // ------------------ Feeds ------------------
@@ -717,7 +717,7 @@ exports.getUserLevelWithEarnings = async (req, res) => {
     const currentUser = {
       userId: userId || null,
       userName: currentUserProfile?.userName || "Unknown User",
-      profileAvatar: currentUserProfile?.profileAvatar || "/default-avatar.png",
+      profileAvatar: currentUserProfile?.profileAvatar ,
     };
 
     // 2️⃣ Find the topmost level for this user
@@ -743,7 +743,7 @@ exports.getUserLevelWithEarnings = async (req, res) => {
         return {
           _id: uId,
           userName: profile.userName || "Unknown User",
-          profileAvatar: profile.profileAvatar || "/default-avatar.png",
+          profileAvatar: profile.profileAvatar || defaultAvater,
         };
       });
     };

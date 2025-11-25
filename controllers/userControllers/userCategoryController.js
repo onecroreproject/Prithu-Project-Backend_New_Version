@@ -173,6 +173,71 @@ exports.userNotInterestedCategory = async (req, res) => {
 
 
 
+/* ------------------------------------------------
+    3️⃣ GET ALL NON-INTERESTED CATEGORIES (FULL DATA)
+------------------------------------------------ */
+exports.getNonInterestedCategories = async (req, res) => {
+  try {
+    const userId = req.Id;
+
+    const userCategory = await UserCategory.findOne({ userId })
+      .populate("nonInterestedCategories", "name icon slug")
+      .lean();
+
+    if (!userCategory) {
+      return res.status(200).json({
+        nonInterestedCategories: [],
+        message: "No category preferences found",
+      });
+    }
+
+    return res.status(200).json({
+      nonInterestedCategories: userCategory.nonInterestedCategories || [],
+    });
+
+  } catch (err) {
+    console.error("❌ Error fetching nonInterested categories:", err);
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+
+
+
+
+/* ------------------------------------------------
+    2️⃣ REMOVE CATEGORY FROM NON-INTERESTED LIST
+------------------------------------------------ */
+exports.removeNonInterestedCategory = async (req, res) => {
+  try {
+    const userId = req.Id;
+    const { categoryId } = req.body;
+
+    if (!categoryId) {
+      return res.status(400).json({ message: "categoryId is required" });
+    }
+
+    await UserCategory.updateOne(
+      { userId },
+      {
+        $pull: { nonInterestedCategories: categoryId },
+        $set: { [`updatedAtMap.${categoryId}`]: new Date() },
+      }
+    );
+
+    return res.status(200).json({
+      message: "Category removed from Not Interested",
+      categoryId,
+    });
+
+  } catch (err) {
+    console.error("❌ Error removing nonInterested category:", err);
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+
+
 
 
 

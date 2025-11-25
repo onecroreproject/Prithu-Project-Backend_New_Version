@@ -1,23 +1,18 @@
 // /cron/index.js
 const cron = require("node-cron");
 
-// Queues (create-only)
+// Queues
 const deactivateQueue = require("../queue/deactivateSubcriptionQueue");
 const deleteQueue = require("../queue/deleteReportQueue");
 const feedQueue = require("../queue/feedPostQueue");
-const trendingQueue = require("../queue/treandingQueue");            // existing trending creators queue
+const trendingQueue = require("../queue/treandingQueue");
 const dailyAnalyticsQueue = require("../queue/salesMetricksUpdate");
 
-// NEW: hashtag trending queue (create-only)
-const hashtagTrendingQueue = require("../queue/hashTagTrendingQueue");
-
-
-
-// NEW: require the hashtag trending worker so it will process jobs
-require("../queueWorker/hasTagWorker");
+// NEW: hashtag trending queue (includes worker inside)
+const hashtagTrendingQueue = require("../queue/hashtagTrendingQueue");
 
 module.exports = ({ timezone = "Asia/Kolkata" } = {}) => {
-  // Every day at midnight (00:00) — deactivate subscriptions
+  // Deactivate subscriptions — Midnight
   cron.schedule(
     "0 0 * * *",
     () => {
@@ -26,7 +21,7 @@ module.exports = ({ timezone = "Asia/Kolkata" } = {}) => {
     { timezone }
   );
 
-  // Every day at 2 AM — cleanup old reports
+  // Cleanup old reports — 2 AM
   cron.schedule(
     "0 2 * * *",
     () => {
@@ -35,7 +30,7 @@ module.exports = ({ timezone = "Asia/Kolkata" } = {}) => {
     { timezone }
   );
 
-  // Every 15 minutes — process scheduled feeds
+  // Scheduled feeds — Every 15 minutes
   cron.schedule(
     "*/15 * * * *",
     () => {
@@ -44,7 +39,7 @@ module.exports = ({ timezone = "Asia/Kolkata" } = {}) => {
     { timezone }
   );
 
-  // Every 6 hours — trending creators (existing)
+  // Trending creators — Every 6 hours
   cron.schedule(
     "0 */6 * * *",
     () => {
@@ -52,18 +47,17 @@ module.exports = ({ timezone = "Asia/Kolkata" } = {}) => {
     },
     { timezone }
   );
+  
+cron.schedule(
+  "*/5 * * * *",  // every 5 minutes
+  () => {
+    hashtagTrendingQueue.add({});
+  },
+  { timezone }
+);
 
-  // NEW: Every 10 minutes — sync hashtag counters → trending
-  // (keeps Redis counters small and provides near real-time trending)
-  cron.schedule(
-    "*/10 * * * *",
-    () => {
-      hashtagTrendingQueue.add({});
-    },
-    { timezone }
-  );
 
-  // Daily analytics — run at midnight (fixed from previous every-minute cron)
+  // Daily analytics — Midnight
   cron.schedule(
     "0 0 * * *",
     () => {
@@ -74,3 +68,5 @@ module.exports = ({ timezone = "Asia/Kolkata" } = {}) => {
 
   console.log("✅ All cron jobs scheduled successfully (timezone:", timezone, ")");
 };
+
+

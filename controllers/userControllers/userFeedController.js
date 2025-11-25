@@ -1,8 +1,8 @@
 
 const Feed = require("../../models/feedModel");
-const ImageView = require("../../models/userModels/MediaSchema/userImageViewsModel");
+const UserImageView = require("../../models/userModels/MediaSchema/userImageViewsModel");
 const ImageStats = require("../../models/userModels/MediaSchema/imageViewModel");
-const VideoView =require("../../models/userModels/MediaSchema/userVideoViewModel");
+const UserVideoView =require("../../models/userModels/MediaSchema/userVideoViewModel");
 const VideoStats =require("../../models/userModels/MediaSchema/videoViewStatusModel");
 const mongoose = require("mongoose");
 const User = require("../../models/userModels/userModel");
@@ -25,34 +25,62 @@ const {feedTimeCalculator}=require("../../middlewares/feedTimeCalculator")
 exports.userImageViewCount = async (req, res) => {
   try {
     const { feedId } = req.body;
-    console.log(feedId)
     const userId = req.Id || req.body.userId;
- 
+
     if (!userId || !feedId) {
       return res.status(400).json({ message: "userId and feedId are required" });
     }
- 
-    // ✅ Add only if not already viewed (unique)
-    const updated = await ImageView.updateOne(
-      { userId },
-      { $addToSet: { views: { imageId: feedId, viewedAt: new Date() } } },
-      { upsert: true }
-    );
- 
-    // ✅ If new view was added → increment count only once
-    if (updated.modifiedCount > 0) {
-      Feed.updateOne(
-        { _id: feedId },
-        { $inc: { views: 1 } }
-      ).exec(); // No await → non-blocking
+
+    // 1️⃣ Check if user already viewed this image
+    const existing = await UserImageView.findOne({ userId, imageId: feedId });
+
+    let isUniqueUser = false;
+
+    if (!existing) {
+      // 2️⃣ Create a new user view record
+      await UserImageView.create({
+        userId,
+        imageId: feedId,
+        viewedAt: new Date(),
+      });
+
+      isUniqueUser = true;
+
+      // 3️⃣ Update global image stats
+      await ImageStats.findOneAndUpdate(
+        { imageId: feedId },
+        {
+          $inc: {
+            totalViews: 1,
+            uniqueUsers: 1,
+          },
+          $set: { lastViewed: new Date() },
+        },
+        { upsert: true }
+      );
+    } else {
+      // Existing user → Only increase total views
+      await ImageStats.findOneAndUpdate(
+        { imageId: feedId },
+        {
+          $inc: { totalViews: 1 },
+          $set: { lastViewed: new Date() }
+        },
+        { upsert: true }
+      );
     }
- 
-    return res.json({ message: "Unique image view recorded" });
+
+    return res.json({
+      message: "Image view recorded",
+      uniqueUser: isUniqueUser,
+    });
+
   } catch (err) {
     console.error("❌ Error recording image view:", err);
     return res.status(500).json({ message: "Server error" });
   }
 };
+
  
 
 
@@ -63,11 +91,11 @@ exports.userVideoViewCount = async (req, res) => {
     const { feedId } = req.body;
     const userId = req.Id || req.body.userId;
 
-    if (!userId || !feedId ) {
-      return res.status(400).json({ message: "userId, feedId, and watchedSeconds are required" });
+    if (!userId || !feedId) {
+      return res.status(400).json({ message: "userId and feedId are required" });
     }
 
-    // 1️⃣ Check feed type and duration
+    // 1️⃣ Validate feed
     const feed = await Feed.findById(feedId, "type duration");
     if (!feed) {
       return res.status(404).json({ message: "Feed not found" });
@@ -76,56 +104,61 @@ exports.userVideoViewCount = async (req, res) => {
       return res.status(400).json({ message: "Feed is not a video" });
     }
 
-    
+    // 2️⃣ Check if user already viewed this video
+    const existing = await UserVideoView.findOne({ userId, videoId: feedId });
 
-    // 3️⃣ Check if already recorded for this user + video
-    const existing = await VideoView.findOne({
-      userId,
-      "views.videoId": feedId,
-    });
+    let isUniqueUser = false;
 
-    if (existing) {
-      return res.json({ message: "Session already recorded", watched: true });
+    if (!existing) {
+      // 3️⃣ Insert one document per view
+      await UserVideoView.create({
+        userId,
+        videoId: feedId,
+        viewedAt: new Date(),
+      });
+
+      isUniqueUser = true;
+
+      // 4️⃣ Update global video stats
+      await VideoStats.findOneAndUpdate(
+        { videoId: feedId },
+        {
+          $inc: {
+            totalViews: 1,
+            uniqueUsers: 1,
+            totalDuration: feed.duration, // add video duration
+          },
+          $set: { lastViewed: new Date() },
+        },
+        { upsert: true }
+      );
+    } else {
+      // NOT unique → only update totalViews + totalDuration
+      await VideoStats.findOneAndUpdate(
+        { videoId: feedId },
+        {
+          $inc: {
+            totalViews: 1,
+            totalDuration: feed.duration,
+          },
+          $set: { lastViewed: new Date() }
+        },
+        { upsert: true }
+      );
     }
 
-    // 4️⃣ Push view + increment user's total duration (use feed.duration, not watchedSeconds)
-    await VideoView.findOneAndUpdate(
-      { userId },
-      {
-        $push: {
-          views: {
-            videoId: feedId,
-            watchedSeconds,
-            totalDuration: feed.duration, // ✅ store feed’s duration
-            viewedAt: new Date(),
-          },
-        },
-        $inc: { totalDuration: feed.duration }, // ✅ increment total by feed duration
-      },
-      { upsert: true }
-    );
-
-    // 5️⃣ Update video stats (also increment by feed.duration)
-    await VideoStats.findOneAndUpdate(
-      { videoId: feedId },
-      {
-        $inc: { totalViews: 1, totalDuration: feed.duration }, // ✅ add feed duration instead of watchedSeconds
-        $set: { lastViewed: new Date() },
-      },
-      { upsert: true }
-    );
-
-    // 6️⃣ Success response
     return res.json({
       message: "Video view recorded",
-      watched: true,
-      durationCounted: feed.duration,
+      durationAdded: feed.duration,
+      uniqueUser: isUniqueUser,
     });
+
   } catch (err) {
     console.error("❌ Error recording video view:", err);
     return res.status(500).json({ message: "Server error" });
   }
 };
+
 
 
 
@@ -202,7 +235,7 @@ exports.fetchUserFollowing = async (req, res) => {
       userId: f.userId?._id,
       userName: f.userId?.userName,
       email: f.userId?.email,
-      profileAvatar: avatarMap[f.userId?._id?.toString()] || "/default-avatar.png",
+      profileAvatar: avatarMap[f.userId?._id?.toString()] ,
       followedAt: f.createdAt,
     }));
 
@@ -635,7 +668,7 @@ exports.getUserdetailWithinTheFeed = async (req, res) => {
     else return res.status(400).json({ message: "Invalid roleRef" });
 
     // Find the profile
-    const profile = await ProfileSettings.findOne(query).select("userName profileAvatar bio");
+    const profile = await ProfileSettings.findOne(query).select("userName profileAvatar bio coverPhoto");
     if (!profile) return res.status(404).json({ message: "Profile not found" });
 
     // Get following info from Follower collection
@@ -654,6 +687,7 @@ exports.getUserdetailWithinTheFeed = async (req, res) => {
     const profileData = {
       userName: profile.userName,
       profileAvatar: profile.profileAvatar,
+      coverPhoto:profile.coverPhoto,
       bio: profile.bio,
       followingCount,
       creatorFollowerCount,
@@ -742,6 +776,13 @@ exports.getUserPost = async (req, res) => {
     });
   }
 };
+
+
+
+
+
+
+
 
 
 
