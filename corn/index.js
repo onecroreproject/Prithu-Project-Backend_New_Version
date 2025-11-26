@@ -66,7 +66,17 @@ cron.schedule(
     { timezone }
   );
 
+
+
+
+
   console.log("✅ All cron jobs scheduled successfully (timezone:", timezone, ")");
 };
+
+
+
+
+
+
 
 

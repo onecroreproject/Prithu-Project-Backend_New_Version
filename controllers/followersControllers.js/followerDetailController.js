@@ -53,7 +53,7 @@ exports.followAccount = async (req, res) => {
 
     // 3️⃣ Log Activity
     await logUserActivity({
-      userId,
+      userId:currentUserId,
       actionType: "FOLLOW_USER",
       targetId: userId,
       targetModel: "User",
@@ -65,8 +65,8 @@ exports.followAccount = async (req, res) => {
       senderId: currentUserId,
       receiverId: userId,
       type: "FOLLOW",
-      title: `${followerProfile?.userName ||" " } started following you 👥`,
-      message: `${followerProfile?.userName || "A user"} is now following your account.`,
+      title: `${followerProfile?.userName ||" " } started following you. Welcome him for your Profile👋 `,
+      message: `${followerProfile?.userName || "A user"} Welcome him for your Profile👋.`,
       entityId: userId,
       entityType: "Follow",
       image: followerProfile?.profileAvatar || "",
@@ -119,7 +119,7 @@ exports.unFollowAccount = async (req, res) => {
 
     // 3️⃣ Log activity
     await logUserActivity({
-      userId,
+      userId:currentUserId,
       actionType: "UNFOLLOW_USER",
       targetId: userId,
       targetModel: "User",

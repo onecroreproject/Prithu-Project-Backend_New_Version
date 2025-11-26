@@ -34,6 +34,7 @@ const {
   getFeedsByCreator,
   deleteFeed,
   getFeedsByHashtag,
+  singleFeedById,
  
 } = require('../controllers/feedControllers/feedsController');
 
@@ -187,7 +188,9 @@ const{
 const{
   getCommentsByFeed,
   getRepliesForComment,
-  getNestedReplies
+  getNestedReplies,
+  deleteComment,
+  deleteReply
 ,
 }=require('../controllers/conmmentController')
 
@@ -397,7 +400,8 @@ router.post('/user/feed/comment',auth,postComment);
 router.post('/user/feed/reply/comment',auth,postReplyComment);
 
 
-
+router.delete("/user/delete/comment/:commentId",auth,deleteComment);
+router.delete("/user/delete/reply/comment/:replyId",auth,deleteReply);
 router.post('/get/replies/for/comment', auth, getRepliesForComment);
 router.post('/get/comments/for/feed',auth,getCommentsByFeed);
 router.post('/get/nested/replies',auth,getNestedReplies);
@@ -438,7 +442,7 @@ router.post("/creator/feed/ScheduleUpload",auth,userUpload.single("file"),(req, 
   userUploadToCloudinary,
   creatorFeedScheduleUpload
 );
-router.get("/get/trending/feed",getTrendingFeeds);
+router.get("/get/trending/feed",auth,getTrendingFeeds);
 router.get('/get/all/feeds/user',auth,getAllFeedsByUserId);
 router.post('/user/watching/vidoes',auth,userVideoViewCount);
 router.post('/user/image/view/count',auth,userImageViewCount);
@@ -701,6 +705,8 @@ router.post("/individual/user/followers", getUserFollowers);
 router.post("/user/remove/follower",auth,removeFollower);
 
 router.get("/get/single/feed/:feedId", auth,getSingleFeedById);
+
+router.get("/feed/:feedId",singleFeedById)
 
 router.get("/get/feeds/by/creator/:feedId",auth,getFeedsByCreator);
             

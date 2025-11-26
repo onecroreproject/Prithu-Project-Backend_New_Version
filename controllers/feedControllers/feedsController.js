@@ -766,6 +766,36 @@ exports.getSingleFeedById = async (req, res) => {
 
 
 
+exports.singleFeedById = async (req, res) => {
+  try {
+    const feedId = req.params.feedId;
+
+    if (!feedId)
+      return res.status(400).json({ message: "Feed ID is required" });
+
+    const feedObjectId = new mongoose.Types.ObjectId(feedId);
+
+    const feed = await Feed.findById(feedObjectId).lean();
+
+    if (!feed) {
+      return res.status(404).json({ message: "Feed not found" });
+    }
+
+    res.status(200).json({
+      message: "Feed retrieved successfully",
+      feed
+    });
+
+  } catch (err) {
+    console.error("Error in getSingleFeedById:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+
+
+
+
 exports.getFeedsByAccountId = async (req, res) => {
   try {
     const accountId = req.accountId || req.body.accountId;
@@ -1464,215 +1494,199 @@ exports.getUserInfoAssociatedFeed = async (req, res) => {
 
 exports.getTrendingFeeds = async (req, res) => {
   try {
-    // 🔥 1️⃣ Today's date range
+    const rawUserId = req.Id || req.body.userId;
+    const userId = rawUserId ? new mongoose.Types.ObjectId(rawUserId) : null;
+
+    if (!userId) {
+      return res.status(400).json({ message: "userId is required" });
+    }
+
+    /* -----------------------------------------
+       1️⃣ Today date range
+    ----------------------------------------- */
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    // 🔥 2️⃣ Fetch ONLY today's feeds
+    /* -----------------------------------------
+       2️⃣ Fetch TODAY’s Feeds
+    ----------------------------------------- */
     const feeds = await Feed.find({
       createdAt: { $gte: todayStart, $lte: todayEnd }
     })
-      .populate("createdByAccount", "_id")
+      .populate("createdByAccount", "_id roleRef")
       .lean();
 
     if (!feeds.length) {
-      return res.status(404).json({ message: "No feeds available for today" });
+      return res.status(404).json({ message: "No trending feeds for today" });
     }
 
-    // ⚡ 3️⃣ Compute engagement metrics per feed
-    const feedScores = await Promise.all(
+    /* -----------------------------------------
+       3️⃣ Build trending list with extra fields
+    ----------------------------------------- */
+    const enriched = await Promise.all(
       feeds.map(async (feed) => {
         const feedId = feed._id;
-        const userId = feed.createdByAccount?._id;
         const roleRef = feed.roleRef;
+        const creatorId = feed.createdByAccount?._id;
 
-        // Profile Query
-        let queryField;
-        if (roleRef === "Admin") queryField = { adminId: userId };
-        else if (roleRef === "Child_Admin") queryField = { childAdminId: userId };
-        else queryField = { userId: userId };
+        /* ---------------------------------------------------------
+           A. Fetch Profile
+        --------------------------------------------------------- */
+        let profileQuery = {};
+        if (roleRef === "Admin") profileQuery = { adminId: creatorId };
+        else if (roleRef === "Child_Admin") profileQuery = { childAdminId: creatorId };
+        else profileQuery = { userId: creatorId };
 
-        const profile = await ProfileSettings.findOne(queryField, {
+        const profile = await ProfileSettings.findOne(profileQuery, {
           userName: 1,
-          profileAvatar: 1,
+          profileAvatar: 1
         }).lean();
 
-        let totalLikes = 0;
-        let totalShares = 0;
-        let totalViews = 0;
-        let totalDownloads = 0;
-        let score = 0;
-
-        const feedAgeHours =
-          (Date.now() - new Date(feed.createdAt)) / (1000 * 60 * 60);
-
-        // Admin / Child Admin Privilege (unchanged)
-        if (roleRef === "Admin" || roleRef === "Child_Admin") {
-          if (feedAgeHours <= 48) {
-            score = 999999;
-          } else {
-            const userActions = await UserFeedActions.aggregate([
-              { $project: { likedFeeds: 1, sharedFeeds: 1 } },
-              {
-                $project: {
-                  likes: {
-                    $size: {
-                      $filter: {
-                        input: "$likedFeeds",
-                        cond: { $eq: ["$$this.feedId", feedId] },
-                      },
-                    },
-                  },
-                  shares: {
-                    $size: {
-                      $filter: {
-                        input: "$sharedFeeds",
-                        cond: { $eq: ["$$this.feedId", feedId] },
-                      },
-                    },
-                  },
-                },
-              },
-              {
-                $group: {
-                  _id: null,
-                  totalLikes: { $sum: "$likes" },
-                  totalShares: { $sum: "$shares" },
-                },
-              },
-            ]);
-
-            totalLikes = userActions[0]?.totalLikes || 0;
-            totalShares = userActions[0]?.totalShares || 0;
-
-            if (feed.type === "image") {
-              const imgStats = await ImageStats.findOne({ imageId: feedId });
-              totalViews = imgStats?.totalViews || 0;
-              totalDownloads = imgStats?.totalDownloads || 0;
-            } else if (feed.type === "video") {
-              const vidStats = await VideoStats.findOne({ videoId: feedId });
-              totalViews = vidStats?.totalViews || 0;
-              totalDownloads = vidStats?.totalDownloads || 0;
+        /* ---------------------------------------------------------
+           B. User Feed Actions (likes, shares, downloads)
+        --------------------------------------------------------- */
+        const actionAgg = await UserFeedActions.aggregate([
+          {
+            $project: {
+              likedFeeds: 1,
+              sharedFeeds: 1,
+              downloadedFeeds: 1
             }
-
-            const decayFactor = feedAgeHours <= 24 ? 1 : Math.exp(-feedAgeHours / 48);
-
-            score =
-              (totalLikes * 3 +
-                totalShares * 5 +
-                totalViews * 1 +
-                totalDownloads * 4) *
-              decayFactor;
-          }
-        } else {
-          // Regular User Feed Scoring
-          const userActions = await UserFeedActions.aggregate([
-            { $project: { likedFeeds: 1, sharedFeeds: 1 } },
-            {
-              $project: {
-                likes: {
-                  $size: {
-                    $filter: {
-                      input: "$likedFeeds",
-                      cond: { $eq: ["$$this.feedId", feedId] },
-                    },
-                  },
-                },
-                shares: {
-                  $size: {
-                    $filter: {
-                      input: "$sharedFeeds",
-                      cond: { $eq: ["$$this.feedId", feedId] },
-                    },
-                  },
-                },
+          },
+          {
+            $project: {
+              likes: {
+                $size: {
+                  $filter: {
+                    input: "$likedFeeds",
+                    cond: { $eq: ["$$this.feedId", feedId] }
+                  }
+                }
               },
-            },
-            {
-              $group: {
-                _id: null,
-                totalLikes: { $sum: "$likes" },
-                totalShares: { $sum: "$shares" },
+              shares: {
+                $size: {
+                  $filter: {
+                    input: "$sharedFeeds",
+                    cond: { $eq: ["$$this.feedId", feedId] }
+                  }
+                }
               },
-            },
-          ]);
-
-          totalLikes = userActions[0]?.totalLikes || 0;
-          totalShares = userActions[0]?.totalShares || 0;
-
-          if (feed.type === "image") {
-            const imgStats = await ImageStats.findOne({ imageId: feedId });
-            totalViews = imgStats?.totalViews || 0;
-            totalDownloads = imgStats?.totalDownloads || 0;
-          } else if (feed.type === "video") {
-            const vidStats = await VideoStats.findOne({ videoId: feedId });
-            totalViews = vidStats?.totalViews || 0;
-            totalDownloads = vidStats?.totalDownloads || 0;
+              downloads: {
+                $size: {
+                  $filter: {
+                    input: "$downloadedFeeds",
+                    cond: { $eq: ["$$this.feedId", feedId] }
+                  }
+                }
+              }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalLikes: { $sum: "$likes" },
+              totalShares: { $sum: "$shares" },
+              totalDownloads: { $sum: "$downloads" }
+            }
           }
+        ]);
 
-          const decayFactor = feedAgeHours <= 24 ? 1 : Math.exp(-feedAgeHours / 48);
+        const totalLikes = actionAgg[0]?.totalLikes || 0;
+        const totalShares = actionAgg[0]?.totalShares || 0;
+        const totalDownloads = actionAgg[0]?.totalDownloads || 0;
 
-          score =
-            (totalLikes * 3 +
-              totalShares * 5 +
-              totalViews * 1 +
-              totalDownloads * 4) *
-            decayFactor;
+        /* ---------------------------------------------------------
+           C. View Count based on ImageStats / VideoStats
+        --------------------------------------------------------- */
+        let totalViews = 0;
+
+        if (feed.type === "image") {
+          const img = await ImageStats.findOne({ imageId: feedId }).lean();
+          totalViews = img?.totalViews || 0;
+        } else if (feed.type === "video") {
+          const vid = await VideoStats.findOne({ videoId: feedId }).lean();
+          totalViews = vid?.totalViews || 0;
         }
+
+        /* ---------------------------------------------------------
+           D. Check If Current User Liked / Saved / Disliked
+        --------------------------------------------------------- */
+        const userAction = await UserFeedActions.findOne({ userId }, {
+          likedFeeds: 1,
+          savedFeeds: 1,
+          disLikeFeeds: 1
+        }).lean();
+
+        const isLiked =
+          userAction?.likedFeeds?.some((f) => f.feedId.toString() === feedId.toString()) || false;
+
+        const isSaved =
+          userAction?.savedFeeds?.some((f) => f.feedId.toString() === feedId.toString()) || false;
+
+        const isDisliked =
+          userAction?.disLikeFeeds?.some((f) => f.feedId.toString() === feedId.toString()) || false;
+
+        /* ---------------------------------------------------------
+           E. Trending Score
+        --------------------------------------------------------- */
+        const feedAgeHours = (Date.now() - new Date(feed.createdAt)) / (1000 * 60 * 60);
+        const decay = feedAgeHours <= 24 ? 1 : Math.exp(-feedAgeHours / 48);
+
+        const score =
+          (totalLikes * 3 + totalShares * 5 + totalViews * 1 + totalDownloads * 4) * decay;
 
         return {
           ...feed,
           totalLikes,
           totalShares,
-          totalViews,
           totalDownloads,
-          score,
-          roleRef,
+          totalViews,
+
+          isLiked,
+          isSaved,
+          isDisliked,
+
           createdByProfile: {
             userName: profile?.userName || "Unknown User",
-            profileAvatar:
-              profile?.profileAvatar ||
-              "https://default-avatar.example.com/default.png",
+            profileAvatar: profile?.profileAvatar || null
           },
+
+          score
         };
       })
     );
 
-    // Sort feeds by score
-    const sortedFeeds = feedScores.sort((a, b) => b.score - a.score);
-    const maxScore = sortedFeeds.length
-      ? Math.max(...sortedFeeds.map((f) => f.score))
-      : 0;
+    /* ---------------------------------------------------------
+       4️⃣ Sort & Rank Trending
+    --------------------------------------------------------- */
+    enriched.sort((a, b) => b.score - a.score);
 
-    const normalizedFeeds = sortedFeeds.map((f, index) => ({
+    const maxScore = enriched.length ? Math.max(...enriched.map((f) => f.score)) : 0;
+
+    const response = enriched.map((f, index) => ({
       ...f,
-      trendingScore: maxScore
-        ? Math.round((f.score / maxScore) * 100)
-        : 0,
       rank: index + 1,
+      trendingScore: maxScore ? Math.round((f.score / maxScore) * 100) : 0
     }));
 
-    const cleanedFeeds = normalizedFeeds.map((f) => {
-      const { score, ...rest } = f;
-      return rest;
+    res.status(200).json({
+      message: "Today's Trending Feeds",
+      count: response.length,
+      data: response
     });
 
-    return res.status(200).json({
-      message: "Today's Trending Feeds",
-      count: cleanedFeeds.length,
-      data: cleanedFeeds,
-    });
   } catch (err) {
     console.error("Error fetching trending feeds:", err);
-    return res.status(500).json({
-      message: "Error fetching trending feeds",
-      error: err.message,
+    res.status(500).json({
+      message: "Internal server error",
+      error: err.message
     });
   }
 };
+
 
 
 

@@ -732,7 +732,7 @@ exports.getVisibilitySettingsWeb = async (req, res) => {
 exports.getUserVisibilityByUserId = async (req, res) => {
   try {
     const { userId } = req.body;
-
+console.log(userId)
     // Validate input
     if (!userId) {
       return res.status(400).json({

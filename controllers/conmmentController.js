@@ -77,7 +77,8 @@ exports.getCommentsByFeed = async (req, res) => {
     profiles.forEach(p => {
       profileMap[p.userId.toString()] = {
         username: p.userName,
-        avatar: p.profileAvatar
+        avatar: p.profileAvatar,
+        userId:p.userId
       };
     });
 
@@ -95,6 +96,7 @@ exports.getCommentsByFeed = async (req, res) => {
         replyCount: replyCountMap[c._id.toString()] || 0,
         timeAgo: feedTimeCalculator(c.createdAt),
         username: profile.username || "Unknown User",
+        userId:profile.userId,
         avatar: profile.avatar
       };
     });
@@ -165,6 +167,7 @@ exports.getRepliesForComment = async (req, res) => {
         replyText: reply.replyText,
         username: profile?.userName || "Unknown User",
         avatar: profile?.profileAvatar || null,
+        userId:profile?.userId || "Unknown",
         likeCount: reply.likeCount || (Array.isArray(reply.likes) ? reply.likes.length : 0),
         isLiked,
         timeAgo: feedTimeCalculator(reply.createdAt),
@@ -224,6 +227,7 @@ exports.getNestedReplies = async (req, res) => {
         replyText: reply.replyText,
         username: profile?.userName || "Unknown User",
         avatar: profile?.profileAvatar || null,
+        userId:profile?.userId || "Unknown",
         likeCount: reply.likeCount || (Array.isArray(reply.likes) ? reply.likes.length : 0),
         isLiked,
         timeAgo: feedTimeCalculator(reply.createdAt),
@@ -233,6 +237,108 @@ exports.getNestedReplies = async (req, res) => {
     return res.json({ replies: final });
   } catch (err) {
     console.error("Get nested replies error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+
+
+
+
+
+
+exports.deleteComment = async (req, res) => {
+  try {
+    const { commentId } = req.params;
+    const userId = req.Id;
+
+    if (!commentId) {
+      return res.status(400).json({ message: "Comment ID required" });
+    }
+
+    const comment = await UserComment.findById(commentId);
+    if (!comment) {
+      return res.status(404).json({ message: "Comment not found" });
+    }
+
+    // Authorization check
+    if (comment.userId.toString() !== userId.toString()) {
+      return res.status(403).json({ message: "You are not allowed to delete this comment" });
+    }
+
+    // 1️⃣ Delete comment
+    await UserComment.findByIdAndDelete(commentId);
+
+    // 2️⃣ Delete main comment likes
+    await CommentLike.deleteMany({ commentId });
+
+    // 3️⃣ Delete all replies belonging to this comment
+    const replies = await Reply.find({ parentCommentId: commentId }).select("_id");
+
+    const replyIds = replies.map(r => r._id);
+
+    if (replyIds.length > 0) {
+      // Delete replies
+      await Reply.deleteMany({ parentCommentId: commentId });
+
+      // Delete reply likes
+      await CommentLike.deleteMany({ replyId: { $in: replyIds } });
+    }
+
+    return res.status(200).json({ message: "Comment & all replies deleted successfully" });
+  } catch (error) {
+    console.error("Delete Comment Error:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+async function getAllNestedReplyIds(parentId) {
+  const children = await Reply.find({ parentReplyId: parentId }).select("_id");
+  let ids = children.map(c => c._id);
+
+  for (let child of children) {
+    const nested = await getAllNestedReplyIds(child._id);
+    ids = ids.concat(nested);
+  }
+
+  return ids;
+}
+
+exports.deleteReply = async (req, res) => {
+  try {
+    const { replyId } = req.params;
+    const userId = req.Id;
+
+    if (!replyId) {
+      return res.status(400).json({ message: "replyId is required" });
+    }
+
+    const reply = await Reply.findById(replyId);
+    if (!reply) {
+      return res.status(404).json({ message: "Reply not found" });
+    }
+
+    // Authorization check
+    if (reply.userId.toString() !== userId.toString()) {
+      return res.status(403).json({ message: "You are not allowed to delete this reply" });
+    }
+
+    // 1️⃣ Get all nested reply IDs
+    const nestedIds = await getAllNestedReplyIds(replyId);
+
+    const allDeleteIds = [replyId, ...nestedIds];
+
+    // 2️⃣ Delete replies (this + nested)
+    await Reply.deleteMany({ _id: { $in: allDeleteIds } });
+
+    // 3️⃣ Delete likes for these replies
+    await CommentLike.deleteMany({ replyId: { $in: allDeleteIds } });
+
+    return res.status(200).json({ message: "Reply & nested replies deleted" });
+  } catch (error) {
+    console.error("Delete Reply Error:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
