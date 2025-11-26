@@ -9,7 +9,7 @@ const trendingQueue = require("../queue/treandingQueue");
 const dailyAnalyticsQueue = require("../queue/salesMetricksUpdate");
 
 // NEW: hashtag trending queue (includes worker inside)
-const hashtagTrendingQueue = require("../queue/hashtagTrendingQueue");
+const hashtagTrendingQueue = require("../queue/hashTagTrendingQueue");
 
 module.exports = ({ timezone = "Asia/Kolkata" } = {}) => {
   // Deactivate subscriptions — Midnight
