@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../../database");
+
 
 const ProjectSchema = new mongoose.Schema(
   {

@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../../database");
+
 
 const DeviceSchema = new mongoose.Schema(
   {
@@ -50,4 +52,4 @@ const DeviceSchema = new mongoose.Schema(
 // ✅ Create compound index for performance
 DeviceSchema.index({ userId: 1, deviceId: 1 }, { unique: true });
 
-module.exports = mongoose.model("Device", DeviceSchema,"Devices");
+module.exports = prithuDB.model("Device", DeviceSchema,"Devices");

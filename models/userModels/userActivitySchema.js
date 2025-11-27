@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../database");
+
 
 const UserActivitySchema = new mongoose.Schema(
   {
@@ -62,4 +64,4 @@ UserActivitySchema.index({ userId: 1, updatedAt: -1 });
 
 module.exports =
   mongoose.models.UserActivity ||
-  mongoose.model("UserActivity", UserActivitySchema, "UserActivities");
+  prithuDB.model("UserActivity", UserActivitySchema, "UserActivities");

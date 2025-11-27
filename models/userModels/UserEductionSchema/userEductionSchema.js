@@ -1,5 +1,7 @@
 // models/userModels/userProfile/educationSchema.js
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../../database");
+
 
 const educationSchema = new mongoose.Schema({
   level: {

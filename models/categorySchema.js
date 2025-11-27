@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const {prithuDB}=require("../database");
 
 const categorySchema = new mongoose.Schema({
   name: {
@@ -18,4 +19,4 @@ const categorySchema = new mongoose.Schema({
 
 });
 
-module.exports = mongoose.model('Categories', categorySchema, 'Categories');
+module.exports = prithuDB.model('Categories', categorySchema, 'Categories');

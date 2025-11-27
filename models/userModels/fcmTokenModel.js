@@ -1,4 +1,6 @@
 const mongoose = require('mongoose');
+const {prithuDB}=require("../../database");
+
 
 const FcmTokenSchema = new mongoose.Schema({
   token: { type: String, required: true },
@@ -15,4 +17,4 @@ const UserSchema = new mongoose.Schema({
   fcmTokens: { type: [FcmTokenSchema], default: [] },
 });
 
-module.exports = mongoose.model('UserToken', UserSchema,'UserFCMTokens');
+module.exports = prithuDB.model('UserToken', UserSchema,'UserFCMTokens');

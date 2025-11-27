@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../database");
+
 
 const UserLanguageSchema = new mongoose.Schema({
   userId: { 
@@ -35,4 +37,4 @@ const UserLanguageSchema = new mongoose.Schema({
 UserLanguageSchema.index({ userId: 1, appLanguageCode: 1 });
 UserLanguageSchema.index({ userId: 1, feedLanguageCode: 1 });
 
-module.exports = mongoose.model("UserLanguage", UserLanguageSchema,"UserLanguage");
+module.exports = prithuDB.model("UserLanguage", UserLanguageSchema,"UserLanguage");

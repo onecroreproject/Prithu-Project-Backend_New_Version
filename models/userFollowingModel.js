@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 
 const followingSchema = new mongoose.Schema(
   {
@@ -64,4 +65,4 @@ followingSchema.index({ "nonFollowingIds.userId": 1 });
  */
 followingSchema.index({ "followingIds.userId": 1, userId: 1 });
 
-module.exports = mongoose.model("Follower", followingSchema, "UserFollowings");
+module.exports = prithuDB.model("Follower", followingSchema, "UserFollowings");

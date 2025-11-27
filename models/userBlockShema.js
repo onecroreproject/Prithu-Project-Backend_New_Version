@@ -1,3 +1,5 @@
+const {prithuDB}=require("../database");
+
 const blockSchema = new mongoose.Schema({
   blockerId: { type: mongoose.ObjectId, required: true, index: true },
   blockedId: { type: mongoose.ObjectId, required: true, index: true },
@@ -7,4 +9,4 @@ const blockSchema = new mongoose.Schema({
 // Ensure no duplicate blocks
 blockSchema.index({ blockerId: 1, blockedId: 1 }, { unique: true });
 
-module.exports = mongoose.model("Block", blockSchema, "UserBlocks");
+module.exports = prithuDB.model("Block", blockSchema, "UserBlocks");

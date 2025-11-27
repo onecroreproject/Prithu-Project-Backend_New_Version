@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../database");
+
 
 const UserCategorySchema = new mongoose.Schema(
   {
@@ -44,7 +46,7 @@ const UserCategorySchema = new mongoose.Schema(
 UserCategorySchema.index({ interestedCategories: 1 });
 UserCategorySchema.index({ nonInterestedCategories: 1 });
 
-module.exports = mongoose.model(
+module.exports = prithuDB.model(
   "UserCategory",
   UserCategorySchema,
   "UserCategorys"

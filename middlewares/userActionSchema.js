@@ -19,4 +19,4 @@ const UserActionSchema = new mongoose.Schema({
 // Prevent duplicates: one user can only do one action type once per feed
 UserActionSchema.index({ user: 1, feed: 1, action: 1 }, { unique: true });
 
-export default mongoose.model("UserAction", UserActionSchema);
+export default prithuDB.model("UserAction", UserActionSchema);

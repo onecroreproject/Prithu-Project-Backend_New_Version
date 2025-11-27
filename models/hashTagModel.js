@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 
 const HashtagSchema = new mongoose.Schema({
   tag: { type: String, unique: true, index: true },
@@ -8,4 +9,4 @@ const HashtagSchema = new mongoose.Schema({
 HashtagSchema.index({ count: -1 });
 HashtagSchema.index({ updatedAt: -1 });
 
-module.exports = mongoose.model("Hashtag", HashtagSchema,"Hashtag");
+module.exports = prithuDB.model("Hashtag", HashtagSchema,"Hashtag");

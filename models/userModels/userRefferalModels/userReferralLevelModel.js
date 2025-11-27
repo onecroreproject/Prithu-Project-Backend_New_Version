@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../../database");
+
 
 const UserLevelSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -18,7 +20,7 @@ UserLevelSchema.pre("save", function(next) {
 
 UserLevelSchema.index({ userId: 1, tier: 1, level: 1 }, { unique: true });
 
-module.exports = mongoose.model("UserLevel", UserLevelSchema,"UserLevels");
+module.exports = prithuDB.model("UserLevel", UserLevelSchema,"UserLevels");
 
 
 

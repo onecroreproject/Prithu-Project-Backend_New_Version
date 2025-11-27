@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 
 const userDeleteLogSchema = new mongoose.Schema(
   {
@@ -38,4 +39,4 @@ const userDeleteLogSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("UserDeleteLog", userDeleteLogSchema,"UserDeleteLog");
+module.exports = prithuDB.model("UserDeleteLog", userDeleteLogSchema,"UserDeleteLog");

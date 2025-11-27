@@ -39,7 +39,7 @@ const CommentLikes=require("../../models/commentsLikeModel.js");
 const CreatorFollowers=require('../../models/creatorFollowerModel.js');
 const Devices=require("../../models/userModels/userSession-Device/deviceModel.js");
 const UserReferral =require("../../models/userModels/userReferralModel");
-const JobPost=require("../../models/JobPost/jobSchema.js");
+
 
 
 // ===================================================

@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../database");
+
 
 // ------------ FCM SUB-SCHEMA -------------
 const FcmTokenSchema = new mongoose.Schema(
@@ -144,4 +146,4 @@ UserSchema.pre("save", function (next) {
   next();
 });
 
-module.exports = mongoose.models.User || mongoose.model("User", UserSchema, "User");
+module.exports = mongoose.models.User || prithuDB.model("User", UserSchema, "User");

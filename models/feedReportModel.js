@@ -1,5 +1,6 @@
 // models/Report.js
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 const { sendMailSafe } = require("../utils/sendMail");
 
 // Embedded Answers
@@ -125,7 +126,7 @@ Support Team`;
     await sendMailSafe({ to: populatedDoc.reportedBy.email, subject, html });
 
     // ⚡ Direct update, avoids recursive save() loop
-    await mongoose.model("Report").updateOne(
+    await prithuDB.model("Report").updateOne(
       { _id: doc._id },
       { $set: { notified: true } }
     );
@@ -134,4 +135,4 @@ Support Team`;
   }
 });
 
-module.exports = mongoose.model("Report", ReportSchema, "Reports");
+module.exports = prithuDB.model("Report", ReportSchema, "Reports");

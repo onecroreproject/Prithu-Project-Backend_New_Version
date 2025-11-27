@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 
 const ReplySchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
@@ -30,4 +31,4 @@ ReplySchema.index({ parentCommentId: 1, createdAt: -1 });
 ReplySchema.index({ parentReplyId: 1, createdAt: -1 });
 ReplySchema.index({ userId: 1, createdAt: -1 });
 
-module.exports = mongoose.model("Reply", ReplySchema, "Replies");
+module.exports = prithuDB.model("Reply", ReplySchema, "Replies");

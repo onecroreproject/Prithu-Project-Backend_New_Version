@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../../database");
+
 
 const videoStatsSchema = new mongoose.Schema(
   {
@@ -43,4 +45,4 @@ const videoStatsSchema = new mongoose.Schema(
 */
 videoStatsSchema.index({ totalViews: -1, lastViewed: -1 });
 
-module.exports = mongoose.model("VideoStats", videoStatsSchema,"VideoStats");
+module.exports = prithuDB.model("VideoStats", videoStatsSchema,"VideoStats");

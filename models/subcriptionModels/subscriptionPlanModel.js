@@ -1,4 +1,5 @@
 const mongoose =require("mongoose");
+const {prithuDB}=require("../../database");
 
 const subscriptionPlanSchema = new mongoose.Schema({
   name: { type: String, required: true }, 
@@ -22,8 +23,8 @@ const subscriptionPlanSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-module.exports=mongoose.model("SubscriptionPlan", subscriptionPlanSchema,"SubscriptionPlan");
-// module.exports= mongoose.models.SubscriptionPlan || mongoose.model("SubscriptionPlan", subscriptionPlanSchema,"SubscriptionPlan");
+module.exports=prithuDB.model("SubscriptionPlan", subscriptionPlanSchema,"SubscriptionPlan");
+// module.exports= mongoose.models.SubscriptionPlan || prithuDB.model("SubscriptionPlan", subscriptionPlanSchema,"SubscriptionPlan");
 
 
 

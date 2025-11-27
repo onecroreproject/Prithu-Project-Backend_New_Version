@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../../database");
+
 
 const ReportTypeSchema = new mongoose.Schema(
   {
@@ -35,4 +37,4 @@ const ReportTypeSchema = new mongoose.Schema(
 // ⚡ Create compound indexes for heavy queries (optional)
 ReportTypeSchema.index({ isActive: 1, name: 1 });
 
-module.exports = mongoose.model("ReportType", ReportTypeSchema, "ReportTypes");
+module.exports = prithuDB.model("ReportType", ReportTypeSchema, "ReportTypes");

@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../database");
+
 
 const UserReferralSchema = new mongoose.Schema({
   parentId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -7,6 +9,6 @@ const UserReferralSchema = new mongoose.Schema({
 
 UserReferralSchema.index({ parentId: 1 }, { unique: true });
 
-module.exports = mongoose.model("UserReferral", UserReferralSchema,"UserReferral");
+module.exports = prithuDB.model("UserReferral", UserReferralSchema,"UserReferral");
 
 

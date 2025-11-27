@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 
 const ProfileSettingsSchema = new mongoose.Schema(
   {
@@ -98,7 +99,7 @@ ProfileSettingsSchema.index({ isPublished: 1 });
 // Multi-role identification
 ProfileSettingsSchema.index({ userId: 1, adminId: 1, childAdminId: 1 });
 
-module.exports = mongoose.model(
+module.exports = prithuDB.model(
   "ProfileSettings",
   ProfileSettingsSchema,
   "ProfileSettings"

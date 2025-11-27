@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const {prithuDB}=require("../../database");
 
 const adminSchema = new mongoose.Schema({
   userName: {
@@ -100,4 +101,4 @@ adminSchema.virtual('isLocked').get(function() {
 adminSchema.index({ adminType: 1 });
 adminSchema.index({ isActive: 1 });
 
-module.exports = mongoose.model('Admin', adminSchema, 'Admin');
+module.exports = prithuDB.model('Admin', adminSchema, 'Admin');

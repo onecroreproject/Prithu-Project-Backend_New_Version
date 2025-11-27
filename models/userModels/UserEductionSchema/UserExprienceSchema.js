@@ -1,5 +1,7 @@
 // models/userModels/userProfile/experienceSchema.js
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../../database");
+
 
 const experienceSchema = new mongoose.Schema({
   jobTitle: { type: String, required: true },

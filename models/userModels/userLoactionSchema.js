@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../database");
+
 
 const locationSchema = new mongoose.Schema(
   {
@@ -28,4 +30,4 @@ const locationSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("Location", locationSchema, "UserLocations");
+module.exports = prithuDB.model("Location", locationSchema, "UserLocations");

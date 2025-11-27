@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 
 const CommentLikeSchema = new mongoose.Schema(
   {
@@ -39,7 +40,7 @@ const CommentLikeSchema = new mongoose.Schema(
 CommentLikeSchema.index({ commentId: 1 });
 CommentLikeSchema.index({ replyCommentId: 1 });
 
-module.exports = mongoose.model("CommentLike", CommentLikeSchema, "CommentLikes");
+module.exports = prithuDB.model("CommentLike", CommentLikeSchema, "CommentLikes");
 
 
 

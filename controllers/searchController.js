@@ -1,11 +1,12 @@
 // ✅ controllers/searchController.js
 const Categories = require("../models/categorySchema");
 const ProfileSettings = require("../models/profileSettingModel");
-const JobPost = require("../models/JobPost/jobSchema");
+const JobPost = require("../models/Job/JobPost/jobSchema");
 const Hashtag = require("../models/hashTagModel");
 const Feed = require("../models/feedModel");
 const { feedTimeCalculator } = require('../middlewares/feedTimeCalculator');
 const mongoose = require("mongoose");
+
 
 
 

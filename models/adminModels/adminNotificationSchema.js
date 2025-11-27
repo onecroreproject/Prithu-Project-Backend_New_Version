@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../database");
 
 const AdminNotificationSchema = new mongoose.Schema({
   targetType: {
@@ -14,4 +15,4 @@ const AdminNotificationSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model("AdminNotification", AdminNotificationSchema,"AdminNotification");
+module.exports = prithuDB.model("AdminNotification", AdminNotificationSchema,"AdminNotification");

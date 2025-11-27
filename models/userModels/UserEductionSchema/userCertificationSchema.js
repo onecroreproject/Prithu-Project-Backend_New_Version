@@ -1,5 +1,7 @@
 // models/userModels/userProfile/certificationSchema.js
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../../database");
+
 
 const certificationSchema = new mongoose.Schema({
   title: { type: String, required: true },

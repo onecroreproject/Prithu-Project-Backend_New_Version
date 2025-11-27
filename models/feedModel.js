@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 
 const feedSchema = new mongoose.Schema(
   {
@@ -79,4 +80,4 @@ feedSchema.index({ fileHash: 1 });
 feedSchema.index({ language: 1 });
 feedSchema.index({ hashtags: 1 });
 
-module.exports = mongoose.model("Feed", feedSchema, "Feeds");
+module.exports = prithuDB.model("Feed", feedSchema, "Feeds");
