@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 
 const UserFeedActionsSchema = new mongoose.Schema(
   {
@@ -79,7 +80,7 @@ UserFeedActionsSchema.index({ "downloadedFeeds.feedId": 1 });
 UserFeedActionsSchema.index({ "disLikeFeeds.feedId": 1 });
 UserFeedActionsSchema.index({ "sharedFeeds.feedId": 1 });
 
-module.exports = mongoose.model(
+module.exports = prithuDB.model(
   "UserFeedActions",
   UserFeedActionsSchema,
   "UserFeedActions"

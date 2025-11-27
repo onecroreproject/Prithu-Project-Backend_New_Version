@@ -1,5 +1,6 @@
 // ✅ models/ChildAdminJobActions.js
 const mongoose =require ("mongoose");
+const {prithuDB}=require("../database");
 
 const actionSubSchema = new mongoose.Schema(
   {
@@ -89,4 +90,4 @@ childAdminJobActionsSchema.pre("save", function (next) {
 });
 
 
-module.exports = mongoose.model("ChildAdminJobActions", childAdminJobActionsSchema,"ChildAdminJobActions");
+module.exports = prithuDB.model("ChildAdminJobActions", childAdminJobActionsSchema,"ChildAdminJobActions");

@@ -2,6 +2,7 @@ const Hashtag = require("../models/hashTagModel");
 const redisClient = require("../Config/redisConfig");
 const mongoose = require("mongoose");
 
+
 // Optimized: Trending Hashtags + Feed IDs
 exports.getTrendingHashtags = async (req, res) => {
   try {

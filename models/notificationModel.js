@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 
 const notificationSchema = new mongoose.Schema(
   {
@@ -107,4 +108,4 @@ notificationSchema.virtual("feedInfo", {
   select: "content contentUrl",
 });
 
-module.exports = mongoose.model("Notification", notificationSchema, "UserNotifications");
+module.exports = prithuDB.model("Notification", notificationSchema, "UserNotifications");

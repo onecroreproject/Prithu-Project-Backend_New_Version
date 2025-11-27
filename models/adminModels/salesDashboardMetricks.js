@@ -1,5 +1,6 @@
 // models/AnalyticsMetric.js
 const mongoose= require ("mongoose");
+const {prithuDB}=require("../../database");
 
 const analyticsMetricSchema = new mongoose.Schema(
   {
@@ -54,4 +55,4 @@ const analyticsMetricSchema = new mongoose.Schema(
 // Ensure unique date record (one per day)
 analyticsMetricSchema.index({ date: 1 }, { unique: true });
 
-module.exports = mongoose.model("AnalyticsMetric", analyticsMetricSchema,"AnalyticsMetrics");
+module.exports = prithuDB.model("AnalyticsMetric", analyticsMetricSchema,"AnalyticsMetrics");

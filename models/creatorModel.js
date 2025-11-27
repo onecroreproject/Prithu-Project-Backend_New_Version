@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const {prithuDB}=require("../database");
 
 const creatorsSchema = new mongoose.Schema({
   // Basic Information
@@ -64,5 +65,5 @@ creatorsSchema.index({ isVerified: 1 });
 creatorsSchema.index({ isActive: 1 });
 
 // Export model
-module.exports = mongoose.model('Creator', creatorsSchema, 'Creators');
+module.exports = prithuDB.model('Creator', creatorsSchema, 'Creators');
 

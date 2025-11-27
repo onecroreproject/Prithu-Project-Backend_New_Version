@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../database");
 
 const WithdrawalInvoiceSchema = new mongoose.Schema({
   withdrawalId: { type: mongoose.Schema.Types.ObjectId, ref: "Withdrawal", required: true }, // Link to Withdrawal
@@ -19,4 +20,4 @@ WithdrawalInvoiceSchema.pre("save", function(next) {
   next();
 });
 
-module.exports = mongoose.model("WithdrawalInvoice", WithdrawalInvoiceSchema, "WithdrawalInvoices");
+module.exports = prithuDB.model("WithdrawalInvoice", WithdrawalInvoiceSchema, "WithdrawalInvoices");

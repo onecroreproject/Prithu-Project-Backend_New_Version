@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const {prithuDB}=require("../database");
 
 const businessUserSchema = new mongoose.Schema({
   // Basic bussiness Information
@@ -68,5 +69,5 @@ businessUserSchema.pre('save', function(next) {
   next();
 });
 
-module.exports=mongoose.model('BusinessUsers',businessUserSchema,'BusinessUsers')
+module.exports=prithuDB.model('BusinessUsers',businessUserSchema,'BusinessUsers')
 

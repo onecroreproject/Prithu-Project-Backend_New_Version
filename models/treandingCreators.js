@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 
 const TrendingCreatorsSchema = new mongoose.Schema({
   accountId: { type: mongoose.Schema.Types.ObjectId, ref: "Account", required: true, unique: true },
@@ -13,4 +14,4 @@ const TrendingCreatorsSchema = new mongoose.Schema({
   lastUpdated: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model("TrendingCreators", TrendingCreatorsSchema, "TrendingCreators");
+module.exports = prithuDB.model("TrendingCreators", TrendingCreatorsSchema, "TrendingCreators");

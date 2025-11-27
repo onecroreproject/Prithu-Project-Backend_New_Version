@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../../database");
+
 
 const imageViewSchema = new mongoose.Schema(
   {
@@ -30,4 +32,4 @@ imageViewSchema.index({ userId: 1, imageId: 1 });
 imageViewSchema.index({ imageId: 1, viewedAt: -1 }); // For recent viewers
 imageViewSchema.index({ userId: 1, viewedAt: -1 }); // For user history
 
-module.exports = mongoose.model("UserImageView", imageViewSchema, "UserImageView");
+module.exports = prithuDB.model("UserImageView", imageViewSchema, "UserImageView");

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+
 const User = require("../../models/userModels/userModel");
 const UserLevel = require("../../models/userModels/userRefferalModels/userReferralLevelModel");
 const UserEarning = require("../../models/userModels/referralEarnings");

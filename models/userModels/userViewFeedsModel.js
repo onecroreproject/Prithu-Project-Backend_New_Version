@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../database");
+
 
 const UserViewSchema = new mongoose.Schema({
   // Either userId or accountId (or both in some cases)
@@ -14,4 +16,4 @@ const UserViewSchema = new mongoose.Schema({
 // Index for analytics (fast aggregations by feed + time)
 UserViewSchema.index({ feedId: 1, createdAt: -1 });
 
-module.exports = mongoose.model("UserView", UserViewSchema, "UserViews");
+module.exports = prithuDB.model("UserView", UserViewSchema, "UserViews");

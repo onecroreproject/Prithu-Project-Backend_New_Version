@@ -1,5 +1,6 @@
 
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../database");
 
 const LevelConfigSchema = new mongoose.Schema({
   userLevel: { 
@@ -24,7 +25,7 @@ const LevelConfigSchema = new mongoose.Schema({
   }
 });
 
-module.exports = mongoose.model(
+module.exports = prithuDB.model(
   "LevelConfig",
   LevelConfigSchema,
   "LevelConfig"

@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../database");
+
 
 const UserViewSchema = new mongoose.Schema(
   {
@@ -33,4 +35,4 @@ UserViewSchema.index({ feedId: 1, viewedAt: -1 });
 // 4️⃣ Analytics: track user’s watch history
 UserViewSchema.index({ userId: 1, viewedAt: -1 });
 
-module.exports = mongoose.model("UserView", UserViewSchema, "UserViews");
+module.exports = prithuDB.model("UserView", UserViewSchema, "UserViews");

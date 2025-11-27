@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 
 const UserCommentSchema = new mongoose.Schema(
   {
@@ -44,4 +45,4 @@ UserCommentSchema.index({ userId: 1, createdAt: -1 });
 // 4️⃣ Useful if accountId is used instead of userId
 UserCommentSchema.index({ accountId: 1, createdAt: -1 });
 
-module.exports = mongoose.model("UserComment", UserCommentSchema, "UserComments");
+module.exports = prithuDB.model("UserComment", UserCommentSchema, "UserComments");

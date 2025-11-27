@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../database");
 
 const userSubscriptionSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -31,7 +32,7 @@ userSubscriptionSchema.pre("save", function (next) {
   next();
 });
 
-module.exports = mongoose.model(
+module.exports = prithuDB.model(
   "UserSubscription",
   userSubscriptionSchema,
   "UserSubscriptions"

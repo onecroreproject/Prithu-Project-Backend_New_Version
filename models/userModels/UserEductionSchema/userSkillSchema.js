@@ -1,5 +1,7 @@
 // models/userModels/userProfile/skillSchema.js
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../../database");
+
 
 const skillSchema = new mongoose.Schema({
   category: { type: String }, // e.g. "Frontend", "Backend", "Database", "Soft Skill"

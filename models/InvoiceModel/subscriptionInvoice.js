@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../database");
 
 const SubscriptionInvoiceSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }, // User who paid
@@ -14,7 +15,7 @@ const SubscriptionInvoiceSchema = new mongoose.Schema({
   metadata: { type: Object }, // Optional: any extra info like plan name, duration, etc.
 });
 
-module.exports = mongoose.model(
+module.exports = prithuDB.model(
   "SubscriptionInvoice",
   SubscriptionInvoiceSchema,
   "SubscriptionInvoices"

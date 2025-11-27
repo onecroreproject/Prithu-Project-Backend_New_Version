@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../database");
+
 
 const hiddenPostSchema = new mongoose.Schema(
   {
@@ -21,4 +23,4 @@ const hiddenPostSchema = new mongoose.Schema(
 // ⭐ Important for speed + avoid duplicates
 hiddenPostSchema.index({ userId: 1, postId: 1 }, { unique: true });
 
-module.exports = mongoose.model("HiddenPost", hiddenPostSchema, "HiddenPost");
+module.exports = prithuDB.model("HiddenPost", hiddenPostSchema, "HiddenPost");

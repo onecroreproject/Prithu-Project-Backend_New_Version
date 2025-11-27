@@ -1,5 +1,5 @@
 const mongoose=require("mongoose")
-
+const {prithuDB}=require("../database");
 
 
 const ProfileVisibilitySchema = new mongoose.Schema(
@@ -146,4 +146,4 @@ const ProfileVisibilitySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("ProfileVisibility", ProfileVisibilitySchema, "ProfileVisibility");
+module.exports = prithuDB.model("ProfileVisibility", ProfileVisibilitySchema, "ProfileVisibility");

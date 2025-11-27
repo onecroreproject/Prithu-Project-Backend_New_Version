@@ -1,5 +1,7 @@
 // models/userModels/userProfile/userProfileModel.js
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../../database");
+
 
 // Import all sub-schemas
 const educationSchema = require("./userEductionSchema");
@@ -40,4 +42,4 @@ const userProfileSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("UserCurricluam", userProfileSchema,"UserCurricluam");
+module.exports = prithuDB.model("UserCurricluam", userProfileSchema,"UserCurricluam");

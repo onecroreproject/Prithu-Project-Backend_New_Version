@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+
 const UserEarning = require("../../models/userModels/referralEarnings");
 const ProfileSettings = require("../../models/profileSettingModel");
 const Withdrawal = require("../../models/userModels/withdrawal");

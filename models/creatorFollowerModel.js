@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 
 const followSchema = new mongoose.Schema({
   creatorId: { 
@@ -21,4 +22,4 @@ const followSchema = new mongoose.Schema({
 // 🌟 Unique index — prevents duplicate follow
 followSchema.index({ creatorId: 1, followerId: 1 }, { unique: true });
 
-module.exports = mongoose.model("Follow", followSchema, "Follows");
+module.exports = prithuDB.model("Follow", followSchema, "Follows");

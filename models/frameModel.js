@@ -1,5 +1,6 @@
 // models/Frame.js
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 
 const frameSchema = new mongoose.Schema(
   {
@@ -11,4 +12,4 @@ const frameSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("Frame", frameSchema,"Frames");
+module.exports = prithuDB.model("Frame", frameSchema,"Frames");

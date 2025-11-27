@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../../database");
 
 const imageStatsSchema = new mongoose.Schema(
   {
@@ -35,4 +36,4 @@ const imageStatsSchema = new mongoose.Schema(
 /* 🔥 Compound index for trending logic based on views + recent activity */
 imageStatsSchema.index({ totalViews: -1, lastViewed: -1 });
 
-module.exports = mongoose.model("ImageStats", imageStatsSchema,"ImageStats");
+module.exports = prithuDB.model("ImageStats", imageStatsSchema,"ImageStats");

@@ -1,6 +1,6 @@
 const Notification = require("../models/Notification");
 const User = require("../models/User");
-const JobPost = require("../models/JobPost");
+const JobPost = require("../models/Job/JobPost/JobPost");
 const { sendEmail } = require("../utils/emailService");
 
 // ✅ Send targeted job notifications (after new job created)

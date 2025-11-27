@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 
 const ReportLogSchema = new mongoose.Schema(
   {
@@ -64,4 +65,4 @@ const ReportLogSchema = new mongoose.Schema(
 // ⚡ Compound index (most common query pattern)
 ReportLogSchema.index({ reportId: 1, performedAt: -1 });
 
-module.exports = mongoose.model("ReportLog", ReportLogSchema, "ReportLogs");
+module.exports = prithuDB.model("ReportLog", ReportLogSchema, "ReportLogs");

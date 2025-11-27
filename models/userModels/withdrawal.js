@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../database");
+
 
 const WithdrawalSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -11,4 +13,4 @@ const WithdrawalSchema = new mongoose.Schema({
   processedAt: { type: Date }
 });
 
-module.exports = mongoose.model("Withdrawal", WithdrawalSchema, "Withdrawals");
+module.exports = prithuDB.model("Withdrawal", WithdrawalSchema, "Withdrawals");

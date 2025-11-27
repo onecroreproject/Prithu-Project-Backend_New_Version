@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../database");
 
 const AccountSchema = new mongoose.Schema(
   {
@@ -35,4 +36,4 @@ AccountSchema.index({ userId: 1, type: 1 }, { unique: true });
 // ⚡ Optional: Speed up admin/user dashboard
 AccountSchema.index({ type: 1, createdAt: -1 });
 
-module.exports = mongoose.model("Account", AccountSchema, "Accounts");
+module.exports = prithuDB.model("Account", AccountSchema, "Accounts");

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const {prithuDB}=require("../../../database");
 const dbTimer = require("../../../middlewares/dbTimer");
 
 
@@ -43,7 +44,7 @@ SessionSchema.plugin(dbTimer);
 SessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 },{_id:1});
 
 
-module.exports =  mongoose.models.Session || mongoose.model("Session", SessionSchema,"Session");
+module.exports =  mongoose.models.Session || prithuDB.model("Session", SessionSchema,"Session");
 
 
 
