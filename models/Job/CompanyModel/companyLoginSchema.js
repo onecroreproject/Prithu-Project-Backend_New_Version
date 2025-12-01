@@ -37,6 +37,12 @@ const CompanyLoginSchema = new mongoose.Schema(
       trim: true,
     },
 
+    whatsAppNumber:{
+      type: String,
+      required: true,
+      trim: true,
+    },
+
     // 🏢 Company Basic Details (Profile is separate)
     companyName: {
       type: String,

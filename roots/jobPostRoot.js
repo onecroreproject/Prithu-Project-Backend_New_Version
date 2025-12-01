@@ -9,7 +9,7 @@ const {deleteJob,approveJob}=require("../controllers/ChildAdminControllers/child
 const {
 registerCompany,
 loginCompany,
-sendOtpAgain,
+sendOtp,
 verifyOtp,
 resetPassword,
 checkAvailability
@@ -22,7 +22,7 @@ const {updateCompanyProfile}=require("../controllers/JobController/CompanyContro
 //CompanyLogin API
 router.post("/company/register",registerCompany);
 router.post("/company/login",loginCompany);
-router.post("/company/send-otp",sendOtpAgain);
+router.post("/company/send-otp",sendOtp);
 router.post("/company/verify-otp",verifyOtp);
 router.post("/company/reset-password",resetPassword);
 router.get("/avilability/check", checkAvailability);
@@ -33,16 +33,16 @@ router.put("/update/company/profile",companyUpload.fields([{ name: "logo", maxCo
 
 
 // User routes
- router.get("/user/get/all",getAllJobs);
+ router.get("/user/get/all",auth,getAllJobs);
  router.get("/get/job/:id", getJobById);
  router.delete("/delete/jobs/:jobId",auth,deleteJobs);
- router.get("/get/jobs/by/id",auth,getJobById);
+ router.get("/get/jobs/by/id/:id",auth,getJobById);
  router.get("/get/jobs/by/company/params",getJobsByCompany);
- router.get("/top/ranked/jobs", getTopRankedJobs);
+ router.get("/top/ranked/jobs", auth,getTopRankedJobs);
 
 //User Action API
 router.post("/update", auth, updateEngagement);
-router.get("/stats/:jobId", getJobEngagementStats);
+router.get("/stats/:jobId",auth, getJobEngagementStats);
 router.get("/user/:userId", auth, getUserEngagements);
 
 

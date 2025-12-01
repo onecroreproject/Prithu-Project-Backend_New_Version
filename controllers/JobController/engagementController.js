@@ -22,8 +22,7 @@ exports.updateEngagement = async (req, res) => {
       });
     }
 
-    // Validate job
-    const jobExists = await JobPost.exists({ _id: jobId });
+    const jobExists = await JobPost.findById(jobId).lean();
     if (!jobExists) {
       return res.status(404).json({
         success: false,
@@ -31,9 +30,7 @@ exports.updateEngagement = async (req, res) => {
       });
     }
 
-    // Allowed actions
-    const validActions = ["like", "share", "save", "download", "apply"];
-
+    const validActions = ["like", "share", "save", "apply", "view"];
     if (!validActions.includes(actionType)) {
       return res.status(400).json({
         success: false,
@@ -41,31 +38,64 @@ exports.updateEngagement = async (req, res) => {
       });
     }
 
-    // Get engagement (or create new)
     let engagement = await JobEngagement.findOne({ jobId, userId });
 
     if (!engagement) {
-      engagement = new JobEngagement({ jobId, userId });
+      engagement = new JobEngagement({
+        jobId,
+        userId,
+        companyId: jobExists.companyId,
+      });
     }
 
-    // Toggle / Set actions
-    const toggleFields = {
+    const fieldMap = {
       like: "liked",
       share: "shared",
       save: "saved",
-      download: "downloaded",
       apply: "applied",
+      view: "view",
     };
 
-    const fieldName = toggleFields[actionType];
+    const fieldName = fieldMap[actionType];
 
-    if (actionType === "like" || actionType === "save") {
-      engagement[fieldName] = !engagement[fieldName];
-    } else {
-      engagement[fieldName] = true; // share, download, apply are one-way
+    // ----------------------------------------------------------------
+    // 👁 VIEW → only record first time
+    // ----------------------------------------------------------------
+    if (actionType === "view") {
+      if (!engagement.view) {
+        engagement.view = true;
+        engagement.lastActionAt = new Date();
+        await engagement.save();
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "View recorded",
+        engagement,
+      });
     }
 
-    // Update timestamp
+    // ----------------------------------------------------------------
+    // 💾 SAVE → toggle
+    // ----------------------------------------------------------------
+    if (actionType === "save") {
+      engagement.saved = !engagement.saved;
+    }
+
+    // ----------------------------------------------------------------
+    // 👍 LIKE & APPLY → toggle
+    // ----------------------------------------------------------------
+    else if (["like", "apply"].includes(actionType)) {
+      engagement[fieldName] = !engagement[fieldName];
+    }
+
+    // ----------------------------------------------------------------
+    // 🔁 SHARE → always true (but no view count increment)
+    // ----------------------------------------------------------------
+    else if (actionType === "share") {
+      engagement.shared = true;
+    }
+
     engagement.lastActionAt = new Date();
     await engagement.save();
 
@@ -74,8 +104,9 @@ exports.updateEngagement = async (req, res) => {
       message: `Action '${actionType}' updated`,
       engagement,
     });
+
   } catch (error) {
-    console.error("❌ Error updating engagement:", error);
+    console.error("❌ Error updating job engagement:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
@@ -83,6 +114,9 @@ exports.updateEngagement = async (req, res) => {
     });
   }
 };
+
+
+
 
 /* ============================================================================================
    2️⃣ GET ENGAGEMENT STATS (Aggregation)
