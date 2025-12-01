@@ -113,6 +113,10 @@ const UserSchema = new mongoose.Schema(
     lastActiveAt: { type: Date, default: Date.now },
     lastLoginAt: { type: Date },
 
+    // ------------ PRESENCE STATUS --------------
+    isOnline: { type: Boolean, default: false },
+    lastSeenAt: { type: Date, default: null },
+
     // ------------ OTP --------------
     otpCode: { type: String },
     otpExpiresAt: { type: Date },
@@ -137,6 +141,7 @@ UserSchema.index({ referralCode: 1 }, { unique: true, sparse: true });
 UserSchema.index({ referralCodeIsValid: 1 });
 UserSchema.index({ accountType: 1 });
 UserSchema.index({ "subscription.isActive": 1 });
+UserSchema.index({ isOnline: 1 }); // For efficient presence queries
 
 // ------------ AUTO UPDATE SUBSCRIPTION TIMESTAMP --------------
 UserSchema.pre("save", function (next) {

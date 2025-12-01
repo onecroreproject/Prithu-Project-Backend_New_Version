@@ -2,6 +2,9 @@ const Company = require("../../models/Job/CompanyModel/companyLoginSchema");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
+// Temporary OTP store (new registrations)
+const tempOtpStore = {}; 
+
 
 
 // Helper: Generate 6-digit OTP
@@ -19,7 +22,7 @@ const generateToken = (companyId) => {
  */
 exports.registerCompany = async (req, res) => {
   try {
-    const { email, password, name, position, phone, companyName, companyEmail } = req.body;
+    const { email, password, name, position, phone, companyName, companyEmail,whatsAppNumber } = req.body;
 
     // Check existing account
     const existing = await Company.findOne({ email });
@@ -41,6 +44,7 @@ exports.registerCompany = async (req, res) => {
       phone,
       companyName,
       companyEmail,
+      whatsAppNumber,
       otp,
       otpExpiry: Date.now() + 5 * 60 * 1000 // 5 minutes
     });
@@ -58,35 +62,57 @@ exports.registerCompany = async (req, res) => {
   }
 };
 
-/**
- * =====================================
- *              SEND OTP AGAIN
- * =====================================
- */
-exports.sendOtpAgain = async (req, res) => {
+
+
+exports.sendOtp = async (req, res) => {
   try {
     const { email } = req.body;
 
+    const otp = generateOTP();
+    const expiry = Date.now() + 5 * 60 * 1000; // 5 minutes
+
+    // --------------- CHECK DB FIRST (EXISTING COMPANY) ---------------
     const company = await Company.findOne({ email });
-    if (!company) {
-      return res.status(404).json({ success: false, message: "Company not found" });
+
+    if (company) {
+      // Save OTP inside company login document
+      company.otp = otp;
+      company.otpExpiry = expiry;
+      await company.save();
+
+      console.log("📨 OTP (Existing User):", otp);
+
+      return res.json({
+        success: true,
+        message: "OTP sent successfully.",
+        otp // remove in production
+      });
     }
 
-    const otp = generateOTP();
-    company.otp = otp;
-    company.otpExpiry = Date.now() + 5 * 60 * 1000;
-    await company.save();
+    // --------------- NEW USER → STORE OTP IN TEMP ---------------
+    tempOtpStore[email] = {
+      otp,
+      expiry
+    };
 
-    res.json({
+    console.log("📨 OTP (New Registration):", otp);
+
+    return res.json({
       success: true,
-      message: "OTP sent again.",
-      otp // send via SMS/Email in production
+      message: "OTP sent successfully.",
+      otp // remove in production
     });
+
   } catch (error) {
     console.error("❌ Send OTP Error:", error);
-    res.status(500).json({ success: false, error: "Error sending OTP" });
+    return res.status(500).json({
+      success: false,
+      error: "Error sending OTP"
+    });
   }
 };
+
+
 
 /**
  * =====================================
@@ -97,34 +123,81 @@ exports.verifyOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
+    // --------------- CHECK DB FIRST ---------------
     const company = await Company.findOne({ email });
-    if (!company) {
-      return res.status(404).json({ success: false, message: "Company not found" });
+
+    if (company) {
+      // Compare OTP
+      if (company.otp !== otp) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid OTP"
+        });
+      }
+
+      if (company.otpExpiry < Date.now()) {
+        return res.status(400).json({
+          success: false,
+          message: "OTP Expired"
+        });
+      }
+
+      // Mark Verified
+      company.isVerified = true;
+      company.otp = null;
+      company.otpExpiry = null;
+      await company.save();
+
+      return res.json({
+        success: true,
+        message: "OTP verified successfully (existing user)."
+      });
     }
 
-    if (company.otp !== otp) {
-      return res.status(400).json({ success: false, message: "Invalid OTP" });
+    // --------------- CHECK TEMP OTP (NEW USER) ---------------
+    const tempOtpData = tempOtpStore[email];
+
+    if (!tempOtpData) {
+      return res.status(404).json({
+        success: false,
+        message: "No OTP found for this email"
+      });
     }
 
-    if (company.otpExpiry < Date.now()) {
-      return res.status(400).json({ success: false, message: "OTP expired" });
+    // Validate OTP
+    if (tempOtpData.otp !== otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP"
+      });
     }
 
-    company.isVerified = true;
-    company.otp = null;
-    company.otpExpiry = null;
-    await company.save();
+    if (tempOtpData.expiry < Date.now()) {
+      delete tempOtpStore[email];
+      return res.status(400).json({
+        success: false,
+        message: "OTP expired"
+      });
+    }
 
-    res.json({
+    // OTP correct → allow registration to continue
+    delete tempOtpStore[email];
+
+    return res.json({
       success: true,
-      message: "OTP verified successfully."
+      message: "OTP verified successfully (new user)."
     });
 
   } catch (error) {
     console.error("❌ Verify OTP Error:", error);
-    res.status(500).json({ success: false, error: "Error verifying OTP" });
+    return res.status(500).json({
+      success: false,
+      error: "Error verifying OTP"
+    });
   }
 };
+
+
 
 /**
  * =====================================

@@ -27,6 +27,7 @@ const CompanyProfileVisibilitySchema = new mongoose.Schema(
 
     // Contact
     companyPhone: { type: String, enum: ["public", "private", "restricted"], default: "restricted" },
+    compayWhatsAppNumber: { type: String, enum: ["public", "private", "restricted"], default: "restricted" },
     companyEmail: { type: String, enum: ["public", "private", "restricted"], default: "restricted" },
     address: { type: String, enum: ["public", "private"], default: "private" },
     city: { type: String, enum: ["public", "private"], default: "public" },

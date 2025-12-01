@@ -1,7 +1,8 @@
+
 const mongoose = require("mongoose");
 const { jobDB } = require("../../../database");
 
-const PaymentSchema = new mongoose.Schema(
+const JobEngagementSchema = new mongoose.Schema(
   {
     companyId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -12,37 +13,33 @@ const PaymentSchema = new mongoose.Schema(
     jobId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "JobPost",
+      required: true,
       index: true,
     },
 
-    amount: { type: Number, required: true, index: true },
-    currency: { type: String, default: "INR" },
-
-    transactionId: { type: String, required: true, unique: true },
-
-    status: {
-      type: String,
-      enum: ["pending", "success", "failed"],
-      default: "pending",
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
       index: true,
     },
 
-    paymentMethod: { type: String },
-    gateway: { type: String }, // Razorpay, Stripe, etc.
-    receiptUrl: { type: String },
+    /* Engagement Flags */
+    liked: { type: Boolean, default: false, index: true },
+    shared: { type: Boolean, default: false },
+    saved: { type: Boolean, default: false },
+    applied: { type: Boolean, default: false, index: true },
+    view:{ type: Boolean, default: false, index: true },
 
-    meta: {
-      planType: String,
-      durationDays: Number,
-      boostLevel: Number,
-    },
+    lastActionAt: { type: Date, default: Date.now, index: true },
   },
   { timestamps: true }
 );
 
-/* Speed optimization indexes */
-PaymentSchema.index({ companyId: 1, status: 1 });
-PaymentSchema.index({ jobId: 1 });
-PaymentSchema.index({ createdAt: -1 });
+/* Unique per job/user */
+JobEngagementSchema.index({ jobId: 1, userId: 1 }, { unique: true });
 
-module.exports = jobDB.model("JobPayment", PaymentSchema, "JobPostPayment");
+/* Aggregation optimization */
+JobEngagementSchema.index({ companyId: 1, applied: 1 });
+
+module.exports = jobDB.model("JobEngagement", JobEngagementSchema,"JobEngagement");
+
