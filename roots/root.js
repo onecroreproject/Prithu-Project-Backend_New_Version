@@ -286,7 +286,11 @@ linkNextQuestion,
 adminTakeActionOnReport,
 getAllQuestions,
 getAllReports
-}=require("../controllers/adminControllers/adminReportController")
+}=require("../controllers/adminControllers/adminReportController");
+const { getPostVolumeWeekly,
+  getPostVolumeDaily,
+  getPostVolumeMonthly,
+ } = require('../controllers/feedControllers/feedVolumController');
 
 
 
@@ -528,6 +532,11 @@ router.put("/admin/report/action/update/:reportId",auth,adminTakeActionOnReport)
 /*---------------------Admin DashBoard API---------------------*/
 router.get("/admin/dashboard/metricks/counts",getDashboardMetricCount);
 router.get("/admin/users/monthly-registrations",getDashUserRegistrationRatio);
+router.get('/posts/daily', getPostVolumeDaily);
+
+// GET /api/metrics/posts/weekly
+router.get('/posts/weekly',getPostVolumeWeekly);
+router.get('/posts/monthly',getPostVolumeMonthly);
 router.get("/admin/user/subscriptionration",getDashUserSubscriptionRatio)
 
 // /* --------------------- Admin Creator API --------------------- */

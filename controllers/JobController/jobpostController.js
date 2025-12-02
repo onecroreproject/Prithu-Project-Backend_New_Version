@@ -11,13 +11,14 @@ const Payment = require("../../models/Job/JobPost/jobPaymentSchema");
 const CompanyLogin = require("../../models/Job/CompanyModel/companyLoginSchema");
 const CompanyProfile = require("../../models/Job/CompanyModel/companyProfile");
 const { uploadAndReplace } = require("../../middlewares/utils/jobReplaceImage");
+const {logCompanyActivity} =require("../../middlewares/utils/jobActivityLoogerFunction");
 
 /* =============================================================================================
    1️⃣ CREATE OR UPDATE JOB POST
    ============================================================================================= */
 exports.createOrUpdateJob = async (req, res) => {
   try {
-    const companyId = req.companyId||req.body.companyId; // from authentication middleware
+    const companyId = req.companyId;
 
     if (!companyId) {
       return res.status(400).json({
@@ -26,10 +27,78 @@ exports.createOrUpdateJob = async (req, res) => {
       });
     }
 
-    const body = req.body;
-    const jobId = body.jobId || null;
+    const body = req.body || {};
 
-    // 🔹 Fetch company profile snapshot for caching inside job post
+    // Accept either jobId or id for backward compatibility
+    const jobId = body.jobId || body.id || null;
+
+    // --- Helper: normalize status ---
+    const normalizeStatus = (s) => {
+      if (s === null || s === undefined) return undefined;
+      const lower = String(s).trim().toLowerCase();
+      // map common variants if needed (keep mapping minimal)
+      if (lower === "submit" || lower === "submitted") return "submit";
+      if (lower === "active") return "active";
+      if (lower === "draft") return "draft";
+      if (lower === "inactive") return "inactive";
+      if (lower === "expired") return "expired";
+      if (lower === "closed") return "closed";
+      return lower;
+    };
+
+    // --- Helper: Extract array-like fields robustly from req.body ---
+    // Supports:
+    // - real arrays: req.body.field === ['a','b']
+    // - repeated param: field=a&field=b => req.body.field === ['a','b'] (common)
+    // - indexed: field[0]=a, field[1]=b => parsed as body['field[0]'] etc
+    // - JSON string: '["a","b"]'
+    // - comma separated string: "a,b"
+    const extractArrayField = (name) => {
+      // 1) direct array
+      const val = body[name];
+      if (Array.isArray(val)) return val.map(String).filter(v => v !== '');
+
+      // 2) direct string that might be JSON or comma separated
+      if (typeof val === 'string') {
+        const trimmed = val.trim();
+        // try JSON parse
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) return parsed.map(String).filter(v => v !== '');
+        } catch (e) {
+          // not JSON
+        }
+        // fallback split by comma
+        const parts = trimmed.split(',').map(p => p.trim()).filter(p => p !== '');
+        return parts.length ? parts : [];
+      }
+
+      // 3) collect indexed keys like "responsibilities[0]" / "responsibilities[1]"
+      const indexedKeys = Object.keys(body).filter(k => k.startsWith(`${name}[`));
+      if (indexedKeys.length > 0) {
+        // map by index
+        const withIndex = indexedKeys.map(k => {
+          const idxMatch = k.match(/\[(\d+)\]/);
+          const idx = idxMatch ? Number(idxMatch[1]) : 0;
+          return { key: k, idx, value: body[k] };
+        }).sort((a,b) => a.idx - b.idx);
+
+        return withIndex.map(i => String(i.value)).filter(v => v !== '');
+      }
+
+      // 4) collect bracketed "name[]" style keys if present (body may have 'name[]' key)
+      if (body[`${name}[]`]) {
+        const v2 = body[`${name}[]`];
+        if (Array.isArray(v2)) return v2.map(String).filter(v => v !== '');
+        if (typeof v2 === 'string') return v2.split(',').map(p => p.trim()).filter(p => p !== '');
+      }
+
+      return [];
+    };
+
+    /* =======================================================================================
+       🏢 Company Snapshot
+    ======================================================================================= */
     const company = await CompanyLogin.findById(companyId).lean();
     const profile = await CompanyProfile.findOne({ companyId }).lean();
 
@@ -40,7 +109,6 @@ exports.createOrUpdateJob = async (req, res) => {
       });
     }
 
-    // Prepare job snapshot
     const companySnapshot = {
       companyId,
       companyName: company.companyName,
@@ -49,43 +117,63 @@ exports.createOrUpdateJob = async (req, res) => {
       companyWebsite: profile?.socialLinks?.website || "",
     };
 
-    /* =================================================================================
-       FILE UPLOADS — Cloudinary (Logo/Cover already handled in company profile)
-       ================================================================================= */
+    /* =======================================================================================
+       📝 File Upload (multer)
+    ======================================================================================= */
     const jobImage = req.files?.jobImage?.[0];
-
     let finalImage = null;
 
     if (jobImage) {
-      finalImage = await uploadAndReplace(
-        jobImage.buffer,
-        "jobs/images",
-        body.oldImage
-      );
+      // uploadAndReplace should accept buffer and optional oldImage and return new URL/path
+      finalImage = await uploadAndReplace(jobImage.buffer, "jobs/images", body.oldImage);
     }
 
-    /* =================================================================================
-       JOB DATA (NORMALIZED TO MATCH SCHEMA)
-       ================================================================================= */
+    /* =======================================================================================
+       📝 VALIDATION FOR ACTIVE ONLY
+       If the incoming status indicates active (or no status provided), and this is a create,
+       ensure required fields are present. Drafts bypass this strictness.
+    ======================================================================================= */
+    const incomingStatus = normalizeStatus(body.status);
+    if ((incomingStatus === "active" || !body.status) && !jobId) {
+      const requiredFields = [
+        "jobTitle",
+        "employmentType",
+        "workMode",
+        "jobDescription",
+      ];
+
+      const missing = requiredFields.filter((f) => !body[f]);
+      if (missing.length > 0 && incomingStatus !== "draft") {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required fields",
+          fields: missing,
+        });
+      }
+    }
+
+    /* =======================================================================================
+       🛠 Normalize & build jobData payload
+    ======================================================================================= */
     const jobData = {
       ...companySnapshot,
 
-      jobTitle: body.jobTitle,
-      jobRole: body.jobRole,
-      jobCategory: body.jobCategory,
-      jobSubCategory: body.jobSubCategory,
-      employmentType: body.employmentType,
-      workMode: body.workMode,
-      shiftType: body.shiftType,
-      openingsCount: body.openingsCount,
-      urgencyLevel: body.urgencyLevel,
-
-      city: body.city,
-      state: body.state,
-      country: body.country,
-      pincode: body.pincode,
-      fullAddress: body.fullAddress,
-      remoteEligibility: body.remoteEligibility,
+      jobTitle: body.jobTitle || "",
+      jobRole: body.jobRole || "",
+      jobCategory: body.jobCategory || "",
+      jobSubCategory: body.jobSubCategory || "",
+      employmentType: body.employmentType || null,
+      workMode: body.workMode || null,
+      shiftType: body.shiftType || null,
+      openingsCount: Number(body.openingsCount) || 1,
+      urgencyLevel: body.urgencyLevel || null,
+      city: body.city || "",
+      state: body.state || "",
+      country: body.country || "",
+      pincode: body.pincode || "",
+      fullAddress: body.fullAddress || "",
+      // remoteEligibility might come as "true"/"false" or boolean
+      remoteEligibility: body.remoteEligibility === "true" || body.remoteEligibility === true || false,
 
       googleLocation:
         body.latitude && body.longitude
@@ -95,81 +183,113 @@ exports.createOrUpdateJob = async (req, res) => {
             }
           : undefined,
 
-      jobDescription: body.jobDescription,
-      responsibilities: body.responsibilities,
-      dailyTasks: body.dailyTasks,
-      keyDuties: body.keyDuties,
+      jobDescription: body.jobDescription || "",
+      responsibilities: extractArrayField("responsibilities"),
+      dailyTasks: extractArrayField("dailyTasks"),
+      keyDuties: extractArrayField("keyDuties"),
 
-      requiredSkills: body.requiredSkills,
-      preferredSkills: body.preferredSkills,
-      technicalSkills: body.technicalSkills,
-      softSkills: body.softSkills,
-      toolsAndTechnologies: body.toolsAndTechnologies,
+      requiredSkills: extractArrayField("requiredSkills"),
+      preferredSkills: extractArrayField("preferredSkills"),
+      technicalSkills: extractArrayField("technicalSkills"),
+      softSkills: extractArrayField("softSkills"),
+      toolsAndTechnologies: extractArrayField("toolsAndTechnologies"),
 
-      educationLevel: body.educationLevel,
-      degreeRequired: body.degreeRequired,
-      certificationRequired: body.certificationRequired,
-      minimumExperience: body.minimumExperience,
-      maximumExperience: body.maximumExperience,
-      freshersAllowed: body.freshersAllowed,
+      educationLevel: body.educationLevel || "",
+      degreeRequired: body.degreeRequired || "",
+      certificationRequired: extractArrayField("certificationRequired"),
+      minimumExperience: Number(body.minimumExperience) || 0,
+      maximumExperience: Number(body.maximumExperience) || 0,
+      freshersAllowed: body.freshersAllowed === "true" || body.freshersAllowed === true || false,
 
-      salaryType: body.salaryType,
-      salaryMin: body.salaryMin,
-      salaryMax: body.salaryMax,
-      salaryCurrency: body.salaryCurrency,
-      salaryVisibility: body.salaryVisibility,
-      benefits: body.benefits,
-      perks: body.perks,
-      incentives: body.incentives,
-      bonuses: body.bonuses,
+      salaryType: body.salaryType || "monthly",
+      salaryMin: Number(body.salaryMin) || 0,
+      salaryMax: Number(body.salaryMax) || 0,
+      salaryCurrency: body.salaryCurrency || "INR",
+      salaryVisibility: body.salaryVisibility || "public",
+      benefits: extractArrayField("benefits"),
+      perks: extractArrayField("perks"),
+      incentives: body.incentives || "",
+      bonuses: body.bonuses || "",
 
-      hiringManagerName: body.hiringManagerName,
-      hiringManagerEmail: body.hiringManagerEmail,
-      hiringManagerPhone: body.hiringManagerPhone,
-      interviewMode: body.interviewMode,
-      interviewLocation: body.interviewLocation,
-      interviewRounds: body.interviewRounds,
-      hiringProcess: body.hiringProcess,
-      interviewInstructions: body.interviewInstructions,
+      hiringManagerName: body.hiringManagerName || "",
+      hiringManagerEmail: body.hiringManagerEmail || "",
+      hiringManagerPhone: body.hiringManagerPhone || "",
+      interviewMode: body.interviewMode || null,
+      interviewLocation: body.interviewLocation || "",
+      interviewRounds: extractArrayField("interviewRounds"),
+      hiringProcess: extractArrayField("hiringProcess"),
+      interviewInstructions: body.interviewInstructions || "",
 
-      startDate: body.startDate,
-      endDate: body.endDate,
-      contractDuration: body.contractDuration,
-      jobTimings: body.jobTimings,
-      workingHours: body.workingHours,
-      workingDays: body.workingDays,
-      holidaysType: body.holidaysType,
+      startDate: body.startDate || null,
+      endDate: body.endDate || null,
+      contractDuration: body.contractDuration || "",
+      jobTimings: body.jobTimings || "",
+      workingHours: body.workingHours || "",
+      workingDays: body.workingDays || "",
+      holidaysType: body.holidaysType || "",
 
-      resumeRequired: body.resumeRequired,
-      coverLetterRequired: body.coverLetterRequired,
-      documentsRequired: body.documentsRequired,
+      resumeRequired: body.resumeRequired === "true" || body.resumeRequired === true,
+      coverLetterRequired: body.coverLetterRequired === "true" || body.coverLetterRequired === true,
+      documentsRequired: extractArrayField("documentsRequired"),
 
-      tags: body.tags,
-      skillKeywords: body.skillKeywords,
-      keywordSearch: body.keywordSearch,
+      tags: extractArrayField("tags"),
+      skillKeywords: extractArrayField("skillKeywords"),
+      keywordSearch: extractArrayField("keywordSearch"),
 
-      status: body.status || "draft",
+      // Status normalized; default to 'draft' if not present
+      status: normalizeStatus(body.status) || "draft",
       isApproved: false,
       isFeatured: false,
       isPromoted: false,
-      priorityScore: body.isPaid ? 15 : 1,
+      priorityScore: normalizeStatus(body.status) === "active" ? 10 : 1,
     };
 
     if (finalImage) jobData.jobImage = finalImage;
 
-    /* =================================================================================
-       CASE A: UPDATE JOB
-       ================================================================================= */
+    /* =======================================================================================
+       🟦 UPDATE JOB (including draft updates)
+    ======================================================================================= */
     if (jobId) {
-      const job = await JobPost.findOne({ _id: jobId, companyId });
+      const existingJob = await JobPost.findOne({ _id: jobId, companyId });
 
-      if (!job)
+      if (!existingJob) {
         return res.status(404).json({
           success: false,
           message: "Job not found or unauthorized",
         });
+      }
 
+      // If existing job is a draft → always UPDATE in place
+      if (existingJob.status === "draft") {
+        await JobPost.updateOne({ _id: jobId }, { $set: jobData });
+
+        await logCompanyActivity({
+          companyId,
+          action: "JOB_DRAFT_UPDATED",
+          description: `Draft updated for job: ${existingJob.jobTitle}`,
+          jobId: existingJob._id,
+          changes: body,
+          req,
+        });
+
+        return res.status(200).json({
+          success: true,
+          message: "Draft updated successfully",
+          jobId,
+        });
+      }
+
+      // Normal update for non-draft job
       await JobPost.updateOne({ _id: jobId }, { $set: jobData });
+
+      await logCompanyActivity({
+        companyId,
+        action: jobData.status === "draft" ? "JOB_DRAFT_SAVED" : "JOB_UPDATED",
+        description: `${jobData.status === "draft" ? "Draft saved for" : "Updated"} job: ${existingJob.jobTitle}`,
+        jobId: existingJob._id,
+        changes: body,
+        req,
+      });
 
       return res.status(200).json({
         success: true,
@@ -178,24 +298,38 @@ exports.createOrUpdateJob = async (req, res) => {
       });
     }
 
-    /* =================================================================================
-       CASE B: CREATE NEW JOB
-       ================================================================================= */
+    /* =======================================================================================
+       🟩 CREATE NEW JOB
+    ======================================================================================= */
     const newJob = await JobPost.create(jobData);
+
+    await logCompanyActivity({
+      companyId,
+      action: jobData.status === "draft" ? "JOB_DRAFT_SAVED" : "JOB_CREATED",
+      description: `${jobData.status === "draft" ? "Draft created for" : "Created"} job: ${jobData.jobTitle || "Untitled Job"}`,
+      jobId: newJob._id,
+      changes: body,
+      req,
+    });
 
     return res.status(201).json({
       success: true,
       message: "Job created successfully",
       job: newJob,
     });
+
   } catch (error) {
-    console.error("❌ Error creating/updating job:", error);
-    res.status(500).json({
+    console.error("❌ Error in createOrUpdateJob:", error);
+    return res.status(500).json({
       success: false,
-      error: error.message,
+      message: error.message || "Internal server error",
     });
   }
 };
+
+
+
+
 
 /* =============================================================================================
    2️⃣ GET ALL JOBS (Public + Search + Filters)

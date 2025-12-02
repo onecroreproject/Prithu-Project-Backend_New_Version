@@ -14,9 +14,9 @@ verifyOtp,
 resetPassword,
 checkAvailability
 }=require("../controllers/authenticationControllers/companyAuthController.js")
-
+const {companyAuth}=require("../middlewares/jwtCompany.js")
 const companyUpload=require("../middlewares/utils/jobMulter.js");
-const {updateCompanyProfile}=require("../controllers/JobController/CompanyControllers/companyProfileController.js")
+const {updateCompanyProfile,getRecentDrafts,getDraftById}=require("../controllers/JobController/CompanyControllers/companyProfileController.js")
 
 
 //CompanyLogin API
@@ -33,11 +33,14 @@ router.put("/update/company/profile",companyUpload.fields([{ name: "logo", maxCo
 
 
 // User routes
+router.post("/company/create/job",companyAuth,upload.fields([{ name: "jobImage", maxCount: 1 }]),createOrUpdateJob);
  router.get("/user/get/all",auth,getAllJobs);
  router.get("/get/job/:id", getJobById);
  router.delete("/delete/jobs/:jobId",auth,deleteJobs);
  router.get("/get/jobs/by/id/:id",auth,getJobById);
  router.get("/get/jobs/by/company/params",getJobsByCompany);
+ router.get("/get/recent/drafts",companyAuth,getRecentDrafts);
+ router.get("/get/draft/jobs/:id",getDraftById);
  router.get("/top/ranked/jobs", auth,getTopRankedJobs);
 
 //User Action API
