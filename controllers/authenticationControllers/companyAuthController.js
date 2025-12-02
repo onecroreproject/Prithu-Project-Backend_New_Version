@@ -213,9 +213,7 @@ exports.loginCompany = async (req, res) => {
       return res.status(404).json({ success: false, message: "Invalid email" });
     }
 
-    if (!company.isVerified) {
-      return res.status(403).json({ success: false, message: "Account not verified. Please verify OTP." });
-    }
+    
 
     const isMatch = await bcrypt.compare(password, company.password);
     if (!isMatch) {
@@ -298,7 +296,7 @@ exports.checkAvailability = async (req, res) => {
     }
 
     // allowed fields
-    const allowedFields = ["email", "companyName", "name", "phone"];
+    const allowedFields = ["email", "companyEmail","companyName", "name", "phone"];
 
     if (!allowedFields.includes(field)) {
       return res.status(400).json({

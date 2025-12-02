@@ -1,6 +1,7 @@
 const CompanyProfile = require("../../../models/Job/CompanyModel/companyProfile");
 const CompanyLogin = require("../../../models/Job/CompanyModel/companyLoginSchema");
 const { uploadAndReplace } = require("../../../middlewares/utils/jobReplaceImage");
+const JobPost=require("../../../models/Job/JobPost/jobSchema");
 
 exports.updateCompanyProfile = async (req, res) => {
   try {
@@ -101,3 +102,121 @@ exports.updateCompanyProfile = async (req, res) => {
     });
   }
 };
+
+
+
+
+exports.getRecentDrafts = async (req, res) => {
+  try {
+    const companyId = req.companyId; // from auth middleware
+
+    if (!companyId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: No companyId found",
+      });
+    }
+
+    // Pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Fetch draft jobs
+    const drafts = await JobPost.find(
+      {
+        companyId,
+        status: "draft",
+      },
+      {
+        jobTitle: 1,
+        jobRole: 1,
+        jobCategory: 1,
+        jobSubCategory: 1,
+        updatedAt: 1,
+        createdAt: 1,
+        employmentType: 1,
+        city: 1,
+        state: 1,
+        salaryMin: 1,
+        salaryMax: 1,
+      }
+    )
+      .sort({ updatedAt: -1 }) // Recent drafts first
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    // Count total drafts
+    const totalDrafts = await JobPost.countDocuments({
+      companyId,
+      status: "draft",
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Recent draft jobs fetched successfully",
+      page,
+      limit,
+      totalDrafts,
+      totalPages: Math.ceil(totalDrafts / limit),
+      drafts,
+    });
+  } catch (error) {
+    console.error("Get Recent Drafts Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching drafts",
+      error: error.message,
+    });
+  }
+};
+
+
+
+exports.getDraftById = async (req, res) => {
+  try {
+ // from auth middleware
+    const jobId = req.params.id;  // from URL params
+
+ 
+    
+
+    if (!jobId) {
+      return res.status(400).json({
+        success: false,
+        message: "jobId is required",
+      });
+    }
+
+    // Fetch a single draft job
+    const draft = await JobPost.findOne(
+      {
+        _id: jobId,
+        status: "draft", // ensure it's a draft
+      }
+    ).lean();
+
+    if (!draft) {
+      return res.status(404).json({
+        success: false,
+        message: "Draft job not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Draft job fetched successfully",
+      draft,
+    });
+
+  } catch (error) {
+    console.error("Get Draft By ID Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching draft job",
+      error: error.message,
+    });
+  }
+};
+
