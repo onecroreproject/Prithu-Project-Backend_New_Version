@@ -15,7 +15,7 @@ exports.companyAuth = (req, res, next) => {
 
     // 🔹 Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-console.log(decoded)
+
     // 🔹 Attach companyId to request
     req.companyId = decoded.companyId;  // Since your generateToken stores { id: company._id }
 

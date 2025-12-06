@@ -62,6 +62,11 @@ const CompanyLoginSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+profileAvatar: {
+  type: String,
+  default: null,
+},
+
     status: {
       type: String,
       enum: ["active", "inactive", "banned"],

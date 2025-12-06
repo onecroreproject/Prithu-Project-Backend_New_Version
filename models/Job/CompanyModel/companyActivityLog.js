@@ -30,6 +30,7 @@ const CompanyActivityLogSchema = new mongoose.Schema(
         "LOGOUT",
 
         "OTHER",
+        "application_status_update",
       ],
       required: true,
       index: true,

@@ -20,7 +20,7 @@ exports.updateCompanyProfile = async (req, res) => {
     const existingProfile = await CompanyProfile.findOne({ companyId });
 
     /* ======================================================
-     *  🔥 Upload Logo
+     *  🔥 Upload Logo (No Changes)
      * ====================================================== */
     if (req.files?.logo?.[0]) {
       data.logo = await uploadAndReplace(
@@ -31,7 +31,7 @@ exports.updateCompanyProfile = async (req, res) => {
     }
 
     /* ======================================================
-     *  🔥 Upload Cover Image
+     *  🔥 Upload Cover Image (No Changes)
      * ====================================================== */
     if (req.files?.coverImage?.[0]) {
       data.coverImage = await uploadAndReplace(
@@ -39,6 +39,22 @@ exports.updateCompanyProfile = async (req, res) => {
         "company/cover",
         existingProfile?.coverImage
       );
+    }
+
+    /* ======================================================
+     *  🔥 Upload Person Profile Avatar (NEW)
+     * ====================================================== */
+
+    if (req.files?.profileAvatar?.[0]) {
+      const avatarUrl = await uploadAndReplace(
+        req.files.profileAvatar[0].buffer,
+        "company/profileAvatar"
+      );
+
+      // Save avatar in CompanyLogin
+      await CompanyLogin.findByIdAndUpdate(companyId, {
+        profileAvatar: avatarUrl
+      });
     }
 
     /* ======================================================
@@ -52,7 +68,7 @@ exports.updateCompanyProfile = async (req, res) => {
     }
 
     /* ======================================================
-     *  🔥 Sync with CompanyLogin
+     *  🔥 Sync Basic Fields with CompanyLogin
      * ====================================================== */
     const syncFields = {
       name: "name",
@@ -74,7 +90,7 @@ exports.updateCompanyProfile = async (req, res) => {
     }
 
     /* ======================================================
-     *  🔥 Create / Update Company Profile
+     *  🔥 Create / Update Company Profile (No Changes)
      * ====================================================== */
     let profile = await CompanyProfile.findOne({ companyId });
 
@@ -102,6 +118,7 @@ exports.updateCompanyProfile = async (req, res) => {
     });
   }
 };
+
 
 
 
@@ -193,7 +210,7 @@ exports.getDraftById = async (req, res) => {
     const draft = await JobPost.findOne(
       {
         _id: jobId,
-        status: "draft", // ensure it's a draft
+       // ensure it's a draft
       }
     ).lean();
 
@@ -219,4 +236,150 @@ exports.getDraftById = async (req, res) => {
     });
   }
 };
+
+
+
+
+
+exports.getCompanyProfile = async (req, res) => {
+  try {
+    const companyId = req.companyId; // from middleware / JWT
+    
+
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        message: "companyId is required",
+      });
+    }
+
+    /* --------------------------------------------------
+     * 1️⃣ FETCH COMPANY LOGIN INFORMATION
+     * -------------------------------------------------- */
+    const companyLogin = await CompanyLogin.findById(companyId)
+      .select("-password -otp -otpExpiry") // remove sensitive fields
+      .lean();
+
+    if (!companyLogin) {
+      return res.status(404).json({
+        success: false,
+        message: "Company login not found",
+      });
+    }
+
+    /* --------------------------------------------------
+     * 2️⃣ FETCH COMPANY PROFILE
+     * -------------------------------------------------- */
+    const companyProfile = await CompanyProfile.findOne({ companyId })
+      .lean();
+
+    // Profile may not exist if company hasn't filled it yet
+    if (!companyProfile) {
+      return res.status(200).json({
+        success: true,
+        profileCompleted: false,
+        company: companyLogin,
+        profile: null,
+      });
+    }
+
+    /* --------------------------------------------------
+     * 3️⃣ SEND COMPLETE COMPANY INFO
+     * -------------------------------------------------- */
+    return res.status(200).json({
+      success: true,
+      profileCompleted: true,
+      company: companyLogin,
+      profile: companyProfile,
+    });
+
+  } catch (error) {
+    console.error("GET COMPANY PROFILE ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+};
+
+
+
+
+exports.getSingleCompanyProfile = async (req, res) => {
+  try {
+    const companyId = req.params.companyId; // FIXED — always string
+
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        message: "companyId is required",
+      });
+    }
+
+    /* --------------------------------------------------
+     * 1️⃣ FETCH COMPANY LOGIN INFORMATION
+     * -------------------------------------------------- */
+    const companyLogin = await CompanyLogin.findById(companyId)
+      .select("-password -otp -otpExpiry")
+      .lean();
+
+    if (!companyLogin) {
+      return res.status(404).json({
+        success: false,
+        message: "Company login not found",
+      });
+    }
+
+    /* --------------------------------------------------
+     * 2️⃣ FETCH COMPANY PROFILE
+     * -------------------------------------------------- */
+    const companyProfile = await CompanyProfile.findOne({ companyId }).lean();
+
+    /* --------------------------------------------------
+     * 3️⃣ FETCH ALL JOBS POSTED BY THIS COMPANY
+     * -------------------------------------------------- */
+    const companyJobs = await JobPost.find({ companyId })
+      .sort({ createdAt: -1 }) // latest first
+      .lean();
+
+    /* --------------------------------------------------
+     * Profile not created yet
+     * -------------------------------------------------- */
+    if (!companyProfile) {
+      return res.status(200).json({
+        success: true,
+        profileCompleted: false,
+        company: companyLogin,
+        profile: null,
+        jobs: companyJobs, // 👉 still return jobs even if profile missing
+      });
+    }
+
+    /* --------------------------------------------------
+     * 4️⃣ SEND COMPLETE COMPANY INFO
+     * -------------------------------------------------- */
+    return res.status(200).json({
+      success: true,
+      profileCompleted: true,
+      company: companyLogin,
+      profile: companyProfile,
+      jobs: companyJobs, // 👉 INCLUDED in response
+    });
+
+  } catch (error) {
+    console.error("GET COMPANY PROFILE ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+};
+
+
+
+
+
+
+
+
 
