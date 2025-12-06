@@ -39,9 +39,12 @@ exports.aptitudeCallback = async (req, res) => {
 
     console.log("📥 CALLBACK RECEIVED:", req.body);
 
-    if (!userId || !sessionToken || !score) {
+    if (!userId || !sessionToken || !score || !testName) {
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
+
+    // 🔥 Clean version ONLY FOR COMPARISON
+    const cleanCompareName = testName.trim().toLowerCase().replace(/\s+/g, "");
 
     const session = await TestSession.findOne({ userId, sessionToken });
 
@@ -53,18 +56,45 @@ exports.aptitudeCallback = async (req, res) => {
       return res.status(400).json({ success: false, message: "Test already submitted" });
     }
 
+    // 🔥 Find existing test result using cleaned name (comparison only)
+    const existingResults = await AptitudeResult.find({ userId });
+
+    const matchedResult = existingResults.find(
+      (x) => x.testName.trim().toLowerCase().replace(/\s+/g, "") === cleanCompareName
+    );
+
+    if (matchedResult) {
+      // 🔥 Update existing record
+      matchedResult.score = score;
+      matchedResult.timeTaken = timeTaken;
+      matchedResult.receivedAt = new Date();
+      await matchedResult.save();
+
+      session.status = "completed";
+      await session.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Aptitude score updated (existing test)",
+      });
+    }
+
+    // 🔥 Save NEW result (testName EXACTLY as received)
     await AptitudeResult.create({
       userId,
       score,
       timeTaken,
-      testName,
+      testName,  // ❗ Save exactly what came from API
       receivedAt: new Date(),
     });
 
     session.status = "completed";
     await session.save();
 
-    return res.status(200).json({ success: true, message: "Aptitude score saved" });
+    return res.status(200).json({
+      success: true,
+      message: "Aptitude score saved",
+    });
 
   } catch (error) {
     console.error("Callback Error:", error);
@@ -75,16 +105,23 @@ exports.aptitudeCallback = async (req, res) => {
 
 
 
+
 exports.getLatestAptitudeResult = async (req, res) => {
   try {
     const userId = req.Id;
 
     const latest = await AptitudeResult.findOne({ userId })
-      .sort({ createdAt: -1 });
+      .sort({ receivedAt: -1 });
+
+    // Also fetch all results for history
+    const results = await AptitudeResult.find({ userId })
+      .sort({ receivedAt: -1 })
+      .limit(10);
 
     return res.status(200).json({
       success: true,
-      latest
+      latest: latest || null,
+      results: results || []  // Add this to match frontend
     });
 
   } catch (error) {

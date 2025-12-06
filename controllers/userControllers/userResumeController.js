@@ -2,6 +2,7 @@ const Users=require("../../models/userModels/userModel");
 const ProfileSettings= require("../../models/profileSettingModel");
 const UserProfile =require("../../models/userModels/UserEductionSchema/userFullCuricluamSchema");
 const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
+const AptitudeResult =require("../../models/userAptitudeResult.js");
 
 // ✅ controllers/profileController.js
 exports.togglePublish = async (req, res) => {
@@ -59,7 +60,6 @@ exports.getPublicResume = async (req, res) => {
 // ✅ controllers/resumeController.js
 exports.getPublicPortfolio = async (req, res) => {
   try {
-    // 🔹 Get username from URL params
     const { username } = req.params;
 
     if (!username) {
@@ -69,10 +69,10 @@ exports.getPublicPortfolio = async (req, res) => {
       });
     }
 
-    // 🔹 Find user by username (case-insensitive match)
-    const user = await Users.findOne({ userName: new RegExp(`^${username}$`, "i") }).select(
-      "_id userName displayName email phoneNumber"
-    );
+    // 🔹 Find user by username (case-insensitive)
+    const user = await Users.findOne({
+      userName: new RegExp(`^${username}$`, "i")
+    }).select("_id userName displayName email phoneNumber");
 
     if (!user) {
       return res.status(404).json({
@@ -81,42 +81,69 @@ exports.getPublicPortfolio = async (req, res) => {
       });
     }
 
-    // 🔹 Fetch published profile settings for the user
-    const profile = await ProfileSettings.findOne({ userId: user._id }).lean();
-    if (!profile || !profile.isPublished) {
+    // 🔹 Check if user's profile is published
+    const profileSettings = await ProfileSettings.findOne({ userId: user._id }).lean();
+
+    if (!profileSettings || !profileSettings.isPublished) {
       return res.status(403).json({
         success: false,
         message: "This user's profile is not published or unavailable",
       });
     }
 
-    // 🔹 Fetch detailed resume/user profile info
-    const fullProfile = await UserProfile.findOne({ userId: user._id })
+    // 🔹 Fetch the user's curriculum (UserCurricluam schema)
+    const curriculum = await UserProfile.findOne({ userId: user._id })
       .populate("userId", "displayName email phoneNumber")
       .lean();
 
-    // 🔹 Merge all data
-    const portfolioData = {
-      ...profile,
-      ...fullProfile,
-      user,
+    // If no curriculum found, still return empty structure instead of failing
+    const curriculumData = curriculum || {
+      education: [],
+      experience: [],
+      skills: [],
+      certifications: [],
+      projects: [],
+      professionalSummary: "",
+      about: "",
+      headline: "",
+      portfolioURL: "",
+      githubURL: "",
+      linkedinURL: "",
+      websiteURL: "",
+      languages: [],
+      interests: [],
+      resumeURL: ""
     };
 
+    // 🔹 Fetch Aptitude Test Results
+    const aptitudeResults = await AptitudeResult.find({ userId: user._id })
+      .sort({ receivedAt: -1 })   // latest first
+      .lean();
 
-     await logUserActivity({
-                userId:user._id,
-                actionType: "VIEW_PORTFOLIO",
-                targetId: user._id,
-                targetModel: "UserCurricluam",
-                metadata: { platform: "web" },
-              });
+    // 🔹 Merge All Portfolio Data
+    const portfolioData = {
+      user,                     // basic details
+      profileSettings,          // publication settings
+      curriculum: curriculumData,  // full curriculum
+      aptitudeTests: aptitudeResults || []
+    };
 
-    // 🔹 Success response
+    // 🔹 Log user activity
+    await logUserActivity({
+      userId: user._id,
+      actionType: "VIEW_PORTFOLIO",
+      targetId: user._id,
+      targetModel: "UserCurricluam",
+      metadata: { platform: "web" },
+    });
+
+    // 🔹 Send response
     res.status(200).json({
       success: true,
       data: portfolioData,
       message: "Public portfolio fetched successfully",
     });
+
   } catch (error) {
     console.error("❌ getPublicPortfolio error:", error);
     res.status(500).json({
@@ -126,5 +153,6 @@ exports.getPublicPortfolio = async (req, res) => {
     });
   }
 };
+
 
 
