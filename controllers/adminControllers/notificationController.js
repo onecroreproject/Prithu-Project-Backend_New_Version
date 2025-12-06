@@ -24,7 +24,7 @@ exports.sendAdminNotification = async (req, res) => {
       title,
       message,
       image:
-        "https://res.cloudinary.com/dzp2c7ed9/image/upload/v1760440686/feeds/images/gs6sr8k6ofthrbrqmvx9.jpg",
+        "https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg",
       platform: u.platform || "WEB",
     }));
 

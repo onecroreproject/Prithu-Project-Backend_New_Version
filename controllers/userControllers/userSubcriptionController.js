@@ -54,7 +54,7 @@ exports.subscribePlan = async (req, res) => {
         username: user.userName,
         endDate: existing.endDate.toDateString(), 
       },
-      embedLogo: true, 
+      embedLogo: false, 
     });
   }
 }
@@ -124,7 +124,7 @@ exports.subscribePlan = async (req, res) => {
     startDate: subscription.startDate.toDateString(),
     endDate: subscription.endDate.toDateString(),
   },
-  embedLogo: true,
+  embedLogo: false,
 });
 
 

@@ -107,7 +107,7 @@ exports.createNewUser = async (req, res) => {
         referralCode: generatedCode,
         accountType, // optional, if template includes account type
       },
-      embedLogo: true,
+      embedLogo: false,
     }).catch((err) => console.error("❌ Email sending failed:", err));
 
     // ✅ Final response
@@ -258,7 +258,7 @@ exports.userLogin = async (req, res) => {
         username: user.userName,
         dashboardLink: `${process.env.FRONTEND_URL}/dashboard`,
       },
-      embedLogo: true,
+      embedLogo: false,
     }).catch((err) => console.error("Email error:", err));
 
     // 9️⃣ Final Response
@@ -447,7 +447,7 @@ exports.userPasswordReset = async (req, res) => {
       to: user.email,
       subject: "Your Prithu Password Has Been Reset",
       placeholders: { username: user.userName || "User" },
-      embedLogo: true,
+      embedLogo: false,
     });
 
     res.json({ message: "Password reset successful" });

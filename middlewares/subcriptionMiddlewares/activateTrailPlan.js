@@ -20,7 +20,7 @@ async function activateTrialPlan(userId, userEmail, userName) {
       placeholders: {
         userName
       },
-      embedLogo: true
+      embedLogo: false
     });
 
     return {
@@ -46,7 +46,7 @@ async function activateTrialPlan(userId, userEmail, userName) {
         remainingDays,
         endDate: endDate.toDateString()
       },
-      embedLogo: true
+      embedLogo: false
     });
 
     return {
@@ -85,7 +85,7 @@ async function activateTrialPlan(userId, userEmail, userName) {
         startDate: startDate.toDateString(),
         endDate: endDate.toDateString()
       },
-      embedLogo: true
+      embedLogo: false
     });
 
     return {

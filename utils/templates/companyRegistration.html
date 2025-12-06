@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prithu - Company Registration Successful!</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #f9f9f7;
+      font-family: Arial, sans-serif;
+      line-height: 1.4;
+    }
+
+    .email-container {
+      max-width: 600px;
+      margin: 40px auto;
+      background-color: #f9f9f7;
+      box-shadow: 2px 6px 30px rgba(0,0,0,0.15);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .header {
+      background-color: #f9f9f7;
+      color: #064d3b;
+      padding: 45px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .logo-text-container {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      font-family: serif;
+    }
+
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .header img.logo {
+      width: 65px;
+      height: auto;
+      animation: spin 4s linear infinite;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+      color: #064d3b;
+    }
+
+    .success-badge {
+      background-color: #28a745;
+      color: white;
+      padding: 12px 25px;
+      border-radius: 25px;
+      font-size: 18px;
+      font-weight: 600;
+      margin-top: 15px;
+      display: inline-block;
+      box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+    }
+
+    .success-icon {
+      font-size: 50px;
+      color: #28a745;
+      margin: 20px 0;
+    }
+
+    .content {
+      padding: 0px 40px;
+      background-color: #f9f9f7;
+      color: #064d3b;
+      text-align: center;
+    }
+
+    .content h2 {
+      font-size: 18px;
+      text-align: left;
+      color: black;
+      margin-bottom: 10px;
+    }
+
+    .content p {
+      font-size: 18px;
+      margin-bottom: 15px;
+      text-align: left;
+      color: black;
+    }
+
+    .company-details {
+      background-color: #ffffff;
+      border-radius: 10px;
+      padding: 25px;
+      margin: 25px 0;
+      text-align: left;
+      border-left: 4px solid #28a745;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .company-details h3 {
+      color: #064d3b;
+      margin-top: 0;
+      font-size: 20px;
+      border-bottom: 2px solid #f0f0f0;
+      padding-bottom: 10px;
+    }
+
+    .detail-row {
+      display: flex;
+      margin: 12px 0;
+      align-items: flex-start;
+    }
+
+    .detail-label {
+      font-weight: 600;
+      color: #064d3b;
+      min-width: 150px;
+      font-size: 16px;
+    }
+
+    .detail-value {
+      color: black;
+      font-size: 16px;
+      flex: 1;
+    }
+
+    .account-id {
+      background-color: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+      text-align: center;
+      border: 2px dashed #4169E1;
+    }
+
+    .account-id h4 {
+      margin: 0 0 10px 0;
+      color: #064d3b;
+    }
+
+    .account-id .id-number {
+      font-size: 22px;
+      font-weight: bold;
+      color: #4169E1;
+      letter-spacing: 2px;
+    }
+
+    .next-steps {
+      background-color: #f0f7ff;
+      border-radius: 10px;
+      padding: 25px;
+      margin: 30px 0;
+      text-align: left;
+    }
+
+    .next-steps h3 {
+      color: #064d3b;
+      margin-top: 0;
+      font-size: 20px;
+    }
+
+    .steps-list {
+      list-style: none;
+      padding-left: 0;
+      margin: 20px 0;
+    }
+
+    .steps-list li {
+      margin-bottom: 20px;
+      padding-left: 40px;
+      position: relative;
+      font-size: 16px;
+    }
+
+    .steps-list li:before {
+      content: counter(step-counter);
+      counter-increment: step-counter;
+      background-color: #4169E1;
+      color: white;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: absolute;
+      left: 0;
+      top: 0;
+      font-weight: bold;
+    }
+
+    .cta-button {
+      display: inline-block;
+      background-color: #4169E1;
+      color: white;
+      padding: 15px 30px;
+      text-decoration: none;
+      border-radius: 5px;
+      font-size: 18px;
+      margin: 20px 0;
+      transition: background 0.3s ease, transform 0.2s ease;
+      font-weight: 600;
+    }
+
+    .cta-button:hover {
+      background-color: #365fc0;
+      transform: translateY(-2px);
+    }
+
+    .secondary-button {
+      display: inline-block;
+      background-color: #28a745;
+      color: white;
+      padding: 12px 25px;
+      text-decoration: none;
+      border-radius: 5px;
+      font-size: 16px;
+      margin: 10px;
+      transition: background 0.3s ease;
+    }
+
+    .secondary-button:hover {
+      background-color: #218838;
+    }
+
+    .button-container {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      flex-wrap: wrap;
+      margin: 25px 0;
+    }
+
+    .welcome-message {
+      background-color: #e8f5e9;
+      border-radius: 10px;
+      padding: 20px;
+      margin: 25px 0;
+      text-align: center;
+      border: 2px solid #28a745;
+    }
+
+    .footer {
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #064d3b;
+      background-color: #f9f9f7;
+      border-top: 1px solid rgba(0,0,0,0.05);
+    }
+
+    .footer a {
+      color: #064d3b;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    .footer p {
+      margin: 8px 0;
+      color: black;
+    }
+
+    .support-section {
+      background-color: #fff8e1;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 25px 0;
+      text-align: center;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin: 25px 0;
+    }
+
+    .feature-item {
+      background-color: white;
+      padding: 15px;
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .feature-icon {
+      font-size: 30px;
+      margin-bottom: 10px;
+      color: #4169E1;
+    }
+
+    @media only screen and (max-width: 600px) {
+      .header {
+        padding: 15px;
+      }
+      .logo-text-container {
+        flex-direction: row;
+        align-items: center;
+      }
+      .header img.logo {
+        width: 50px;
+      }
+      .header h1 {
+        font-size: 24px;
+      }
+      .content {
+        padding: 0px 20px;
+      }
+      .detail-row {
+        flex-direction: column;
+      }
+      .detail-label {
+        min-width: auto;
+        margin-bottom: 5px;
+      }
+      .button-container {
+        flex-direction: column;
+        align-items: center;
+      }
+      .features-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="email-container">
+    <div class="header">
+      <div class="logo-text-container">
+        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo" class="logo" />
+        <h1 style="font-size: 37px">Prithu</h1>
+      </div>
+      <div class="success-badge">🎉 Company Registration Successful!</div>
+      <div class="success-icon">✓</div>
+    </div>
+
+    <div class="content">
+      <h2 style="font-size: 19px">Congratulations {company_name} Team!</h2>
+      
+      <p style="font-size: 18px; line-height: 1.6;">
+        We're delighted to inform you that your company registration with Prithu has been successfully completed! 
+        Your company is now officially part of our growing business community.
+      </p>
+
+      <div class="welcome-message">
+        <h3 style="color: #064d3b; margin: 0;">Welcome to the Prithu Business Network!</h3>
+        <p style="color: #064d3b; font-size: 16px; margin: 10px 0 0 0;">
+          Get ready to connect with talent, grow your business, and access exclusive features.
+        </p>
+      </div>
+
+      <div class="company-details">
+        <h3>Your Company Profile Details</h3>
+        
+        <div class="account-id">
+          <h4>Your Company Account ID</h4>
+          <div class="id-number">{company_account_id}</div>
+          <p style="font-size: 14px; color: #666; margin: 10px 0 0 0;">
+            Please save this ID for future reference
+          </p>
+        </div>
+        
+        <div class="detail-row">
+          <div class="detail-label">Company Name:</div>
+          <div class="detail-value">{company_name}</div>
+        </div>
+        
+        <div class="detail-row">
+          <div class="detail-label">Registration Date:</div>
+          <div class="detail-value">{registration_date}</div>
+        </div>
+        
+        <div class="detail-row">
+          <div class="detail-label">Account Type:</div>
+          <div class="detail-value">{account_type} Business Account</div>
+        </div>
+        
+        <div class="detail-row">
+          <div class="detail-label">Primary Contact:</div>
+          <div class="detail-value">{contact_person_name} ({contact_email})</div>
+        </div>
+        
+        <div class="detail-row">
+          <div class="detail-label">Plan:</div>
+          <div class="detail-value"><strong>{subscription_plan}</strong> (Valid until: {plan_expiry_date})</div>
+        </div>
+      </div>
+
+      <div class="next-steps">
+        <h3>🎯 Next Steps to Get Started</h3>
+        <ol class="steps-list" style="counter-reset: step-counter;">
+          <li><strong>Complete Your Company Profile</strong><br>
+            Add your company logo, description, and additional details to attract top talent.</li>
+          
+          <li><strong>Set Up Job Postings</strong><br>
+            Start creating job listings to find the perfect candidates for your team.</li>
+          
+          <li><strong>Explore Talent Pool</strong><br>
+            Browse through our database of skilled professionals ready to join your company.</li>
+          
+          <li><strong>Configure Team Access</strong><br>
+            Add team members and set up permissions for collaborative hiring.</li>
+        </ol>
+      </div>
+
+      <h3 style="text-align: center; color: #064d3b; font-size: 20px;">🚀 Quick Access</h3>
+      
+      <div class="button-container">
+        <a href="{dashboard_url}" class="cta-button">Go To Company Dashboard</a>
+        <a href="{profile_setup_url}" class="secondary-button">Complete Profile</a>
+        <a href="{post_job_url}" class="secondary-button">Post First Job</a>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-item">
+          <div class="feature-icon">👥</div>
+          <h4 style="margin: 0; color: #064d3b;">Team Collaboration</h4>
+          <p style="font-size: 14px; color: #666;">Add team members for collaborative hiring</p>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon">📊</div>
+          <h4 style="margin: 0; color: #064d3b;">Analytics Dashboard</h4>
+          <p style="font-size: 14px; color: #666;">Track applications and hiring metrics</p>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon">🔔</div>
+          <h4 style="margin: 0; color: #064d3b;">Smart Notifications</h4>
+          <p style="font-size: 14px; color: #666;">Get alerts for matching candidates</p>
+        </div>
+      </div>
+
+      <p style="text-align:center; font-size: 18px; color: #064d3b;">
+        <strong>Your business journey with Prithu starts now!</strong>
+      </p>
+      
+      <div class="support-section">
+        <p><strong>Need Assistance?</strong> Our dedicated business support team is here to help you succeed.</p>
+        <p>
+          📞 Call: {support_phone}<br>
+          📧 Email: <a href="mailto:business@prithu.in" style="color: #4169E1;">business@prithu.in</a><br>
+          🕒 Hours: Monday-Friday, 9 AM - 6 PM
+        </p>
+      </div>
+
+      <p style="text-align:center; font-size: 16px; color: #666;">
+        To explore all features, visit our <a href="{help_center_url}" style="color: #4169E1;">Business Help Center</a>
+      </p>
+    </div>
+
+    <div class="footer">
+      <p><strong>Prithu Business Services</strong></p>
+      <p><a href="mailto:business@prithu.in" style="color: black;">business@prithu.in</a> | 
+         <a href="{support_portal_url}" style="color: black;">Support Portal</a></p>
+      <p><a href="{privacy_policy_url}" style="color: black;">Privacy Policy</a> | 
+         <a href="{terms_url}" style="color: black;">Terms of Service</a> | 
+         <a href="{company_guide_url}" style="color: black;">Company Guide</a></p>
+      <p>© {current_year} Prithu. All business rights reserved.</p>
+      <p style="font-size: 12px; color: #888;">
+        This email was sent to {contact_email} as part of your company registration.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
