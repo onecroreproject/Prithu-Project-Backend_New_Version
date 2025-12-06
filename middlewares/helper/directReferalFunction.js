@@ -77,7 +77,7 @@ exports.handleReferralReward = async (req, res) => {
             rewardAmount,
             balance: updatedReferrer.balanceEarnings,
           },
-          embedLogo: true,
+          embedLogo: false,
         });
       }
 
@@ -90,7 +90,7 @@ exports.handleReferralReward = async (req, res) => {
             userName: currentUser.userName,
             referrerName: updatedReferrer.userName,
           },
-          embedLogo: true,
+          embedLogo: false,
         });
       }
 
@@ -118,7 +118,7 @@ exports.handleReferralReward = async (req, res) => {
           referredUserName: currentUser.userName,
           referralCode: currentUser.referralCode,
         },
-        embedLogo: true,
+        embedLogo: false,
       });
     }
 
@@ -132,7 +132,7 @@ exports.handleReferralReward = async (req, res) => {
           userName: currentUser.userName,
           referrerName: referrer?.userName || "your referrer",
         },
-        embedLogo: true,
+        embedLogo: false,
       });
     }
 

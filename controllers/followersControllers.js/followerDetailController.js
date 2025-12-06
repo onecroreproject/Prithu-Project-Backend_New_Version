@@ -268,7 +268,7 @@ exports.removeFollower = async (req, res) => {
       templateName: "removeFollower.html",  
       to: followerProfile.email,
       subject: `${creatorProfile?.userName || "Someone"} removed you from followers`,
-      embedLogo: true,
+      embedLogo: false,
       placeholders: {
         creatorName: creatorProfile?.userName || "A user",
         creatorAvatar: creatorProfile?.profileAvatar || "",

@@ -41,7 +41,7 @@ console.log(language)
     if ( !categoryId || !type) {
       return res
         .status(400)
-        .json({ message: "Language, categoryId, and type are required" });
+        .json({ message: "categoryId are required" });
     }
 
     // ✅ Extract hashtags

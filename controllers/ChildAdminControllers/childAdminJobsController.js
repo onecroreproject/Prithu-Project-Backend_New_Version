@@ -93,7 +93,7 @@ exports.approveJob = async (req, res) => {
         title: job.jobTitle,
         message: "Your job is now live and visible to all job seekers!",
       },
-      embedLogo: true,
+      embedLogo: false,
     });
 
     return res.status(200).json({
@@ -189,7 +189,7 @@ exports.deleteJob = async (req, res) => {
         title: job.jobTitle,
         message: `Your job was removed by an admin. Reason: ${reason}`,
       },
-      embedLogo: true,
+      embedLogo: false,
     });
 
     /* --------------------------------------------------------------------------
