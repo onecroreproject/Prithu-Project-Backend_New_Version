@@ -128,6 +128,18 @@ exports.createOrUpdateJob = async (req, res) => {
       finalImage = await uploadAndReplace(jobImage.buffer, "jobs/images", body.oldImage);
     }
 
+    if (jobImage) {
+    const newFileName = `${companyId}_${newJob._id}_${Date.now()}.png`;
+
+    // Save into your uploads/jobs folder
+    const uploadPath = path.join("uploads", "jobs", newFileName);
+    fs.writeFileSync(uploadPath, jobImage.buffer);
+
+    // store filename in DB
+    newJob.jobImage = newFileName;
+    await newJob.save();
+}
+
     /* =======================================================================================
        📝 VALIDATION FOR ACTIVE ONLY
        If the incoming status indicates active (or no status provided), and this is a create,
@@ -336,11 +348,12 @@ exports.createOrUpdateJob = async (req, res) => {
    ============================================================================================= */
 exports.getAllJobs = async (req, res) => {
   try {
-    const userId = req.Id || req.body.userId; // logged-in user's ID
+    const userId = req.Id || req.body.userId;
 
     const {
       jobCategory,
       jobRole,
+      jobId,
       city,
       state,
       country,
@@ -353,85 +366,200 @@ exports.getAllJobs = async (req, res) => {
       maxExp,
       minSalary,
       maxSalary,
+      companyId,
+      category,
+      salaryRange,
+      experience,
+      location // Added for frontend compatibility
     } = req.query;
 
     const q = keyword || search;
 
-    const baseFilter = { status: "active", isApproved: true };
+    /** -------------------------------------------
+     * JOB ID FILTER - HIGHEST PRIORITY
+     * ------------------------------------------- */
+    if (jobId) {
+      console.log(`Fetching single job with ID: ${jobId}`);
+      
+      const job = await JobPost.findOne({
+        $or: [
+          { _id: jobId },
+          { jobId: jobId }
+        ],
+        status: "active",
+        isApproved: true
+      })
+      .populate('companyId', 'companyName logo industry')
+      .lean();
 
-    if (jobCategory) baseFilter.jobCategory = jobCategory;
-    if (jobRole) baseFilter.jobRole = jobRole;
+      if (!job) {
+        console.log(`Job not found: ${jobId}`);
+        return res.status(200).json({
+          success: true,
+          total: 0,
+          jobs: []
+        });
+      }
+
+      const engagementData = await JobEngagement.find({ jobId: job._id }).lean();
+      
+      const engagementStats = {
+        likeCount: 0,
+        shareCount: 0,
+        saveCount: 0,
+        applyCount: 0,
+        viewCount: 0,
+        isLiked: false,
+        isSaved: false,
+        isApplied: false,
+        isViewed: false
+      };
+
+      engagementData.forEach((e) => {
+        if (e.liked) engagementStats.likeCount++;
+        if (e.shared) engagementStats.shareCount++;
+        if (e.saved) engagementStats.saveCount++;
+        if (e.applied) engagementStats.applyCount++;
+        if (e.view) engagementStats.viewCount++;
+
+        if (e.userId?.toString() === userId?.toString()) {
+          engagementStats.isLiked = e.liked;
+          engagementStats.isSaved = e.saved;
+          engagementStats.isApplied = e.applied;
+          engagementStats.isViewed = e.view;
+        }
+      });
+
+      /** -------------------------------------------
+       * ADD companyId INTO RESPONSE
+       * ------------------------------------------- */
+      const finalJob = {
+        ...job,
+        companyId: job.companyId?._id,  // ✅ ADDED
+        ...engagementStats
+      };
+
+      return res.status(200).json({
+        success: true,
+        total: 1,
+        jobs: [finalJob]
+      });
+    }
+
+    /** -------------------------------------------
+     * BASE FILTER FOR MULTIPLE JOBS
+     * ------------------------------------------- */
+    const baseFilter = {
+      status: "active",
+      isApproved: true
+    };
+
+    if (companyId) {
+      const ids = companyId.split(",");
+      baseFilter.companyId = ids.length > 1 ? { $in: ids } : ids[0];
+    }
+
+    if (category && category !== "All") {
+      baseFilter.jobCategory = new RegExp(category, "i");
+    }
+
+    if (experience) {
+      const [minE, maxE] = experience.split("-").map(Number);
+      baseFilter.$and = [
+        { minimumExperience: { $gte: minE } },
+        { maximumExperience: { $lte: maxE } }
+      ];
+    }
+
+    if (salaryRange) {
+      const [minS, maxS] = salaryRange.split("-").map(Number);
+      baseFilter.$and = [
+        ...(baseFilter.$and || []),
+        { salaryMin: { $gte: minS } },
+        { salaryMax: { $lte: maxS } }
+      ];
+    }
+
+    const locationQuery = location || city;
+    if (locationQuery) {
+      baseFilter.$or = [
+        { city: new RegExp(locationQuery, "i") },
+        { state: new RegExp(locationQuery, "i") },
+        { country: new RegExp(locationQuery, "i") }
+      ];
+    }
+    
+    if (state) baseFilter.state = new RegExp(`^${state}$`, "i");
+    if (country) baseFilter.country = new RegExp(`^${country}$`, "i");
 
     if (employmentType) {
-      const types = employmentType.split(",");
+      const types = Array.isArray(employmentType)
+        ? employmentType
+        : employmentType.split(",");
       baseFilter.employmentType = types.length > 1 ? { $in: types } : types[0];
     }
 
     if (workMode) {
-      const modes = workMode.split(",");
+      const modes = Array.isArray(workMode)
+        ? workMode
+        : workMode.split(",");
       baseFilter.workMode = modes.length > 1 ? { $in: modes } : modes[0];
     }
 
-    if (city) baseFilter.city = city;
-    if (state) baseFilter.state = state;
-    if (country) baseFilter.country = country;
-
     if (tags) baseFilter.tags = { $in: tags.split(",") };
-
     if (minExp) baseFilter.minimumExperience = { $gte: Number(minExp) };
     if (maxExp) baseFilter.maximumExperience = { $lte: Number(maxExp) };
     if (minSalary) baseFilter.salaryMin = { $gte: Number(minSalary) };
     if (maxSalary) baseFilter.salaryMax = { $lte: Number(maxSalary) };
 
+    /** -------------------------------------------
+     * SEARCH LOGIC
+     * ------------------------------------------- */
     let jobs = [];
 
-    /* -------------------------------------------
-     * 1️⃣ TEXT SEARCH
-     * ------------------------------------------- */
     if (q) {
-      let textFilter = { ...baseFilter, $text: { $search: q } };
+      jobs = await JobPost.find({
+        ...baseFilter,
+        $text: { $search: q }
+      })
+      .populate('companyId', 'companyName logo industry')
+      .sort({ score: { $meta: "textScore" } })
+      .lean();
 
-      jobs = await JobPost.find(textFilter)
-        .sort({ score: { $meta: "textScore" } })
-        .lean();
-
-      // Fallback to regex
       if (jobs.length === 0) {
-        let regexFilter = {
-          ...baseFilter,
-          $or: [
-            { jobTitle: new RegExp(q, "i") },
-            { jobRole: new RegExp(q, "i") },
-            { jobDescription: new RegExp(q, "i") },
-            { keywordSearch: new RegExp(q, "i") },
-          ],
-        };
-
-        jobs = await JobPost.find(regexFilter)
-          .sort({ createdAt: -1 })
-          .lean();
+        jobs = await JobPost.find({
+          $and: [
+            {
+              $or: [
+                { jobTitle: new RegExp(q, "i") },
+                { jobRole: new RegExp(q, "i") },
+                { jobCategory: new RegExp(q, "i") },
+                { jobDescription: new RegExp(q, "i") },
+                { keywordSearch: new RegExp(q, "i") }
+              ]
+            },
+            baseFilter
+          ]
+        })
+        .populate('companyId', 'companyName logo industry')
+        .sort({ createdAt: -1 })
+        .lean();
       }
     } else {
-      // No search → normal listing
       jobs = await JobPost.find(baseFilter)
+        .populate('companyId', 'companyName logo industry')
         .sort({ isFeatured: -1, priorityScore: -1, createdAt: -1 })
         .lean();
     }
 
-    /* -----------------------------------------------
-     * 2️⃣ FETCH ALL ENGAGEMENTS FOR ALL JOBS
-     * ----------------------------------------------- */
+    /** -------------------------------------------
+     * ENGAGEMENT MERGE
+     * ------------------------------------------- */
     const jobIds = jobs.map((j) => j._id);
+    const engagementData = await JobEngagement.find({ jobId: { $in: jobIds } }).lean();
 
-    const engagementData = await JobEngagement.find({ jobId: { $in: jobIds } })
-      .lean();
-
-    /* -----------------------------------------------
-     * 3️⃣ PROCESS ENGAGEMENT DATA PER JOB
-     * ----------------------------------------------- */
-    const engagementMap = {}; // key: jobId => { counts + user flags }
-
-    jobIds.forEach((id) => {
+    const engagementMap = {};
+    jobIds.forEach(id => {
       engagementMap[id] = {
         likeCount: 0,
         shareCount: 0,
@@ -441,53 +569,54 @@ exports.getAllJobs = async (req, res) => {
         isLiked: false,
         isSaved: false,
         isApplied: false,
-        isViewed: false,
+        isViewed: false
       };
     });
 
     engagementData.forEach((e) => {
-      const j = engagementMap[e.jobId];
+      const job = engagementMap[e.jobId];
+      if (!job) return;
 
-      if (!j) return;
+      if (e.liked) job.likeCount++;
+      if (e.shared) job.shareCount++;
+      if (e.saved) job.saveCount++;
+      if (e.applied) job.applyCount++;
+      if (e.view) job.viewCount++;
 
-      // Global counts
-      if (e.liked) j.likeCount++;
-      if (e.shared) j.shareCount++;
-      if (e.saved) j.saveCount++;
-      if (e.applied) j.applyCount++;
-      if (e.view) j.viewCount++;
-
-      // Current user flags
       if (e.userId?.toString() === userId?.toString()) {
-        j.isLiked = e.liked;
-        j.isSaved = e.saved;
-        j.isApplied = e.applied;
-        j.isViewed = e.view;
+        job.isLiked = e.liked;
+        job.isSaved = e.saved;
+        job.isApplied = e.applied;
+        job.isViewed = e.view;
       }
     });
 
-    /* -----------------------------------------------
-     * 4️⃣ ATTACH ENGAGEMENT INFO TO EACH JOB
-     * ----------------------------------------------- */
+    /** -------------------------------------------
+     * FINAL RESPONSE + ADD companyId
+     * ------------------------------------------- */
     const finalJobs = jobs.map((job) => ({
       ...job,
-      ...engagementMap[job._id],
+      companyId: job.companyId?._id,  // ✅ ADDED HERE TOO
+      ...engagementMap[job._id]
     }));
 
-    /* -----------------------------------------------
-     * 5️⃣ SEND RESPONSE
-     * ----------------------------------------------- */
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       total: finalJobs.length,
-      jobs: finalJobs,
+      jobs: finalJobs
     });
 
   } catch (error) {
     console.error("GET ALL JOBS ERROR:", error);
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 };
+
+
+
+
+
+
 
 
 
@@ -498,6 +627,7 @@ exports.getJobById = async (req, res) => {
   try {
     const jobId = req.params.id;
     const userId = req.Id;
+
     const userObjectId = new mongoose.Types.ObjectId(userId);
     const jobObjectId = new mongoose.Types.ObjectId(jobId);
 
@@ -514,28 +644,11 @@ exports.getJobById = async (req, res) => {
       },
 
       /* --------------------------------------------------
-       * 2️⃣ JOIN PAYMENT DETAILS
+       * ❌ REMOVED PAYMENT LOOKUP
        * -------------------------------------------------- */
-      {
-        $lookup: {
-          from: "JobPostPayment",
-          localField: "_id",
-          foreignField: "jobId",
-          as: "paymentInfo",
-        },
-      },
-
-      {
-        $addFields: {
-          paymentAmount: { $ifNull: [{ $max: "$paymentInfo.amount" }, 0] },
-          boostLevel: {
-            $ifNull: [{ $max: "$paymentInfo.meta.boostLevel" }, 0],
-          },
-        },
-      },
 
       /* --------------------------------------------------
-       * 3️⃣ JOIN ENGAGEMENT DATA
+       * 2️⃣ JOIN ENGAGEMENT DATA
        * -------------------------------------------------- */
       {
         $lookup: {
@@ -547,7 +660,7 @@ exports.getJobById = async (req, res) => {
       },
 
       /* --------------------------------------------------
-       * 4️⃣ COMPUTE GLOBAL COUNTS
+       * 3️⃣ GLOBAL COUNTS
        * -------------------------------------------------- */
       {
         $addFields: {
@@ -600,7 +713,7 @@ exports.getJobById = async (req, res) => {
       },
 
       /* --------------------------------------------------
-       * 5️⃣ CURRENT USER'S ENGAGEMENT
+       * 4️⃣ CURRENT USER'S ENGAGEMENT
        * -------------------------------------------------- */
       {
         $addFields: {
@@ -609,9 +722,7 @@ exports.getJobById = async (req, res) => {
               $filter: {
                 input: "$engagementData",
                 as: "e",
-                cond: {
-                  $eq: ["$$e.userId", userObjectId],
-                },
+                cond: { $eq: ["$$e.userId", userObjectId] },
               },
             },
           },
@@ -619,7 +730,7 @@ exports.getJobById = async (req, res) => {
       },
 
       /* --------------------------------------------------
-       * 6️⃣ USER FLAGS
+       * 5️⃣ USER FLAGS
        * -------------------------------------------------- */
       {
         $addFields: {
@@ -632,23 +743,11 @@ exports.getJobById = async (req, res) => {
       },
 
       /* --------------------------------------------------
-       * 7️⃣ ENGAGEMENT SCORE (OPTIONAL)
+       * ❌ REMOVED ENGAGEMENT SCORE
        * -------------------------------------------------- */
-      {
-        $addFields: {
-          engagementScore: {
-            $add: [
-              "$likeCount",
-              { $multiply: ["$shareCount", 2] },
-              { $multiply: ["$saveCount", 3] },
-              { $multiply: ["$applyCount", 5] },
-            ],
-          },
-        },
-      },
 
       /* --------------------------------------------------
-       * 8️⃣ JOIN COMPANY LOGIN
+       * 6️⃣ JOIN COMPANY LOGIN
        * -------------------------------------------------- */
       {
         $lookup: {
@@ -661,7 +760,7 @@ exports.getJobById = async (req, res) => {
       { $unwind: "$companyLogin" },
 
       /* --------------------------------------------------
-       * 9️⃣ JOIN COMPANY PROFILE
+       * 7️⃣ JOIN COMPANY PROFILE
        * -------------------------------------------------- */
       {
         $lookup: {
@@ -679,31 +778,12 @@ exports.getJobById = async (req, res) => {
       },
 
       /* --------------------------------------------------
-       * 🔟 JOIN COMPANY VISIBILITY SETTINGS
-       * -------------------------------------------------- */
-      {
-        $lookup: {
-          from: "CompanyProfileVisibility",
-          localField: "companyId",
-          foreignField: "companyId",
-          as: "visibilitySettings",
-        },
-      },
-      {
-        $unwind: {
-          path: "$visibilitySettings",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-
-      /* --------------------------------------------------
-       * 1️⃣1️⃣ FINAL PROJECTION
+       * 8️⃣ FINAL PROJECTION (NO PAYMENT / NO SCORE)
        * -------------------------------------------------- */
       {
         $project: {
           jobId: "$_id",
 
-          /* Job info */
           jobTitle: 1,
           jobRole: 1,
           jobCategory: 1,
@@ -724,7 +804,7 @@ exports.getJobById = async (req, res) => {
           status: 1,
           endDate: 1,
 
-          /* Engagement */
+          /* Counts */
           likeCount: 1,
           shareCount: 1,
           saveCount: 1,
@@ -738,11 +818,6 @@ exports.getJobById = async (req, res) => {
           isViewed: 1,
           isShared: 1,
 
-          /* Payment + ranking */
-          paymentAmount: 1,
-          boostLevel: 1,
-          engagementScore: 1,
-
           /* Company */
           companyId: 1,
           postedBy: {
@@ -755,7 +830,6 @@ exports.getJobById = async (req, res) => {
           },
 
           companyProfile: 1,
-          visibilitySettings: 1,
         },
       },
     ]);
@@ -777,6 +851,7 @@ exports.getJobById = async (req, res) => {
     });
   }
 };
+
 
 
 /* =============================================================================================
@@ -814,59 +889,88 @@ exports.getJobsByCompany = async (req, res) => {
   try {
     const companyId = req.companyId;
 
+    // 1️⃣ Fetch all jobs of this company
     const jobs = await JobPost.find({ companyId })
       .sort({ createdAt: -1 })
       .lean();
 
-    if (!jobs.length)
-      return res.status(404).json({ success: false, message: "No jobs found" });
+    if (!jobs.length) {
+      return res.status(404).json({
+        success: false,
+        message: "No jobs found for this company",
+      });
+    }
 
-    const enhanced = await Promise.all(
-      jobs.map(async (job) => {
-        const engagements = await JobEngagement.find({ jobId: job._id }).lean();
-        const payments = await Payment.findOne({
-          jobId: job._id,
-          status: "success",
-        }).lean();
+    /* --------------------------------------------------
+     * 2️⃣ FETCH ALL ENGAGEMENTS FOR THESE JOBS
+     * -------------------------------------------------- */
+    const jobIds = jobs.map((j) => j._id);
 
-        const stats = {
-          likes: engagements.filter((e) => e.liked).length,
-          shares: engagements.filter((e) => e.shared).length,
-          saved: engagements.filter((e) => e.saved).length,
-          applied: engagements.filter((e) => e.applied).length,
-        };
+    const engagements = await JobEngagement.find({
+      jobId: { $in: jobIds },
+    }).lean();
 
-        const engagementScore =
-          stats.likes * 2 +
-          stats.shares * 3 +
-          stats.saved * 1 +
-          stats.applied * 6 +
-          (payments ? 25 : 0);
+    /* --------------------------------------------------
+     * 3️⃣ BUILD ENGAGEMENT COUNT MAP
+     * -------------------------------------------------- */
+    const engagementMap = {};
 
-        return {
-          ...job,
-          stats,
-          engagementScore,
-          isPaid: !!payments,
-        };
-      })
-    );
-
-    res.json({
-      success: true,
-      total: enhanced.length,
-      jobs: enhanced,
+    jobIds.forEach((id) => {
+      engagementMap[id] = {
+        likeCount: 0,
+        shareCount: 0,
+        saveCount: 0,
+        applyCount: 0,
+        viewCount: 0,
+      };
     });
+
+    engagements.forEach((e) => {
+      const item = engagementMap[e.jobId];
+      if (!item) return;
+
+      if (e.liked) item.likeCount++;
+      if (e.shared) item.shareCount++;
+      if (e.saved) item.saveCount++;
+      if (e.applied) item.applyCount++;
+      if (e.view) item.viewCount++;
+    });
+
+    /* --------------------------------------------------
+     * 4️⃣ MERGE COUNTS INTO EACH JOB
+     * -------------------------------------------------- */
+    const final = jobs.map((job) => ({
+      ...job,
+      ...engagementMap[job._id], // merge counts only
+    }));
+
+    /* --------------------------------------------------
+     * 5️⃣ RESPONSE
+     * -------------------------------------------------- */
+    return res.status(200).json({
+      success: true,
+      total: final.length,
+      jobs: final,
+    });
+
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    console.error("GET JOBS BY COMPANY ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+    });
   }
 };
 
 
 
+
+
+
+
 exports.getTopRankedJobs = async (req, res) => {
   try {
-    const userId = req.Id; // logged-in user
+    const userId = req.Id;
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
     const jobs = await JobPost.aggregate([
@@ -876,8 +980,8 @@ exports.getTopRankedJobs = async (req, res) => {
       {
         $match: {
           status: "active",
-          isApproved: true,
-        },
+          isApproved: true
+        }
       },
 
       /* --------------------------------------------------
@@ -888,17 +992,16 @@ exports.getTopRankedJobs = async (req, res) => {
           from: "JobPostPayment",
           localField: "_id",
           foreignField: "jobId",
-          as: "paymentInfo",
-        },
+          as: "paymentInfo"
+        }
       },
-
       {
         $addFields: {
           paymentAmount: { $ifNull: [{ $max: "$paymentInfo.amount" }, 0] },
           boostLevel: {
-            $ifNull: [{ $max: "$paymentInfo.meta.boostLevel" }, 0],
-          },
-        },
+            $ifNull: [{ $max: "$paymentInfo.meta.boostLevel" }, 0]
+          }
+        }
       },
 
       /* --------------------------------------------------
@@ -909,8 +1012,8 @@ exports.getTopRankedJobs = async (req, res) => {
           from: "JobEngagement",
           localField: "_id",
           foreignField: "jobId",
-          as: "engagementData",
-        },
+          as: "engagementData"
+        }
       },
 
       /* --------------------------------------------------
@@ -923,9 +1026,9 @@ exports.getTopRankedJobs = async (req, res) => {
               $filter: {
                 input: "$engagementData",
                 as: "e",
-                cond: { $eq: ["$$e.liked", true] },
-              },
-            },
+                cond: { $eq: ["$$e.liked", true] }
+              }
+            }
           },
 
           shareCount: {
@@ -933,9 +1036,9 @@ exports.getTopRankedJobs = async (req, res) => {
               $filter: {
                 input: "$engagementData",
                 as: "e",
-                cond: { $eq: ["$$e.shared", true] },
-              },
-            },
+                cond: { $eq: ["$$e.shared", true] }
+              }
+            }
           },
 
           saveCount: {
@@ -943,9 +1046,9 @@ exports.getTopRankedJobs = async (req, res) => {
               $filter: {
                 input: "$engagementData",
                 as: "e",
-                cond: { $eq: ["$$e.saved", true] },
-              },
-            },
+                cond: { $eq: ["$$e.saved", true] }
+              }
+            }
           },
 
           applyCount: {
@@ -953,9 +1056,9 @@ exports.getTopRankedJobs = async (req, res) => {
               $filter: {
                 input: "$engagementData",
                 as: "e",
-                cond: { $eq: ["$$e.applied", true] },
-              },
-            },
+                cond: { $eq: ["$$e.applied", true] }
+              }
+            }
           },
 
           viewCount: {
@@ -963,15 +1066,15 @@ exports.getTopRankedJobs = async (req, res) => {
               $filter: {
                 input: "$engagementData",
                 as: "e",
-                cond: { $eq: ["$$e.view", true] },
-              },
-            },
-          },
-        },
+                cond: { $eq: ["$$e.view", true] }
+              }
+            }
+          }
+        }
       },
 
       /* --------------------------------------------------
-       * 5️⃣ CURRENT USER'S ENGAGEMENT
+       * 5️⃣ CURRENT USER ENGAGEMENT
        * -------------------------------------------------- */
       {
         $addFields: {
@@ -980,13 +1083,11 @@ exports.getTopRankedJobs = async (req, res) => {
               $filter: {
                 input: "$engagementData",
                 as: "e",
-                cond: {
-                  $eq: ["$$e.userId", userObjectId],
-                },
-              },
-            },
-          },
-        },
+                cond: { $eq: ["$$e.userId", userObjectId] }
+              }
+            }
+          }
+        }
       },
 
       /* --------------------------------------------------
@@ -998,12 +1099,12 @@ exports.getTopRankedJobs = async (req, res) => {
           isSaved: { $ifNull: ["$userEngagement.saved", false] },
           isApplied: { $ifNull: ["$userEngagement.applied", false] },
           isViewed: { $ifNull: ["$userEngagement.view", false] },
-          isShared: { $ifNull: ["$userEngagement.shared", false] },
-        },
+          isShared: { $ifNull: ["$userEngagement.shared", false] }
+        }
       },
 
       /* --------------------------------------------------
-       * 7️⃣ WEIGHTED ENGAGEMENT SCORE
+       * 7️⃣ ENGAGEMENT SCORE
        * -------------------------------------------------- */
       {
         $addFields: {
@@ -1012,10 +1113,10 @@ exports.getTopRankedJobs = async (req, res) => {
               "$likeCount",
               { $multiply: ["$shareCount", 2] },
               { $multiply: ["$saveCount", 3] },
-              { $multiply: ["$applyCount", 5] },
-            ],
-          },
-        },
+              { $multiply: ["$applyCount", 5] }
+            ]
+          }
+        }
       },
 
       /* --------------------------------------------------
@@ -1026,8 +1127,8 @@ exports.getTopRankedJobs = async (req, res) => {
           from: "CompanyLogin",
           localField: "companyId",
           foreignField: "_id",
-          as: "companyLogin",
-        },
+          as: "companyLogin"
+        }
       },
       { $unwind: "$companyLogin" },
 
@@ -1039,59 +1140,54 @@ exports.getTopRankedJobs = async (req, res) => {
           from: "CompanyProfile",
           localField: "companyId",
           foreignField: "companyId",
-          as: "companyProfile",
-        },
+          as: "companyProfile"
+        }
       },
       {
         $unwind: {
           path: "$companyProfile",
-          preserveNullAndEmptyArrays: true,
-        },
+          preserveNullAndEmptyArrays: true
+        }
       },
 
       /* --------------------------------------------------
-       * 🔟 JOIN COMPANY VISIBILITY SETTINGS
+       * 🔟 JOIN VISIBILITY SETTINGS
        * -------------------------------------------------- */
       {
         $lookup: {
           from: "CompanyProfileVisibility",
           localField: "companyId",
           foreignField: "companyId",
-          as: "visibilitySettings",
-        },
+          as: "visibilitySettings"
+        }
       },
       {
         $unwind: {
           path: "$visibilitySettings",
-          preserveNullAndEmptyArrays: true,
-        },
+          preserveNullAndEmptyArrays: true
+        }
       },
 
       /* --------------------------------------------------
-       * 1️⃣1️⃣ SORT BY RANKING
+       * 1️⃣1️⃣ SORT BY PERFORMANCE + PROMOTION
        * -------------------------------------------------- */
       {
         $sort: {
           paymentAmount: -1,
           boostLevel: -1,
           engagementScore: -1,
-          createdAt: -1,
-        },
+          createdAt: -1
+        }
       },
 
       /* --------------------------------------------------
-       * 1️⃣2️⃣ LIMIT
-       * -------------------------------------------------- */
-      { $limit: 50 },
-
-      /* --------------------------------------------------
-       * 1️⃣3️⃣ CLEAN FINAL PROJECTION
+       * 1️⃣2️⃣ FINAL PROJECTION
        * -------------------------------------------------- */
       {
         $project: {
           jobId: "$_id",
 
-          /* Job info */
+          /* Job fields */
           jobTitle: 1,
           jobRole: 1,
           jobCategory: 1,
@@ -1108,58 +1204,59 @@ exports.getTopRankedJobs = async (req, res) => {
           jobDescription: 1,
           requiredSkills: 1,
           createdAt: 1,
+          endDate: 1,
 
-          /* Ranking */
-          paymentAmount: 1,
-          boostLevel: 1,
-          engagementScore: 1,
-
-          /* Engagement Counts */
+          /* Counts */
           likeCount: 1,
           shareCount: 1,
           saveCount: 1,
           applyCount: 1,
           viewCount: 1,
 
-          /* Logged-in user flags */
+          /* User flags */
           isLiked: 1,
           isSaved: 1,
           isApplied: 1,
           isViewed: 1,
           isShared: 1,
 
-          /* Company Data */
-          companyId: 1,
+          /* Ranking */
+          paymentAmount: 1,
+          boostLevel: 1,
+          engagementScore: 1,
 
+          /* Company */
+          companyId: 1,
           postedBy: {
+            companyName: "$companyLogin.companyName",
             name: "$companyLogin.name",
             email: "$companyLogin.email",
             phone: "$companyLogin.phone",
-            companyName: "$companyLogin.companyName",
             whatsAppNumber: "$companyLogin.whatsAppNumber",
-            position: "$companyLogin.position",
+            position: "$companyLogin.position"
           },
 
           companyProfile: 1,
-          visibilitySettings: 1,
-        },
-      },
+          visibilitySettings: 1
+        }
+      }
     ]);
 
     return res.status(200).json({
       success: true,
       total: jobs.length,
-      jobs,
+      jobs
     });
 
   } catch (error) {
     console.error("❌ TOP RANKED JOB ERROR:", error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message
     });
   }
 };
+
 
 
 

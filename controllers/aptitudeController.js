@@ -1,0 +1,99 @@
+const crypto = require("crypto");
+const TestSession = require("../models/userTestSchema");
+const AptitudeResult = require("../models/userAptitudeResult");
+
+exports.startAptitudeTest = async (req, res) => {
+  try {
+    const userId = req.Id;
+
+    const sessionToken = crypto.randomBytes(16).toString("hex");
+
+    await TestSession.create({
+      userId,
+      sessionToken,
+      status: "pending"
+    });
+
+    const testUrl = `http://192.168.1.11:8000/student/student-exam?token=${sessionToken}&user=${userId}`;
+
+    return res.status(200).json({
+      success: true,
+      testUrl,
+    });
+
+  } catch (error) {
+    console.error("Start Test Error:", error);
+    return res.status(500).json({ success: false, message: "Unable to start test" });
+  }
+};
+
+
+
+
+
+
+
+exports.aptitudeCallback = async (req, res) => {
+  try {
+    const { userId, sessionToken, score, timeTaken, testName } = req.body;
+
+    console.log("📥 CALLBACK RECEIVED:", req.body);
+
+    if (!userId || !sessionToken || !score) {
+      return res.status(400).json({ success: false, message: "Missing required fields" });
+    }
+
+    const session = await TestSession.findOne({ userId, sessionToken });
+
+    if (!session) {
+      return res.status(401).json({ success: false, message: "Invalid session token" });
+    }
+
+    if (session.status === "completed") {
+      return res.status(400).json({ success: false, message: "Test already submitted" });
+    }
+
+    await AptitudeResult.create({
+      userId,
+      score,
+      timeTaken,
+      testName,
+      receivedAt: new Date(),
+    });
+
+    session.status = "completed";
+    await session.save();
+
+    return res.status(200).json({ success: true, message: "Aptitude score saved" });
+
+  } catch (error) {
+    console.error("Callback Error:", error);
+    return res.status(500).json({ success: false, message: "Callback processing failed" });
+  }
+};
+
+
+
+
+exports.getLatestAptitudeResult = async (req, res) => {
+  try {
+    const userId = req.Id;
+
+    const latest = await AptitudeResult.findOne({ userId })
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      latest
+    });
+
+  } catch (error) {
+    console.error("Latest Result Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch latest result"
+    });
+  }
+};
+
+

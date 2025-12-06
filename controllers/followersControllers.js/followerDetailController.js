@@ -297,6 +297,8 @@ exports.removeFollower = async (req, res) => {
 
 
 
+
+
 exports.checkFollowStatus = async (req, res) => {
   try {
     const { creatorId } = req.body;

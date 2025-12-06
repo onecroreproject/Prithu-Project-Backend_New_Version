@@ -7,8 +7,8 @@ const tempOtpStore = {};
 
 
 
-// Helper: Generate 6-digit OTP
-const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+// Helper: Generate 4-digit OTP
+const generateOTP = () => Math.floor(1000 + Math.random() * 9000).toString();
 
 // Helper: Generate JWT
 const generateToken = (companyId) => {

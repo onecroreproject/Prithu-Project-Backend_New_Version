@@ -378,3 +378,83 @@ exports.deleteProject = async (req, res) => {
   }
 };
 
+
+
+exports.checkCurriculumStatus = async (req, res) => {
+  try {
+    const userId = req.Id || req.body.userId;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
+
+    // Fetch curriculum
+    const curriculum = await UserCurricluam.findOne({ userId }).lean();
+
+    if (!curriculum) {
+      return res.status(200).json({
+        success: true,
+        curriculumCompleted: false,
+        message: "Curriculum not created yet",
+        missingFields: [
+          "education",
+          "experience",
+          "skills",
+          "certifications",
+          "projects",
+          "resumeURL",
+        ],
+        percentage: 0,
+      });
+    }
+
+    /* -----------------------------------------------
+     * CHECK FILLED STATUS
+     * --------------------------------------------- */
+
+    let missingFields = [];
+
+    if (!curriculum.education || curriculum.education.length === 0)
+      missingFields.push("education");
+
+    if (!curriculum.experience || curriculum.experience.length === 0)
+      missingFields.push("experience");
+
+    if (!curriculum.skills || curriculum.skills.length === 0)
+      missingFields.push("skills");
+
+    if (!curriculum.certifications || curriculum.certifications.length === 0)
+      missingFields.push("certifications");
+
+    if (!curriculum.projects || curriculum.projects.length === 0)
+      missingFields.push("projects");
+
+    if (!curriculum.resumeURL) missingFields.push("resumeURL");
+
+    // Calculate completion percentage (optional)
+    const totalSections = 6;
+    const completedSections = totalSections - missingFields.length;
+    const percentage = Math.round((completedSections / totalSections) * 100);
+
+    const curriculumCompleted = missingFields.length === 0;
+
+    return res.status(200).json({
+      success: true,
+      curriculumCompleted,
+      missingFields,
+      percentage,
+      curriculum,
+    });
+
+  } catch (error) {
+    console.error("❌ CURRICULUM STATUS ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error checking curriculum status",
+      error: error.message,
+    });
+  }
+};

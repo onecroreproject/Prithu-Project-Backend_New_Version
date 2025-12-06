@@ -789,7 +789,7 @@ console.log(userId)
 exports.getUserProfileDetail = async (req, res) => {
   try {
     const userId = req.Id || req.query.id;
-
+console.log("user",userId)
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
     }

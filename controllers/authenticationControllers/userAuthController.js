@@ -135,41 +135,32 @@ exports.userLogin = async (req, res) => {
   try {
     const { identifier, password, deviceId, deviceType, os, browser, sessionId } = req.body;
 
-    // 1️⃣ Validate inputs
     if (!identifier || !password) {
-      return res.status(400).json({ error: "Username/Email and password are required" });
+      return res.status(400).json({ error: "Email and password are required" });
     }
 
-
-
-    // 2️⃣ Find user
-    const user = await User.findOne({
-    email: identifier ,
-    });
+    // 1️⃣ Find user
+    const user = await User.findOne({ email: identifier });
     if (!user) {
       return res.status(400).json({ error: "Invalid username" });
     }
 
-
     await checkAndClearDeactivatedUser(user._id);
 
-    // 3️⃣ Validate password
+    // 2️⃣ Validate password
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       return res.status(400).json({ error: "Invalid password" });
     }
 
-    // 4️⃣ Check if blocked
     if (user.isBlocked) {
-      return res
-        .status(403)
-        .json({ error: "User credentials are blocked. Please contact admin." });
+      return res.status(403).json({ error: "User is blocked. Contact admin." });
     }
 
-    // 5️⃣ Run startup process
+    // 3️⃣ Startup checks
     const userStart = await startUpProcessCheck(user._id);
 
-    // 6️⃣ Generate JWT tokens
+    // 4️⃣ Generate tokens
     const accessToken = jwt.sign(
       {
         userName: user.userName,
@@ -187,11 +178,10 @@ exports.userLogin = async (req, res) => {
       { expiresIn: "30d" }
     );
 
-    // 7️⃣ Device Handling
-    const currentDeviceId = deviceId 
+    // 5️⃣ Device Handling
+    const currentDeviceId = deviceId;
     const deviceName = `${os || "Unknown OS"} - ${browser || "Unknown Browser"}`;
 
-    // Find or create the device record
     let device = await Device.findOne({ userId: user._id, deviceId: currentDeviceId });
 
     if (!device) {
@@ -216,33 +206,28 @@ exports.userLogin = async (req, res) => {
       device.isOnline = true;
       device.lastActiveAt = new Date();
       await device.save();
-      console.log("♻️ Existing device login detected:", device.deviceName);
+      console.log("♻️ Existing device login:", device.deviceName);
     }
 
-    // 8️⃣ Session Handling
+    // 6️⃣ SESSION HANDLING (updated logic)
     let session = null;
 
-    // First try to find an existing active session for this device
+    // 📌 Find if a session already exists for this device
     session = await Session.findOne({
       userId: user._id,
       deviceId: device._id,
-      isOnline: true,
-    }).populate("deviceId", "deviceType os browser deviceName ipAddress");
+    });
 
-    // If frontend sent a sessionId and it matches existing record, reuse it
-    if (!session && sessionId) {
-      const existingSession = await Session.findById(sessionId).populate(
-        "deviceId",
-        "deviceType os browser deviceName ipAddress"
-      );
-      if (existingSession && existingSession.userId.toString() === user._id.toString()) {
-        session = existingSession;
-        console.log("🔁 Reusing existing session:", session._id);
-      }
-    }
+    if (session) {
+      // 🔁 Reuse existing session
+      console.log("🔁 Reusing session:", session._id);
 
-    // Otherwise, create a new session for this device
-    if (!session) {
+      session.refreshToken = refreshToken;
+      session.isOnline = true;
+      session.lastSeenAt = new Date();
+      await session.save();
+    } else {
+      // 🆕 Create a new session (only one per device)
       session = await Session.create({
         userId: user._id,
         deviceId: device._id,
@@ -250,42 +235,33 @@ exports.userLogin = async (req, res) => {
         isOnline: true,
         lastSeenAt: new Date(),
       });
+
       console.log("🆕 New session created:", session._id);
-
-      // Link session to device
-      device.sessionId = session._id;
-      await device.save();
-    } else {
-      // Reactivate old session
-      session.refreshToken = refreshToken;
-      session.isOnline = true;
-      session.lastSeenAt = new Date();
-      await session.save();
-
-      // Sync to device
-      device.sessionId = session._id;
-      await device.save();
     }
 
-    // 🔟 Update user status
+    // 7️⃣ Link device → session
+    device.sessionId = session._id;
+    await device.save();
+
+    // 8️⃣ User online
     await User.findByIdAndUpdate(user._id, {
       isOnline: true,
       lastSeenAt: new Date(),
     });
 
-    // 1️⃣1️⃣ Send login notification (non-blocking)
+    // 🔔 Send login email
     sendTemplateEmail({
       templateName: "login.html",
       to: user.email,
-      subject: "👋 Welcome Back to Prithu!",
+      subject: "👋 Welcome Back!",
       placeholders: {
         username: user.userName,
         dashboardLink: `${process.env.FRONTEND_URL}/dashboard`,
       },
       embedLogo: true,
-    }).catch((err) => console.error("❌ Failed to send login email:", err));
+    }).catch((err) => console.error("Email error:", err));
 
-    // ✅ 1️⃣2️⃣ Return final response
+    // 9️⃣ Final Response
     return res.status(200).json({
       success: true,
       message: "Login successful",
@@ -304,11 +280,13 @@ exports.userLogin = async (req, res) => {
       category: userStart.hasInterestedCategory,
       role: "user",
     });
+
   } catch (error) {
     console.error("❌ Login error:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 };
+
 
 
 
@@ -482,7 +460,7 @@ exports.userPasswordReset = async (req, res) => {
 exports.userLogOut = async (req, res) => {
   try {
     const userId = req.Id || req.userId; // Extracted from JWT middleware
-    const { deviceId } = req.body; // ✅ Now only deviceId is sent from frontend
+    const { deviceId } = req.body;
 
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized: Invalid or missing token" });
@@ -498,13 +476,17 @@ exports.userLogOut = async (req, res) => {
       return res.status(404).json({ error: "Device not found" });
     }
 
-    // 2️⃣ Find and delete all sessions linked to this device
+    // 2️⃣ Find all sessions linked to this device
     const sessions = await Session.find({ userId, deviceId: device._id });
 
     if (sessions.length > 0) {
-      // Delete all sessions for this device (clean logout)
-      await Session.deleteMany({ userId, deviceId: device._id });
-      console.log(`🧹 Deleted ${sessions.length} session(s) for device ${deviceId}`);
+      // 🔥 Update isOnline=false instead of deleting session
+      await Session.updateMany(
+        { userId, deviceId: device._id },
+        { $set: { isOnline: false, lastActiveAt: new Date() } }
+      );
+
+      console.log(`🟡 Updated ${sessions.length} session(s) to isOnline=false for device ${deviceId}`);
     } else {
       console.log("ℹ️ No active sessions found for this device.");
     }
@@ -515,7 +497,7 @@ exports.userLogOut = async (req, res) => {
     device.sessionId = null;
     await device.save();
 
-    // 4️⃣ Check for other active sessions
+    // 4️⃣ Check if any other active sessions exist for the user
     const activeSessions = await Session.find({ userId, isOnline: true });
     const userStillOnline = activeSessions.length > 0;
 
@@ -523,21 +505,23 @@ exports.userLogOut = async (req, res) => {
     await User.findByIdAndUpdate(userId, {
       isOnline: userStillOnline,
       lastSeenAt: new Date(),
-      ...(userStillOnline ? {} : { refreshToken: null }),
+      ...(userStillOnline ? {} : { refreshToken: null }), // Clear refreshToken only if user fully offline
     });
 
     return res.status(200).json({
       success: true,
       message: "Logout successful",
       deviceStatus: "Device marked offline",
-      sessionDeleted: sessions.length,
+      sessionsUpdated: sessions.length,
       userStatusChanged: !userStillOnline,
     });
+
   } catch (error) {
     console.error("❌ Logout error:", error);
     return res.status(500).json({ error: error.message });
   }
 };
+
 
 
 

@@ -292,7 +292,7 @@ const{
   getUserFollowing,
   getUserFollowers,
 }=require("../WebController/UserController/userFolloweController");
-
+const User=require("../models/userModels/userModel")
 const{
   createOrGetProfile,
   getFullProfile,
@@ -311,6 +311,7 @@ const{
   addOrUpdateProject,
 getUserProjects,
 deleteProject,
+checkCurriculumStatus,
 }=require("../controllers/userControllers/userCurriculamController");
 
 
@@ -346,6 +347,8 @@ const{
   getHiddenPosts,
   removeHiddenPost,
 }=require("../controllers/userControllers/hiddenPostController");
+const { applyForJob } = require('../controllers/userControllers/userJobController');
+const { startAptitudeTest ,aptitudeCallback,getLatestAptitudeResult} = require('../controllers/aptitudeController');
 
 
 
@@ -461,6 +464,16 @@ router.get('/user/get/all/category', getUserPostCategories);
  router.post('/user/follow/creator',auth,followAccount);
  router.post('/user/unfollow/creator',auth,unFollowAccount);
  router.get('/user/following/data',auth,getUserFollowersData);
+
+
+ /*----------------------UserAptitude---------------------------*/
+router.post("/aptitude/start-test", auth, startAptitudeTest);
+router.post("/aptitude/callback", aptitudeCallback);
+router.get("/aptitude/latest/results", auth, getLatestAptitudeResult);
+
+
+ /*_______________________User JOB API_____________________________*/
+ router.post("/apply/job",auth,applyForJob)
 
  /* --------------------- User Notifiction API --------------------- */
  router.post("/admin/send/notification", sendAdminNotification )
@@ -662,6 +675,7 @@ router.get("/user/profile/completion",auth,getProfileCompletion);
 // ✅ Profile
 router.post("/create", createOrGetProfile);
 router.get("/get/full/curriculam/profile",auth,getFullProfile);
+router.get("/user/curicullam/status",auth,checkCurriculumStatus)
 
 // ✅ Education
 router.post("/profile/education",auth,addEducation);
@@ -724,17 +738,6 @@ router.get("/get/non-interested-categories", auth, getNonInterestedCategories);
 router.get("/get/feeds/by/hashtag/:tag",auth, getFeedsByHashtag);
 
 router.get("/get/user/birthday", getUpcomingBirthdays);
-
-
-
-
-
-
-
-
-
-
-
 
 
 
