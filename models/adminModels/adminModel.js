@@ -1,33 +1,34 @@
-const mongoose = require('mongoose');
-const {prithuDB}=require("../../database");
+const mongoose = require("mongoose");
+const { prithuDB } = require("../../database");
 
 const adminSchema = new mongoose.Schema({
   userName: {
     type: String,
     required: true,
     unique: true,
+    index: true,
     minlength: 3,
     maxlength: 30,
     trim: true
   },
-  email: { 
-    type: String, 
-    required: true, 
-    unique: true, 
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true,
     lowercase: true,
     trim: true
   },
-  passwordHash: { 
-    type: String, 
-    required: true 
-  },
-  
-  // Admin-specific fields
+
+  passwordHash: { type: String, required: true },
+
   adminType: {
     type: String,
-    enum: ['ChildAdmin', 'Admin', 'Moderator'],
-    default: 'Admin'
+    enum: ["ChildAdmin", "Admin", "Moderator"],
+    default: "Admin",
+    index: true
   },
+
   permissions: {
     canManageUsers: { type: Boolean, default: false },
     canManageCreators: { type: Boolean, default: false },
@@ -39,43 +40,26 @@ const adminSchema = new mongoose.Schema({
     canViewAnalytics: { type: Boolean, default: false }
   },
 
-  // Profile information
-  profileSettings:{ type: mongoose.Schema.Types.ObjectId, ref: "ProfileSettings" },
+  profileSettings: { type: mongoose.Schema.Types.ObjectId, ref: "ProfileSettings" },
 
-  // Status tracking
   isActive: { type: Boolean, default: true },
   isEmailVerified: { type: Boolean, default: false },
   lastLoginAt: { type: Date },
-  
-  // Security fields
+
   loginAttempts: { type: Number, default: 0 },
   lockUntil: { type: Date },
-  
-  // OTP for password reset
+
   otpCode: { type: String },
   otpExpiresAt: { type: Date },
 
-  // Audit fields
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Admin',
-    default: null
-  },
-  updatedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Admin',
-    default: null
-  },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin", default: null },
+  updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin", default: null },
 
-  feeds: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Feed'
-    }],
-
-}, { 
+  feeds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Feed" }]
+}, {
   timestamps: true,
-  toJSON: { 
-    transform: function(doc, ret) {
+  toJSON: {
+    transform(doc, ret) {
       delete ret.passwordHash;
       delete ret.otpCode;
       delete ret.otpExpiresAt;
@@ -84,21 +68,13 @@ const adminSchema = new mongoose.Schema({
   }
 });
 
-// Virtual for full name
-adminSchema.virtual('fullName').get(function() {
-  return `${this.profile.firstName || ''} ${this.profile.lastName || ''}`.trim();
+// Fix virtual
+adminSchema.virtual("isLocked").get(function () {
+  return Boolean(this.lockUntil && this.lockUntil > Date.now());
 });
 
-// Check if account is locked
-adminSchema.virtual('isLocked').get(function() {
-  return !!(this.lockUntil && this.lockUntil > Date.now());
-}, { timestamps: true });
+// Ensure DB-level unique indexes
+adminSchema.index({ email: 1 }, { unique: true });
+adminSchema.index({ userName: 1 }, { unique: true });
 
-
-
-
-// Index for performance
-adminSchema.index({ adminType: 1 });
-adminSchema.index({ isActive: 1 });
-
-module.exports = prithuDB.model('Admin', adminSchema, 'Admin');
+module.exports = prithuDB.model("Admin", adminSchema, "Admin");

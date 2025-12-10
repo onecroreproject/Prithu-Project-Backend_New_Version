@@ -570,7 +570,7 @@ router.get('/admin/getall/subscriptions', getAllPlans);
 
 /* --------------------- Admin User API --------------------- */
 router.get('/admin/getall/users', getAllUserDetails);
-router.get('/admin/get/user/profile/detail/:id',getUserDetailWithIdForAdmin);
+
 router.get("/admin/users/status", getUsersStatus);
 router.get("/admin/user/detail/by-date", getUsersByDate);
 router.get ('/admin/user/action/intersection/count/:userId',getAnaliticalCountforUser);

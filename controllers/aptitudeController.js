@@ -14,7 +14,7 @@ exports.startAptitudeTest = async (req, res) => {
       status: "pending"
     });
 
-    const testUrl = `http://192.168.1.11:8000/student/student-exam?user=${userId}&token=${sessionToken}`;
+    const testUrl = `http://aptitude.1croreprojects.com/student/student-exam?user=${userId}&token=${sessionToken}`;
 
     return res.status(200).json({
       success: true,

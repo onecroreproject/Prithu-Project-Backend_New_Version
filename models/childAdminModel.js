@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
-const {prithuDB}=require("../database");
+const { prithuDB } = require("../database");
 
-// ✅ Submenu permission schema
+// Sub-permission
 const subPermissionSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
@@ -20,7 +20,7 @@ const subPermissionSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// ✅ Main menu permission schema
+// Main permission group
 const menuPermissionSchema = new mongoose.Schema(
   {
     mainMenu: { type: String, required: true },
@@ -44,25 +44,42 @@ const menuPermissionSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// ✅ Child Admin Schema
+// Child Admin Schema
 const childAdminSchema = new mongoose.Schema(
   {
-    userName: { type: String, required: true, unique: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    userName: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      index: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+      index: true,
+    },
+
     passwordHash: { type: String, required: true },
-    parentAdminId: { type: mongoose.Schema.Types.ObjectId, ref: "Admin", required: true },
 
-    // Unique childAdminId (string) to prevent duplicates
-    childAdminId: { 
-      type: String, 
-      unique: true, 
-      default: () => new mongoose.Types.ObjectId().toString() 
+    parentAdminId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      required: true,
+      index: true,
     },
 
-    menuPermissions: {
-      type: [menuPermissionSchema],
-      default: [],
+    childAdminId: {
+      type: String,
+      unique: true,
+      default: () => new mongoose.Types.ObjectId().toString(),
+      index: true,
     },
+
+    menuPermissions: { type: [menuPermissionSchema], default: [] },
 
     grantedPermissions: { type: [String], default: [] },
     ungrantedPermissions: { type: [String], default: [] },
@@ -73,9 +90,6 @@ const childAdminSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-
-
-// Include virtuals in JSON output
 childAdminSchema.set("toJSON", { virtuals: true });
 childAdminSchema.set("toObject", { virtuals: true });
 

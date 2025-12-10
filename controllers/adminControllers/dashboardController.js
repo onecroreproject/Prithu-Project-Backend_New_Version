@@ -9,12 +9,12 @@ exports.getDashboardMetricCount = async (req, res) => {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
-    // ------------------------------
+    // -----------------------------------
     // Run all queries in parallel
-    // ------------------------------
+    // -----------------------------------
     const [
       totalUsers,
-      activeUsersToday,
+      activeUsersToday,     // using isOnline instead of lastActiveAt
       newRegistrationsToday,
       suspendedUsers,
       totalReports,
@@ -22,9 +22,9 @@ exports.getDashboardMetricCount = async (req, res) => {
       // 1️⃣ Total Users
       User.countDocuments(),
 
-      // 2️⃣ Active Users Today (logged in / active today)
+      // 2️⃣ Active Users Today → users who are ONLINE
       User.countDocuments({
-        lastActiveAt: { $gte: startOfToday },
+        isOnline: true,
       }),
 
       // 3️⃣ New registrations today
@@ -32,19 +32,19 @@ exports.getDashboardMetricCount = async (req, res) => {
         createdAt: { $gte: startOfToday },
       }),
 
-      // 4️⃣ Suspended users (blocked)
+      // 4️⃣ Suspended users
       User.countDocuments({
         isBlocked: true,
       }),
 
-      // 5️⃣ All reports count
+      // 5️⃣ Total reports
       Report.countDocuments(),
     ]);
 
-    // ------------------------------
-    // Return data
-    // ------------------------------
-    res.status(200).json({
+    // -----------------------------------
+    // Send response
+    // -----------------------------------
+    return res.status(200).json({
       success: true,
       totalUsers,
       activeUsersToday,
@@ -55,13 +55,14 @@ exports.getDashboardMetricCount = async (req, res) => {
   } catch (error) {
     console.error("Dashboard metric error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch dashboard metrics",
       error: error.message,
     });
   }
 };
+
 
 
 
