@@ -3,6 +3,8 @@ const {userTimeAgo}=require('../../middlewares/userStatusTimeAgo.js');
 const UserFeedActions=require('../../models/userFeedInterSectionModel');
 const ProfileSettings=require('../../models/profileSettingModel.js');
 const mongoose=require("mongoose");
+const ImageStats=require("../../models/userModels/MediaSchema/imageViewModel.js")
+const VideoStats=require("../../models/userModels/MediaSchema/videoViewStatusModel.js")
 const UserDevices = require("../../models/userModels/userSession-Device/deviceModel");
 const Subscriptions=require('../../models/subcriptionModels/userSubscreptionModel.js');
 const UserLanguage=require('../../models/userModels/userLanguageModel.js');
@@ -38,6 +40,7 @@ const CreatorFollowers=require('../../models/creatorFollowerModel.js');
 const Devices=require("../../models/userModels/userSession-Device/deviceModel.js");
 const UserReferral =require("../../models/userModels/userReferralModel");
 const JobPost=require("../../models/Job/JobPost/jobSchema.js");
+const TrendingCreators=require("../../models/treandingCreators.js")
 
 
 
@@ -160,58 +163,158 @@ exports.getUsersByDate = async (req, res) => {
 
 exports.getAllUserDetails = async (req, res) => {
   try {
-    // 1️⃣ Get all users
+    // 1️⃣ Get all users (online + lastLoginAt directly from User schema)
     const allUsers = await Users.find()
-      .select("userName _id email lastActiveAt createdAt subscription isBlocked")
+      .select(
+        "userName _id email lastActiveAt lastLoginAt createdAt subscription isBlocked isOnline profileSettings"
+      )
       .lean();
 
     if (!allUsers || allUsers.length === 0) {
       return res.status(404).json({ message: "Users details not found" });
     }
 
-    // 2️⃣ Get all user IDs
+    // 2️⃣ Extract userIds
     const userIds = allUsers.map((u) => u._id);
 
-    // 3️⃣ Fetch profile settings for these users
-    const profileSettingsList = await ProfileSettings.find({ userId: { $in: userIds } })
+    // 3️⃣ Fetch profile settings (profile avatar)
+    const profileSettingsList = await ProfileSettings.find({
+      userId: { $in: userIds },
+    })
       .select("userId profileAvatar")
       .lean();
 
-    // Create a lookup map: userId -> profileAvatar
+    // Create quick lookup map for avatars
     const profileMap = {};
     profileSettingsList.forEach((p) => {
       profileMap[p.userId.toString()] = p.profileAvatar || null;
     });
 
-    // 4️⃣ Fetch sessions for online status
-    const sessions = await Session.find({ userId: { $in: userIds } })
-      .select("userId isOnline")
-      .lean();
-
-    const sessionMap = {};
-    sessions.forEach((s) => {
-      sessionMap[s.userId.toString()] = s.isOnline;
-    });
-
-    // 5️⃣ Format response
+    // 4️⃣ Format final response
     const formattedUsers = allUsers.map((user) => ({
       userId: user._id,
       userName: user.userName,
       email: user.email,
       createdAt: user.createdAt,
-      lastActiveAt: user.lastActiveAt,
-      isOnline: sessionMap[user._id.toString()] || false,
+
+      // 📌 USER ONLINE STATUS (Directly from User schema)
+      isOnline: user.isOnline || false,
+
+      // 📌 LAST ACTIVE TIME (Already in User schema)
+      lastActiveAt: user.lastActiveAt || null,
+
+      // 📌 LAST LOGIN TIME (From User schema)
+      lastLoginAt: user.lastLoginAt || null,
+
+      // 📌 Avatar
       profileAvatar: profileMap[user._id.toString()] || null,
+
+      // 📌 Subscription info
       subscriptionActive: user.subscription?.isActive || false,
+
+      // 📌 Block status
       isBlocked: user.isBlocked,
     }));
 
     return res.status(200).json({ users: formattedUsers });
   } catch (err) {
     console.error("Error fetching users:", err);
-    return res.status(500).json({ message: "Cannot fetch user details", error: err.message });
+    return res.status(500).json({
+      message: "Cannot fetch user details",
+      error: err.message,
+    });
   }
 };
+
+
+
+
+
+exports.searchAllUserDetails = async (req, res) => {
+  try {
+    const { search } = req.query;
+    let searchFilter = {};
+
+    // -----------------------------------------
+    // 1️⃣ APPLY SMART SEARCH FILTER
+    // -----------------------------------------
+    if (search && search.trim() !== "") {
+      const trimmed = search.trim();
+
+      // A) Referral code: ABC123 (3 letters + 3 digits)
+      if (/^[A-Za-z]{3}\d{3}$/.test(trimmed)) {
+        searchFilter.referralCode = trimmed.toUpperCase();
+      }
+
+      // B) Mobile number: exactly 10 digits
+      else if (/^\d{10}$/.test(trimmed)) {
+        searchFilter.phone = trimmed;
+      }
+
+      // C) Name: alphabets only → full or partial match
+      else if (/^[A-Za-z]+$/.test(trimmed)) {
+        searchFilter.userName = { $regex: trimmed, $options: "i" };
+      }
+    }
+
+    // -----------------------------------------
+    // 2️⃣ Fetch all users with search filter
+    // -----------------------------------------
+    const allUsers = await Users.find(searchFilter)
+      .select(
+        "userName _id email phone lastActiveAt lastLoginAt createdAt subscription isBlocked isOnline profileSettings referralCode"
+      )
+      .lean();
+
+    if (!allUsers || allUsers.length === 0) {
+      return res.status(404).json({ message: "No users found" });
+    }
+
+    // -----------------------------------------
+    // 3️⃣ Fetch profile settings (avatars)
+    // -----------------------------------------
+    const userIds = allUsers.map((u) => u._id);
+
+    const profileSettingsList = await ProfileSettings.find({
+      userId: { $in: userIds },
+    })
+      .select("userId profileAvatar")
+      .lean();
+
+    const profileMap = {};
+    profileSettingsList.forEach((p) => {
+      profileMap[p.userId.toString()] = p.profileAvatar || null;
+    });
+
+    // -----------------------------------------
+    // 4️⃣ Build formatted response
+    // -----------------------------------------
+    const formattedUsers = allUsers.map((user) => ({
+      userId: user._id,
+      userName: user.userName,
+      email: user.email,
+      phone: user.phone || null,
+      referralCode: user.referralCode || null,
+      createdAt: user.createdAt,
+      isOnline: user.isOnline,
+      lastActiveAt: user.lastActiveAt,
+      lastLoginAt: user.lastLoginAt,
+      subscriptionActive: user.subscription?.isActive || false,
+      isBlocked: user.isBlocked,
+      profileAvatar: profileMap[user._id.toString()] || null,
+    }));
+
+    return res.status(200).json({ users: formattedUsers });
+  } catch (err) {
+    console.error("Error fetching users:", err);
+    return res.status(500).json({
+      message: "Cannot fetch user details",
+      error: err.message,
+    });
+  }
+};
+
+
 
 
 
@@ -408,157 +511,226 @@ exports.getUsersStatus = async (req, res) => {
   }
 };
 
-exports.getUserDetailWithIdForAdmin = async (req, res) => {
+exports.getUserSocialMeddiaDetailWithIdForAdmin = async (req, res) => {
   try {
     const userId = req.params.id;
+
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
     }
 
-    // ✅ Base user info
+    // -------------------------------------------
+    // 1️⃣ BASE USER
+    // -------------------------------------------
     const user = await Users.findById(userId)
       .select(
-        "userName email role referralCode referredByUserId directReferrals currentLevel currentTier totalEarnings withdrawableEarnings isActive lastActiveAt lastLoginAt"
+        "userName email referralCode referredByUserId totalEarnings withdrawableEarnings isActive lastActiveAt lastLoginAt currentLevel currentTier roles isOnline"
       )
       .lean();
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    // ✅ Profile info
+    // -------------------------------------------
+    // 2️⃣ PROFILE DETAILS (FULL SCHEMA)
+    // -------------------------------------------
     const profile = await ProfileSettings.findOne({ userId })
-      .select(
-        "gender bio dateOfBirth maritalStatus maritalDate phoneNumber profileAvatar timezone socialLinks"
-      )
+      .select("-__v -createdAt -updatedAt")
       .lean();
 
-    // ✅ Subscription info
-    const subscription = await Subscriptions.findOne({ userId })
+    // -------------------------------------------
+    // 3️⃣ SUBSCRIPTION
+    // -------------------------------------------
+    const subscription = await UserSubscriptions.findOne({ userId })
       .select("subscriptionActive startDate endDate subscriptionActiveDate")
       .lean();
 
-    // ✅ Language preferences
+    // -------------------------------------------
+    // 4️⃣ LANGUAGE
+    // -------------------------------------------
     const language = await UserLanguage.findOne({ userId })
       .select("feedLanguageCode appLanguageCode")
       .lean();
 
-    // ✅ Device info
+    // -------------------------------------------
+    // 5️⃣ DEVICE INFO
+    // -------------------------------------------
     const device = await UserDevices.findOne({ userId })
-      .select("deviceType deviceName ipAddress")
+      .select("deviceType deviceName ipAddress createdAt")
       .sort({ createdAt: -1 })
       .lean();
 
-    // ✅ Referral details
-    const referralData = await UserReferral.findOne({ parentId: userId })
+    // -------------------------------------------
+    // 6️⃣ FOLLOWERS (who follow this user)
+    // -------------------------------------------
+    const followers = await Followers.find({ creatorId: userId })
       .populate({
-        path: "childIds",
-        select: "_id userName email createdAt",
+        path: "followerId",
+        select: "userName email",
       })
       .lean();
 
-    let childDetails = [];
-    if (referralData?.childIds?.length) {
-      const childIds = referralData.childIds.map((child) => child._id);
-      const profiles = await ProfileSettings.find({
-        userId: { $in: childIds },
+    const followerIds = followers.map((f) => f.followerId._id);
+
+    const followerProfiles = await ProfileSettings.find({
+      userId: { $in: followerIds },
+    })
+      .select("userId profileAvatar userName")
+      .lean();
+
+    const formattedFollowers = followers.map((f) => {
+      const p = followerProfiles.find(
+        (x) => x.userId.toString() === f.followerId._id.toString()
+      );
+      return {
+        _id: f.followerId._id,
+        userName: f.followerId.userName,
+        email: f.followerId.email,
+        profileAvatar: p?.profileAvatar || null,
+        followedAt: f.createdAt,
+      };
+    });
+
+    // -------------------------------------------
+    // 7️⃣ FOLLOWING (this user follows)
+    // -------------------------------------------
+    const following = await Followers.find({ followerId: userId })
+      .populate({
+        path: "creatorId",
+        select: "userName email",
       })
-        .select("userId profileAvatar")
-        .lean();
+      .lean();
 
-      childDetails = referralData.childIds.map((child) => {
-        const childProfile = profiles.find(
-          (p) => p.userId.toString() === child._id.toString()
-        );
-        return {
-          _id: child._id,
-          userName: child.userName,
-          email: child.email,
-          profileAvatar: childProfile?.profileAvatar || null,
-          joinDate: child.createdAt,
-        };
-      });
-    }
+    const followingIds = following.map((f) => f.creatorId._id);
 
-    // ✅ Helper function to calculate age
-    const calculateAge = (dob) => {
-      if (!dob) return null;
-      const birthDate = new Date(dob);
-      const today = new Date();
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const m = today.getMonth() - birthDate.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
-      return age;
-    };
+    const followingProfiles = await ProfileSettings.find({
+      userId: { $in: followingIds },
+    })
+      .select("userId profileAvatar userName")
+      .lean();
 
-    // ✅ Extract social links
-    const socialLinks = {
-      facebook: profile?.socialLinks?.facebook || null,
-      instagram: profile?.socialLinks?.instagram || null,
-      linkedin: profile?.socialLinks?.linkedin || null,
-      twitter: profile?.socialLinks?.twitter || null,
-      youtube: profile?.socialLinks?.youtube || null,
-    };
+    const formattedFollowing = following.map((f) => {
+      const p = followingProfiles.find(
+        (x) => x.userId.toString() === f.creatorId._id.toString()
+      );
+      return {
+        _id: f.creatorId._id,
+        userName: f.creatorId.userName,
+        email: f.creatorId.email,
+        profileAvatar: p?.profileAvatar || null,
+        followedAt: f.createdAt,
+      };
+    });
 
-    // ✅ Fetch all job posts by this user
-    const jobPosts = await JobPost.find({ postedBy: userId })
-      .select(
-        "_id title companyName category jobRole experience jobType salaryRange status createdAt updatedAt"
-      )
+    // -------------------------------------------
+    // 8️⃣ GET ALL POSTS MADE BY USER
+    // -------------------------------------------
+    const posts = await Feed.find({
+      createdByAccount: userId,
+      roleRef: "User",
+    })
+      .select("type contentUrl category createdAt statsId hashtags")
       .sort({ createdAt: -1 })
       .lean();
 
-    // ✅ Merge everything
-    const userDetails = {
-      userName: user.userName,
-      email: user.email,
-      role: user.role,
-      referralCode: user.referralCode,
-      referredByUserId: user.referredByUserId,
-      directReferrals: childDetails,
-      currentLevel: user.currentLevel,
-      currentTier: user.currentTier,
-      totalEarnings: user.totalEarnings || 0,
-      withdrawableEarnings: user.withdrawableEarnings || 0,
-      isActive: user.isActive,
-      lastActiveAt: user.lastActiveAt || null,
-      lastLoginAt: user.lastLoginAt || null,
+    const feedIds = posts.map((f) => f._id);
 
-      profile: {
-        bio: profile?.bio || null,
-        gender: profile?.gender || null,
-        phoneNumber: profile?.phoneNumber || null,
-        dateOfBirth: profile?.dateOfBirth || null,
-        age: calculateAge(profile?.dateOfBirth),
-        maritalStatus: profile?.maritalStatus || null,
-        maritalDate: profile?.maritalDate || null,
-        profileAvatar: profile?.profileAvatar || null,
-        timezone: profile?.timezone || null,
-        socialLinks,
-      },
+    // -------------------------------------------
+    // 9️⃣ FEED ENGAGEMENTS (Likes, Saves, Shares)
+    // -------------------------------------------
+    const engagements = await UserFeedActions.find({
+      $or: [
+        { "likedFeeds.feedId": { $in: feedIds } },
+        { "savedFeeds.feedId": { $in: feedIds } },
+        { "sharedFeeds.feedId": { $in: feedIds } },
+      ],
+    })
+      .select("likedFeeds savedFeeds sharedFeeds downloadedFeeds")
+      .lean();
 
-      subscription:
-        subscription || {
-          subscriptionActive: false,
-          startDate: null,
-          endDate: null,
-          subscriptionActiveDate: null,
-        },
+    const engagementMap = {};
+    feedIds.forEach((id) => {
+      engagementMap[id] = {
+        likes: 0,
+        saved: 0,
+        shares: 0,
+        downloads: 0,
+      };
+    });
 
-      language: language || {
-        feedLanguageCode: "en",
-        appLanguageCode: "en",
-      },
+    engagements.forEach((act) => {
+      act.likedFeeds?.forEach((l) => {
+        if (engagementMap[l.feedId]) engagementMap[l.feedId].likes++;
+      });
+      act.savedFeeds?.forEach((s) => {
+        if (engagementMap[s.feedId]) engagementMap[s.feedId].saved++;
+      });
+      act.sharedFeeds?.forEach((s) => {
+        if (engagementMap[s.feedId]) engagementMap[s.feedId].shares++;
+      });
+      act.downloadedFeeds?.forEach((d) => {
+        if (engagementMap[d.feedId]) engagementMap[d.feedId].downloads++;
+      });
+    });
 
-      device: device || {},
+    // -------------------------------------------
+    // 🔟 COMMENTS ON USER POSTS
+    // -------------------------------------------
+    const comments = await UserComments.find({
+      feedId: { $in: feedIds },
+    })
+      .populate({
+        path: "userId",
+        select: "userName",
+      })
+      .lean();
 
-      jobPosts: jobPosts || [], // ✅ include user's job posts
-    };
+    const commentsMap = {};
+    feedIds.forEach((id) => (commentsMap[id] = []));
+
+    comments.forEach((c) => {
+      commentsMap[c.feedId].push({
+        commenterName: c.userId?.userName,
+        commentText: c.commentText,
+        createdAt: c.createdAt,
+      });
+    });
+
+    // -------------------------------------------
+    // 1️⃣1️⃣ Reports by this user
+    // -------------------------------------------
+    const reports = await Report.find({ reportedBy: userId })
+      .select("typeId targetId targetType answers status createdAt")
+      .lean();
+
+    // -------------------------------------------
+    // 1️⃣2️⃣ Trending Creator Info
+    // -------------------------------------------
+    const trending = await TrendingCreators.findOne({ userId }).lean();
+
+    // -------------------------------------------
+    // FINAL RESPONSE
+    // -------------------------------------------
+    const formattedPosts = posts.map((p) => ({
+      ...p,
+      stats: engagementMap[p._id],
+      comments: commentsMap[p._id],
+    }));
 
     return res.status(200).json({
       success: true,
       message: "User details fetched successfully",
-      user: userDetails,
+      user: {
+        ...user,
+        profile,
+        subscription,
+        language,
+        device,
+        followers: formattedFollowers,
+        following: formattedFollowing,
+        posts: formattedPosts,
+        reports,
+        trending,
+      },
     });
   } catch (err) {
     console.error("Error fetching user details:", err);
@@ -568,7 +740,8 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
       error: err.message,
     });
   }
-}
+};
+
 
 
 
@@ -577,126 +750,435 @@ exports.getUserDetailWithIdForAdmin = async (req, res) => {
 exports.getUserAnalyticalData = async (req, res) => {
   try {
     const { userId } = req.params;
+    const { startDate, endDate, type, tab } = req.query;
+    
     if (!userId) return res.status(400).json({ message: "userId is required" });
 
-    // ------------------ User Profile ------------------
+    // Build base query for date filtering
+    const buildDateQuery = (field) => {
+      const query = {};
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0); // Start of day
+        query[field] = { $gte: start };
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999); // End of day
+        query[field] = { ...query[field], $lte: end };
+      }
+      return Object.keys(query).length > 0 ? query : {};
+    };
+
+    // -------------------------------------------------------------------
+    // 1️⃣ BASIC USER PROFILE
+    // -------------------------------------------------------------------
     const userProfile = await ProfileSettings.findOne({ userId })
-      .select("userName profileAvatar")
+      .select("userName profileAvatar createdAt lastSeen")
       .lean();
 
     const selectedUser = {
       userName: userProfile?.userName || "Unknown User",
       userAvatar: userProfile?.profileAvatar || "",
+      joinedAt: userProfile?.createdAt || new Date(),
+      lastSeen: userProfile?.lastSeen || null,
     };
 
-    // ------------------ Feeds ------------------
-    const imageData = await ImageView.findOne({ userId }).lean();
-    const videoData = await VideoView.findOne({ userId }).lean();
+    // -------------------------------------------------------------------
+    // 2️⃣ USER POSTS (Full image/video posts with all engagement details)
+    // -------------------------------------------------------------------
+    const postsQuery = {
+      createdByAccount: userId,
+      roleRef: "User",
+      ...buildDateQuery('createdAt'),
+      ...(type && type !== 'all' ? { type } : {})
+    };
 
-    const feeds = [
-      ...(imageData?.views || []).map((v, i) => ({
-        id: v.imageId,
-        title: `Image ${i + 1}`,
-        description: `Viewed at ${v.viewedAt}`,
-      })),
-      ...(videoData?.views || []).map((v, i) => ({
-        id: v.videoId,
-        title: `Video ${i + 1}`,
-        description: `Watched ${v.watchedSeconds || 0}s at ${v.viewedAt}`,
-      })),
-    ];
-
-    // ------------------ Following ------------------
-    const followingData = await Follower.findOne({ userId }).lean();
-    const followerUserIds = (followingData?.followerIds || []).map(f => f.userId) || [];
-
-    const profiles = await ProfileSettings.find({ userId: { $in: followerUserIds } })
-      .select("userId userName displayName profileAvatar")
+    const postsRaw = await Feed.find(postsQuery)
+      .select("_id type contentUrl title description createdAt")
+      .sort({ createdAt: -1 })
       .lean();
 
-    const followingProfileMap = profiles.reduce((acc, p) => {
-      acc[p.userId.toString()] = p;
-      return acc;
-    }, {});
+    const postIds = postsRaw.map(p => p._id);
 
-    const following = (followingData?.followerIds || []).map((f, i) => {
-      const profile = followingProfileMap[f.userId.toString()] || {};
-      return {
-        id: f.userId,
-        name: profile.displayName || profile.userName || `User ${i + 1}`,
-        description: `Following since ${f.createdAt}`,
-        avatar: profile.profileAvatar || null,
-      };
-    }) || [];
+    // ----- Fetch views from image/video stats -----
+    const imageViews = await ImageStats.find({ imageId: { $in: postIds } })
+      .select("imageId totalViews")
+      .lean();
 
-    // ------------------ Hidden Feeds ------------------
-    const user = await Users.findById(userId).lean();
-    const hiddenFeedIds = user?.hiddenPostIds || [];
-    const hiddenFeeds = await Feed.find({ _id: { $in: hiddenFeedIds } })
-      .select("type language category contentUrl createdByAccount roleRef")
-      .lean() || [];
+    const videoViews = await VideoStats.find({ videoId: { $in: postIds } })
+      .select("videoId totalViews")
+      .lean();
 
-    const creatorIds = hiddenFeeds.map(f => f.createdByAccount);
-    const creatorProfiles = await ProfileSettings.find({ userId: { $in: creatorIds } })
-      .select("userId userName displayName profileAvatar")
-      .lean() || [];
+    const viewMap = {};
+    imageViews.forEach(v => (viewMap[v.imageId.toString()] = v.totalViews || 0));
+    videoViews.forEach(v => (viewMap[v.videoId.toString()] = v.totalViews || 0));
 
-    const profileMap = creatorProfiles.reduce((acc, p) => {
-      acc[p.userId.toString()] = p;
-      return acc;
-    }, {});
+    // ----- Fetch like/share/download activity from all users -----
+    const actionsAll = await UserFeedActions.find({})
+      .select("likedFeeds sharedFeeds downloadedFeeds disLikeFeeds")
+      .lean();
 
-    const hidden = hiddenFeeds.map(feed => ({
-      id: feed._id,
-      type: feed.type || "image",
-      category: feed.category || "Unknown",
-      language: feed.language || "en",
-      contentUrl: feed.contentUrl || "",
-      createdBy: {
-        id: feed.createdByAccount,
-        role: feed.roleRef || "User",
-      },
-      creator: {
-        name: profileMap[feed.createdByAccount?.toString()]?.displayName ||
-              profileMap[feed.createdByAccount?.toString()]?.userName ||
-              "Unknown Creator",
-        avatar: profileMap[feed.createdByAccount?.toString()]?.profileAvatar || null,
-      },
-    })) || [];
+    const likeMap = {};
+    const shareMap = {};
+    const downloadMap = {};
+    const dislikeMap = {};
 
-    // ------------------ Interested Categories ------------------
+    actionsAll.forEach(u => {
+      u.likedFeeds?.forEach(l => {
+        likeMap[l.feedId] = (likeMap[l.feedId] || 0) + 1;
+      });
+
+      u.sharedFeeds?.forEach(s => {
+        shareMap[s.feedId] = (shareMap[s.feedId] || 0) + 1;
+      });
+
+      u.downloadedFeeds?.forEach(d => {
+        downloadMap[d.feedId] = (downloadMap[d.feedId] || 0) + 1;
+      });
+
+      u.disLikeFeeds?.forEach(d => {
+        dislikeMap[d.feedId] = (dislikeMap[d.feedId] || 0) + 1;
+      });
+    });
+
+    // ----- Fetch comment counts -----
+    const commentCounts = await UserComments.aggregate([
+      { $match: { feedId: { $in: postIds } } },
+      { $group: { _id: "$feedId", count: { $sum: 1 } } },
+    ]);
+
+    const commentMap = {};
+    commentCounts.forEach(c => (commentMap[c._id.toString()] = c.count));
+
+    // ----- FINAL POSTS -----
+    const posts = postsRaw.map(p => ({
+      id: p._id,
+      type: p.type,
+      url: p.contentUrl,
+      title: p.title || `${p.type} post`,
+      description: p.description || "",
+      createdAt: p.createdAt,
+      views: viewMap[p._id.toString()] || 0,
+      likes: likeMap[p._id.toString()] || 0,
+      shares: shareMap[p._id.toString()] || 0,
+      downloads: downloadMap[p._id.toString()] || 0,
+      dislikes: dislikeMap[p._id.toString()] || 0,
+      comments: commentMap[p._id.toString()] || 0,
+    }));
+
+    const imageCount = posts.filter(p => p.type === "image").length;
+    const videoCount = posts.filter(p => p.type === "video").length;
+
+    // -------------------------------------------------------------------
+    // 3️⃣ FOLLOWERS (Users who follow THIS user) with date filtering
+    // -------------------------------------------------------------------
+    const followersQuery = {
+      creatorId: userId,
+      ...buildDateQuery('createdAt')
+    };
+
+    const followers = await Followers.find(followersQuery)
+      .select("followerId createdAt")
+      .lean();
+
+    const followerIds = followers.map(f => f.followerId);
+
+    const followerProfiles = await ProfileSettings.find({
+      userId: { $in: followerIds }
+    }).select("userId userName profileAvatar").lean();
+
+    const followerDateMap = {};
+    followers.forEach(f => (followerDateMap[f.followerId.toString()] = f.createdAt));
+
+    const followersList = followerProfiles.map(p => ({
+      id: p.userId,
+      userName: p.userName,
+      profileAvatar: p.profileAvatar,
+      followedAt: followerDateMap[p.userId.toString()],
+    }));
+
+    // -------------------------------------------------------------------
+    // 4️⃣ FOLLOWING (Who THIS user follows) with date filtering
+    // -------------------------------------------------------------------
+    const followingQuery = {
+      followerId: userId,
+      ...buildDateQuery('createdAt')
+    };
+
+    const following = await Followers.find(followingQuery)
+      .select("creatorId createdAt")
+      .lean();
+
+    const followingIds = following.map(f => f.creatorId);
+
+    const followingProfiles = await ProfileSettings.find({
+      userId: { $in: followingIds }
+    }).select("userId userName profileAvatar").lean();
+
+    const followingDateMap = {};
+    following.forEach(f => (followingDateMap[f.creatorId.toString()] = f.createdAt));
+
+    const followingList = followingProfiles.map(p => ({
+      id: p.userId,
+      userName: p.userName,
+      profileAvatar: p.profileAvatar,
+      followedAt: followingDateMap[p.userId.toString()],
+    }));
+
+    // -------------------------------------------------------------------
+    // 5️⃣ USER INTERACTIONS (Liked, Shared, Downloaded…) with date filtering
+    // -------------------------------------------------------------------
+    const userAction = await UserFeedActions.findOne({ userId })
+      .populate({
+        path: 'likedFeeds.feedId',
+        select: '_id type contentUrl title description createdAt',
+        model: 'Feed'
+      })
+      .populate({
+        path: 'sharedFeeds.feedId',
+        select: '_id type contentUrl title description createdAt',
+        model: 'Feed'
+      })
+      .populate({
+        path: 'downloadedFeeds.feedId',
+        select: '_id type contentUrl title description createdAt',
+        model: 'Feed'
+      })
+      .populate({
+        path: 'disLikeFeeds.feedId',
+        select: '_id type contentUrl title description createdAt',
+        model: 'Feed'
+      })
+      .populate({
+        path: 'savedFeeds.feedId',
+        select: '_id type contentUrl title description createdAt',
+        model: 'Feed'
+      })
+      .lean();
+
+    // Filter interactions by date if provided
+    const filterByDate = (items, dateField) => {
+      if (!startDate && !endDate) return items || [];
+      
+      const start = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : null;
+      const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : null;
+      
+      return (items || []).filter(item => {
+        if (!item || !item[dateField]) return false;
+        
+        const itemDate = new Date(item[dateField]).getTime();
+        
+        if (start && itemDate < start) return false;
+        if (end && itemDate > end) return false;
+        
+        return true;
+      });
+    };
+
+    const likedPosts = filterByDate(userAction?.likedFeeds?.map(f => ({
+      id: f.feedId?._id,
+      type: f.feedId?.type,
+      url: f.feedId?.contentUrl,
+      title: f.feedId?.title || 'Liked post',
+      description: f.feedId?.description || '',
+      likedAt: f.likedAt,
+    })), 'likedAt');
+
+    const dislikedPosts = filterByDate(userAction?.disLikeFeeds?.map(f => ({
+      id: f.feedId?._id,
+      type: f.feedId?.type,
+      url: f.feedId?.contentUrl,
+      title: f.feedId?.title || 'Disliked post',
+      description: f.feedId?.description || '',
+      dislikedAt: f.dislikedAt,
+    })), 'dislikedAt');
+
+    const sharedPosts = filterByDate(userAction?.sharedFeeds?.map(f => ({
+      id: f.feedId?._id,
+      type: f.feedId?.type,
+      url: f.feedId?.contentUrl,
+      title: f.feedId?.title || 'Shared post',
+      description: f.feedId?.description || '',
+      sharedAt: f.sharedAt,
+    })), 'sharedAt');
+
+    const downloadedPosts = filterByDate(userAction?.downloadedFeeds?.map(f => ({
+      id: f.feedId?._id,
+      type: f.feedId?.type,
+      url: f.feedId?.contentUrl,
+      title: f.feedId?.title || 'Downloaded post',
+      description: f.feedId?.description || '',
+      downloadedAt: f.downloadedAt,
+    })), 'downloadedAt');
+
+    const savedPosts = filterByDate(userAction?.savedFeeds?.map(f => ({
+      id: f.feedId?._id,
+      type: f.feedId?.type,
+      url: f.feedId?.contentUrl,
+      title: f.feedId?.title || 'Saved post',
+      description: f.feedId?.description || '',
+      savedAt: f.savedAt,
+    })), 'savedAt');
+
+    const interactions = {
+      liked: likedPosts.length,
+      disliked: dislikedPosts.length,
+      shared: sharedPosts.length,
+      downloaded: downloadedPosts.length,
+      saved: savedPosts.length,
+    };
+
+    // -------------------------------------------------------------------
+    // 6️⃣ HIDDEN POSTS with date filtering
+    // -------------------------------------------------------------------
+    const hiddenQuery = {
+      userId,
+      ...buildDateQuery('createdAt')
+    };
+
+    const hiddenRecords = await HiddenPost.find(hiddenQuery)
+      .select("postId createdAt")
+      .lean();
+
+    const hiddenIds = hiddenRecords.map(h => h.postId);
+    const hiddenDate = {};
+    hiddenRecords.forEach(h => (hiddenDate[h.postId.toString()] = h.createdAt));
+
+    const hiddenFeeds = await Feed.find({ _id: { $in: hiddenIds } })
+      .select("_id type contentUrl title description createdByAccount")
+      .lean();
+
+    const hiddenCreatorIds = hiddenFeeds.map(f => f.createdByAccount);
+
+    const hiddenCreators = await ProfileSettings.find({
+      userId: { $in: hiddenCreatorIds }
+    }).select("userId userName profileAvatar").lean();
+
+    const hiddenCreatorMap = {};
+    hiddenCreators.forEach(c => (hiddenCreatorMap[c.userId.toString()] = c));
+
+    const hidden = hiddenFeeds.map(f => ({
+      id: f._id,
+      type: f.type,
+      url: f.contentUrl,
+      title: f.title || 'Hidden post',
+      description: f.description || '',
+      hiddenAt: hiddenDate[f._id.toString()],
+      creator: hiddenCreatorMap[f.createdByAccount] || null,
+    }));
+
+    // -------------------------------------------------------------------
+    // 7️⃣ CATEGORY INTERESTS
+    // -------------------------------------------------------------------
     const categoryData = await UserCategory.findOne({ userId })
-      .populate("interestedCategories.categoryId", "name description")
-      .populate("nonInterestedCategories.categoryId", "name description")
-      .lean() || {};
+      .populate("interestedCategories", "name description")
+      .populate("nonInterestedCategories", "name description")
+      .lean();
 
-    const interested = (categoryData?.interestedCategories || []).map((c, i) => ({
-      id: c.categoryId?._id || i,
-      title: c.categoryId?.name || `Category ${i + 1}`,
-      description: c.categoryId?.description || `Interested since ${c.updatedAt?.toDateString() || "Unknown"}`,
+    const interested = categoryData?.interestedCategories?.map(c => ({
+      id: c._id,
+      name: c.name,
+      description: c.description || "",
     })) || [];
 
-    const nonInterested = (categoryData?.nonInterestedCategories || []).map((c, i) => ({
-      id: c.categoryId?._id || i,
-      title: c.categoryId?.name || `Category ${i + 1}`,
-      description: c.categoryId?.description || `Not interested since ${c.updatedAt?.toDateString() || "Unknown"}`,
+    const nonInterested = categoryData?.nonInterestedCategories?.map(c => ({
+      id: c._id,
+      name: c.name,
+      description: c.description || "",
     })) || [];
 
-    // ------------------ Response ------------------
+    // -------------------------------------------------------------------
+    // 8️⃣ USER COMMENTS WITH POST DETAILS with date filtering
+    // -------------------------------------------------------------------
+    const commentsQuery = {
+      userId,
+      ...buildDateQuery('createdAt')
+    };
+
+    const comments = await UserComments.find(commentsQuery)
+      .select("_id commentText feedId createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const commentFeedIds = comments.map(c => c.feedId);
+
+    const commentFeeds = await Feed.find({ _id: { $in: commentFeedIds } })
+      .select("_id type contentUrl title description createdByAccount")
+      .lean();
+
+    const commentFeedMap = {};
+    commentFeeds.forEach(f => {
+      commentFeedMap[f._id.toString()] = f;
+    });
+
+    const userComments = comments.map(c => ({
+      id: c._id,
+      text: c.commentText,
+      createdAt: c.createdAt,
+      post: commentFeedMap[c.feedId] || null,
+    }));
+
+    // -------------------------------------------------------------------
+    // 9️⃣ ENGAGEMENT SUMMARY
+    // -------------------------------------------------------------------
+    const engagementSummary = {
+      totalPosts: posts.length,
+      totalFollowers: followersList.length,
+      totalFollowing: followingList.length,
+      totalPostLikes: posts.reduce((a, b) => a + b.likes, 0),
+      totalPostViews: posts.reduce((a, b) => a + b.views, 0),
+      totalComments: userComments.length,
+      totalInteractions:
+        likedPosts.length +
+        dislikedPosts.length +
+        sharedPosts.length +
+        downloadedPosts.length +
+        userComments.length,
+    };
+
+    // -------------------------------------------------------------------
+    // 🔟 FINAL RESPONSE
+    // -------------------------------------------------------------------
     return res.status(200).json({
+      success: true,
       selectedUser,
-      feeds,
-      following,
+      posts,
+      imageCount,
+      videoCount,
+      followers: followersList,
+      following: followingList,
+      interactions,
+      likedPosts,
+      dislikedPosts,
+      sharedPosts,
+      downloadedPosts,
+      savedPosts,
       hidden,
       interested,
       nonInterested,
+      comments: userComments,
+      engagementSummary,
+      stats: engagementSummary,
+      filters: {
+        startDate,
+        endDate,
+        type,
+        applied: !!(startDate || endDate || type)
+      }
     });
 
   } catch (err) {
     console.error("Error fetching analytics:", err);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: err.message,
+    });
   }
 };
+
+
 
 
 
@@ -791,27 +1273,29 @@ exports.getUserLevelWithEarnings = async (req, res) => {
 
 exports.getUserProfileDashboardMetricCount = async (req, res) => {
   try {
-    // 1️⃣ Total users
+    // 1️⃣ Total registered users
     const totalUsers = await Users.countDocuments();
 
     // 2️⃣ Active subscriptions
-    const subscriptionCount = await UserSubscription.distinct("userId", { isActive: true }).then(ids => ids.length);
+    const subscriptionCount = await Users.countDocuments({
+      "subscription.isActive": true,
+    });
 
-    // 3️⃣ Account count
-    const accountCount = await Account.distinct("userId").then(ids => ids.length);
+    // 3️⃣ Unique user accounts
+    const accountCount = await Account.distinct("userId").then(
+      (ids) => ids.length
+    );
 
     // 4️⃣ Blocked users
     const blockedUserCount = await Users.countDocuments({ isBlocked: true });
 
-    // 5️⃣ Immediate online users
-    // Get distinct userIds where any session has isOnline: true
-    const onlineUserIds = await Session.distinct("userId", { isOnline: true });
-    const onlineUsersCount = onlineUserIds.length;
+    // 5️⃣ Online users (⚡ from User schema)
+    const onlineUsersCount = await Users.countDocuments({ isOnline: true });
 
     // 6️⃣ Offline users = total - online
     const offlineUsersCount = totalUsers - onlineUsersCount;
 
-    res.status(200).json({
+    return res.status(200).json({
       totalUsers,
       onlineUsers: onlineUsersCount,
       offlineUsers: offlineUsersCount,
@@ -820,13 +1304,14 @@ exports.getUserProfileDashboardMetricCount = async (req, res) => {
       accountCount,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
+    console.error("Dashboard metric error:", error);
+    return res.status(500).json({
       message: "Failed to fetch dashboard metrics",
       error: error.message,
     });
   }
 };
+
 
 
 
@@ -923,25 +1408,178 @@ exports.getReports = async (req, res) => {
 
 
 exports.deleteUserAndAllRelated = async (req, res) => {
-  const { userId } = req.params ;
+  console.log("🟦 [STEP 0] Controller entered");
+
+  const { userId } = req.params;
   console.log("🧾 Starting deletion for user:", userId);
 
   if (!mongoose.Types.ObjectId.isValid(userId)) {
+    console.log("❌ Invalid userId");
     return res.status(400).json({ message: "Invalid userId" });
   }
 
-  // 1️⃣ Find user before transaction
-  const user = await Users.findById(userId);
-  if (!user) return res.status(404).json({ message: "User not found" });
+  // 1️⃣ Minimal check (fast)
+  console.log("🟦 [STEP 1] Fetching user...");
+  let user;
+  try {
+    user = await Users.findById(userId).select("profileAvatar").lean();
+    console.log("✅ User fetch success");
+  } catch (err) {
+    console.error("❌ ERROR fetching user:", err);
+    return res.status(500).json({
+      message: "Error fetching user",
+      error: err.message,
+    });
+  }
 
-  // 2️⃣ Collect Cloudinary public IDs
-  const publicIds = new Set();
+  if (!user) {
+    console.log("❌ User not found");
+    return res.status(404).json({ message: "User not found" });
+  }
 
-  const extractPublicId = (url) => {
+  // 2️⃣ Start session on the SAME connection as Users model
+  console.log("🟦 [STEP 2] Starting DB session from Users.db...");
+  let session;
+  try {
+    const start = Date.now();
+
+    // IMPORTANT CHANGE ⬇️
+    session = await Users.db.startSession();
+    // or if you prefer and have prithuDB imported:
+    // session = await prithuDB.startSession();
+
+    console.log(
+      `✅ startSession SUCCESS on DB "${Users.db.name}" (⏱ ${Date.now() - start} ms)`
+    );
+  } catch (err) {
+    console.error("❌ FAILED at startSession() using Users.db:", err);
+    return res.status(500).json({
+      message: "DB Session initialization failed",
+      error: err.message,
+    });
+  }
+
+  try {
+    console.log("🟦 [STEP 3] Starting transaction...");
+    session.startTransaction();
+    console.log("✅ Transaction started");
+
+    // --------------------------------------------
+    // 🔥 DELETE RELATED RECORDS USING FAST FILTERS
+    // --------------------------------------------
+    console.log("🟦 [STEP 4] Fetching Accounts...");
+    const accounts = await Account.find({ userId }, "_id").lean();
+    const accountIds = accounts.map((a) => a._id);
+    console.log("✔ Accounts found:", accountIds.length);
+
+    console.log("🟦 [STEP 5] Running delete operations...");
+
+    const timedDelete = async (label, fn) => {
+      const t = Date.now();
+      try {
+        await fn();
+        console.log(`✔ ${label} completed (⏱ ${Date.now() - t}ms)`);
+      } catch (e) {
+        console.error(`❌ ${label} FAILED:`, e.message);
+        throw e;
+      }
+    };
+
+    await timedDelete("Account.deleteMany", () =>
+      Account.deleteMany({ userId }, { session })
+    );
+    await timedDelete("CommentLikes.deleteMany", () =>
+      CommentLikes.deleteMany({ userId }, { session })
+    );
+    await timedDelete("Devices.deleteMany", () =>
+      Devices.deleteMany({ userId }, { session })
+    );
+    await timedDelete("Feed.deleteMany", () =>
+      Feed.deleteMany(
+        { $or: [{ createdBy: { $in: accountIds } }, { userId }] },
+        { session }
+      )
+    );
+    await timedDelete("Followers.updateMany", () =>
+      Followers.updateMany({}, { $pull: { followerIds: userId } }, { session })
+    );
+    await timedDelete("HiddenPost.deleteMany", () =>
+      HiddenPost.deleteMany({ userId }, { session })
+    );
+    await timedDelete("ImageView.deleteMany", () =>
+      ImageView.deleteMany({ userId }, { session })
+    );
+    await timedDelete("ProfileSettings.deleteMany", () =>
+      ProfileSettings.deleteMany({ userId }, { session })
+    );
+    await timedDelete("Report.deleteMany", () =>
+      Report.deleteMany({ reportedBy: userId }, { session })
+    );
+    await timedDelete("UserComments.deleteMany", () =>
+      UserComments.deleteMany({ userId }, { session })
+    );
+    await timedDelete("UserDevices.deleteMany", () =>
+      UserDevices.deleteMany({ userId }, { session })
+    );
+    await timedDelete("UserEarnings.deleteMany", () =>
+      UserEarnings.deleteMany({ userId }, { session })
+    );
+    await timedDelete("UserFeedActions.deleteMany", () =>
+      UserFeedActions.deleteMany(
+        { $or: [{ accountId: { $in: accountIds } }, { userId }] },
+        { session }
+      )
+    );
+    await timedDelete("UserLanguage.deleteMany", () =>
+      UserLanguage.deleteMany({ userId }, { session })
+    );
+    await timedDelete("UserLevels.deleteMany", () =>
+      UserLevels.deleteMany({ userId }, { session })
+    );
+    await timedDelete("UserNotification.deleteMany", () =>
+      UserNotification.deleteMany({ userId }, { session })
+    );
+    await timedDelete("UserSubscriptions.deleteMany", () =>
+      UserSubscriptions.deleteMany({ userId }, { session })
+    );
+    await timedDelete("UserViews.deleteMany", () =>
+      UserViews.deleteMany({ userId }, { session })
+    );
+    await timedDelete("VideoView.deleteMany", () =>
+      VideoView.deleteMany({ userId }, { session })
+    );
+    await timedDelete("Users.deleteOne", () =>
+      Users.deleteOne({ _id: userId }, { session })
+    );
+
+    console.log("🟦 [STEP 6] Committing transaction...");
+    const commitStart = Date.now();
+    await session.commitTransaction();
+    console.log(`✅ Transaction committed (⏱ ${Date.now() - commitStart}ms)`);
+  } catch (error) {
+    console.error("❌ ERROR inside transaction:", error);
+    console.log("⚠️ Aborting transaction...");
+    await session.abortTransaction();
+    await session.endSession();
+    return res.status(500).json({
+      message: "Failed to delete user",
+      error: error.message,
+    });
+  }
+
+  await session.endSession();
+  console.log("🟦 [STEP 6.5] Session ended");
+
+  // --------------------------------------------------------
+  // 3️⃣ DELETE CLOUDINARY FILES AFTER COMMIT (not inside DB)
+  // --------------------------------------------------------
+  console.log("🟦 [STEP 7] Deleting Cloudinary resources...");
+  let deleteCount = 0;
+
+  const extractPid = (url) => {
     if (!url) return null;
     try {
-      const parts = url.split("/");
-      const file = parts.pop();
+      const file = url.split("/").pop();
       return file.split(".")[0];
     } catch {
       return null;
@@ -949,125 +1587,30 @@ exports.deleteUserAndAllRelated = async (req, res) => {
   };
 
   if (user.profileAvatar) {
-    const pid = extractPublicId(user.profileAvatar);
-    if (pid) publicIds.add(pid);
-  }
+    const pid = extractPid(user.profileAvatar);
+    console.log("🔎 Avatar PID:", pid);
 
-  const accounts = await Account.find({ userId }).lean();
-  const accountIds = accounts.map((a) => a._id.toString());
-
-  const feedCursor = Feed.find({
-    $or: [{ createdBy: { $in: accountIds } }, { userId }],
-  }).cursor();
-
-  for await (const f of feedCursor) {
-    if (f.thumbnail) {
-      const pid = extractPublicId(f.thumbnail);
-      if (pid) publicIds.add(pid);
-    }
-    if (Array.isArray(f.media)) {
-      f.media.forEach((m) => {
-        const pid = extractPublicId(m.url);
-        if (pid) publicIds.add(pid);
-      });
-    }
-  }
-
-  const ufaDocs = await UserFeedActions.find({
-    $or: [{ userId }, { accountId: { $in: accountIds } }],
-  }).lean();
-
-  ufaDocs.forEach((d) => {
-    if (Array.isArray(d.media)) {
-      d.media.forEach((m) => {
-        const pid = extractPublicId(m.url);
-        if (pid) publicIds.add(pid);
-      });
-    }
-  });
-
-  // 3️⃣ Delete Cloudinary media before DB transaction
-  const deleteCloudinaryBatch = async (ids, batchSize = 10) => {
-    const results = [];
-    for (let i = 0; i < ids.length; i += batchSize) {
-      const chunk = ids.slice(i, i + batchSize);
+    if (pid) {
       try {
-        const res = await cloudinary.api.delete_resources(chunk);
-        results.push(res);
-      } catch (e) {
-        console.error("Cloudinary delete error:", e.message);
+        await cloudinary.api.delete_resources([pid]);
+        deleteCount++;
+        console.log("✔ Cloudinary deleted:", pid);
+      } catch (err) {
+        console.error("❌ Cloudinary deletion failed:", err.message);
       }
     }
-    return results;
-  };
-
-  const publicIdArray = Array.from(publicIds);
-  console.log(`🧹 Deleting ${publicIdArray.length} Cloudinary files...`);
-  await deleteCloudinaryBatch(publicIdArray, 10);
-
-  // 4️⃣ Start session & transaction
-  const session = await mongoose.startSession();
-
-  try {
-    session.startTransaction();
-
-    // Sequential deletes (no Promise.all)
-    await Account.deleteMany({ userId }, { session });
-    await CommentLikes.deleteMany({ userId }, { session });
-    await CreatorFollowers.updateMany(
-      { followers: userId },
-      { $pull: { followers: userId } },
-      { session }
-    );
-    await Devices.deleteMany({ userId }, { session });
-    await Feed.deleteMany(
-      { $or: [{ createdBy: { $in: accountIds } }, { userId }] },
-      { session }
-    );
-    await Followers.updateMany({}, { $pull: { followerIds: userId } }, { session });
-    await HeldReferrals.deleteMany({ userId }, { session });
-    await HiddenPost.deleteMany({ userId }, { session });
-    await ImageView.deleteMany({ userId }, { session });
-    await ProfileSettings.deleteMany({ userId }, { session });
-    await Report.deleteMany({ reportedBy: userId }, { session });
-    await Session.deleteMany({ userId }, { session });
-    await UserComments.deleteMany({ userId }, { session });
-    await UserDevices.deleteMany({ userId }, { session });
-    await UserEarnings.deleteMany({ userId }, { session });
-    await UserFeedActions.deleteMany(
-      { $or: [{ accountId: { $in: accountIds } }, { userId }] },
-      { session }
-    );
-    await UserFeedCategories.deleteMany({ userId }, { session });
-    await UserFollowings.updateMany({}, { $pull: { followingIds: userId } }, { session });
-    await UserLanguage.deleteMany({ userId }, { session });
-    await UserLevels.deleteMany({ userId }, { session });
-    await UserNotification.deleteMany({ userId }, { session });
-    await UserSubscriptions.deleteMany({ userId }, { session });
-    await UserViews.deleteMany({ userId }, { session });
-    await VideoView.deleteMany({ userId }, { session });
-    await Users.deleteOne({ _id: userId }, { session });
-
-    await session.commitTransaction();
-    console.log("✅ Transaction committed successfully.");
-  } catch (err) {
-    console.error("❌ Transaction error:", err);
-    await session.abortTransaction();
-    console.log("⚠️ Transaction aborted.");
-    return res.status(500).json({
-      message: "Failed to delete user records",
-      error: err.message,
-    });
-  } finally {
-    await session.endSession();
   }
 
-  // 5️⃣ Done
+  console.log("🎉 ALL STEPS COMPLETE");
+
   return res.status(200).json({
-    message: "✅ User and all related records deleted successfully",
-    deletedMediaCount: publicIdArray.length,
+    message: "User deleted successfully",
+    cloudinaryMediaDeleted: deleteCount,
   });
 };
+
+
+
 
 
 

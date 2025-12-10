@@ -5,16 +5,6 @@ const{ userUpload, userUploadToCloudinary,userProcessFeedFile}=require('../middl
 const {adminUploadToCloudinary,adminProcessFeedFile,adminUpload}=require('../middlewares/services/adminCloudnaryUpload');
 
 
-// Controllers
-const {
-  createNewUser,
-  userLogin,
-  userSendOtp,
-  userPasswordReset,
-  existUserVerifyOtp, 
-  newUserVerifyOtp,
-  userLogOut,
-} = require('../controllers/authenticationControllers/userAuthController');
 
 
 const {
@@ -42,6 +32,7 @@ const {
   newAdminVerifyOtp,
   adminPasswordReset,
   verifyToken,
+  checkAvailability,
 } = require('../controllers/authenticationControllers/adminAuthController');
 
 const {
@@ -95,9 +86,10 @@ const {
   getUsersStatus,
   getUsersByDate,
   getAllUserDetails,
+  searchAllUserDetails,
   getAnaliticalCountforUser,
   getUserLikedFeedsforAdmin,
-  getUserDetailWithIdForAdmin,
+  getUserSocialMeddiaDetailWithIdForAdmin,
   getUserAnalyticalData,
   getUserLevelWithEarnings,
   getUserProfileDashboardMetricCount,
@@ -105,19 +97,11 @@ const {
 } = require('../controllers/adminControllers/adminUserControllers');
 
 const {
-  likeFeed,
-  toggleSaveFeed,
-  downloadFeed,
-  postComment,
-  postReplyComment,
   getUserSavedFeeds,
   getUserDownloadedFeeds,
-  shareFeed,
-  likeMainComment,
   getUserLikedFeeds,
   userHideFeed,
   getUserCategory,
-  toggleDislikeFeed,
 } = require('../controllers/feedControllers/userActionsFeedController');
 
 
@@ -149,6 +133,7 @@ const {
   getCreatorDetailWithId,
   getAllCreatorDetails,
   getAllTrendingCreators,
+  adminGetTrendingFeeds,
 } = require('../controllers/creatorControllers/creatorDetailController');
 
 const {
@@ -165,11 +150,6 @@ const {
 } = require('../controllers/adminControllers/adminCatagoryController');
 
 
-
-const{
-  creatorSelectCategory,
-  creatorUnSelectCategory,
-}=require('../controllers/creatorControllers/creatorCategoryController')
 
 
 const{
@@ -295,14 +275,6 @@ const { getPostVolumeWeekly,
 
 
 
-// /* --------------------- User Authentication --------------------- */
-router.post('/auth/user/register', createNewUser);
-router.post('/auth/user/login', userLogin);
-router.post('/auth/user/otp-send', userSendOtp);
-router.post('/auth/exist/user/verify-otp', existUserVerifyOtp);
-router.post('/auth/new/user/verify-otp', newUserVerifyOtp);
-router.post('/auth/user/reset-password', userPasswordReset);
-router.post('/auth/user/logout',auth, userLogOut);
 
 // /* --------------------- User Referral API Actions --------------------- */
 router.get('/user/referal/code',auth,getUserReferalCode);
@@ -319,19 +291,6 @@ router.get("/check/username/availability",checkUsernameAvailability);
 router.get("/check/email/availability",checkEmailAvailability);
 
 
-// /* --------------------- User Feed Actions --------------------- */
-router.post('/user/feed/like',auth, likeFeed);
-router.post('/user/comment/like',auth,likeMainComment);
-router.post("/user/feed/dislike",auth,toggleDislikeFeed);
-router.post('/user/feed/save',auth, toggleSaveFeed);
-router.post('/user/feed/download',auth, downloadFeed);
-router.post('/user/feed/comment',auth,postComment);
-router.post('/user/feed/reply/comment',auth,postReplyComment);
-router.post('/user/feed/share',auth, shareFeed);
-router.post('/user/select/category',auth,userSelectCategory);
-router.post('/user/not/intrested',auth,userNotInterestedCategory);
-router.post('/user/interested/feed',auth,userInterestedCategory);
-router.post("/user/intrested/category/begin",auth,saveInterestedCategory);
 
 // /* --------------------- User Feed Get Actions --------------------- */
 router.get('/user/get/saved/feeds',auth, getUserSavedFeeds);
@@ -451,6 +410,8 @@ router.post('/auth/exist/admin/verify-otp', existAdminVerifyOtp);
 router.post('/auth/new/admin/verify-otp', newAdminVerifyOtp);
 router.post('/auth/admin/reset-password', adminPasswordReset);
 router.get('/api/admin/verify-token',auth, verifyToken);
+router.get("/auth/check-availability", checkAvailability);
+
 
 /* --------------------- Admin Profile API --------------------- */
  router.put('/admin/profile/detail/update',auth,adminUpload.single('file'),(req, res, next) => { req.baseUrl = "/profile"; next(); },adminUploadToCloudinary,adminProfileDetailUpdate);
@@ -487,7 +448,8 @@ router.get('/admin/getall/subscriptions', getAllPlans);
 
 /* --------------------- Admin User API --------------------- */
 router.get('/admin/getall/users', getAllUserDetails);
-router.get('/admin/get/user/profile/detail/:id',getUserDetailWithIdForAdmin);
+router.get("/admin/search/user",searchAllUserDetails);
+router.get('/admin/get/user/social/media/profile/detail/:id',getUserSocialMeddiaDetailWithIdForAdmin);
 router.get("/admin/users/status", getUsersStatus);
 router.get("/admin/user/detail/by-date", getUsersByDate);
 router.get ('/admin/user/action/intersection/count/:userId',getAnaliticalCountforUser);
@@ -545,6 +507,10 @@ router.get('/admin/get/user/detail', getUserProfileDetail);
 router.get ('/admin/get/trending/creator',getAllTrendingCreators);
 // router.get("/admin/users/status", getUserStatus);
 // router.get("/admin/user/detail/by-date", getUsersByDate);
+
+
+/*---------------------------Admin Feed ________________________*/
+router.get("/admin/get/trending/feed",adminGetTrendingFeeds)
 
 /*----------------------Admin Sales Dashboard------------------*/
 router.get("/sales/dashboard/analytics", getAnalytics);
@@ -607,13 +573,39 @@ router.get("/user/profile/completion",auth,getProfileCompletion);
 
 
 
+// const Users=require("../models/userModels/userModel")
 
 
 
+// // Set all users isOnline = false
+// const setAllUsersOffline = async () => {
+//   try {
+//     const result = await Users.updateMany(
+//       {},                     // match ALL documents
+//       { $set: { isOnline: false } } // update field
+//     );
+
+  
+
+//   } catch (error) {
+//     console.error("Error updating users:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to update users",
+//       error: error.message,
+//     });
+//   }
+// };
 
 
 
+// setAllUsersOffline()
 
+
+
+// const computeTrendingCreators = require("../middlewares/computeTreandingCreators");
+
+// computeTrendingCreators()
 
 
 module.exports = router;

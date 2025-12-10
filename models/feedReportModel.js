@@ -36,6 +36,7 @@ const ReportSchema = new mongoose.Schema(
 
     targetId: {
       type: mongoose.Schema.Types.ObjectId,
+      refPath: "targetType",
       required: true,
       index: true,
     },

@@ -150,7 +150,7 @@ exports.createFeedReport = async (req, res) => {
   try {
     const { typeId, targetId, targetType, answers } = req.body;
     const userId = req.Id || req.body.userId;
-
+console.log({targetId,userId})
     if (!typeId || !targetId || !targetType) {
       return res.status(400).json({
         message: "typeId, targetId, and targetType are required",

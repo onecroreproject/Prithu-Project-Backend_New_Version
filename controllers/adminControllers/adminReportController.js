@@ -7,6 +7,7 @@ const Feed = require("../../models/feedModel");
 const Account = require("../../models/accountSchemaModel");
 const { sendMailSafe } = require("../../utils/sendMail");
 const ProfileSettings =require("../../models/profileSettingModel")
+const UserComments=require("../../models/userCommentModel")
 
 
 
@@ -349,114 +350,193 @@ exports.deleteQuestion = async (req, res) => {
 exports.getAllReports = async (req, res) => {
   try {
     const reports = await Report.find({})
-      .populate("reportedBy", "_id")
       .populate("typeId", "name")
+      .populate("reportedBy", "_id")
+      .sort({ createdAt: -1 })
       .lean();
 
-    const formatted = await Promise.all(
-      reports.map(async (r) => {
-        // ========================================
-        // 🧹 REMOVE DUPLICATE ANSWERS HERE
-        // ========================================
-        const uniqueAnswersMap = {};
-        (r.answers || []).forEach((ans) => {
-          uniqueAnswersMap[ans.questionId] = ans; 
-        });
+    if (!reports.length) {
+      return res.json({ message: "No reports found", data: [] });
+    }
 
-        const uniqueAnswers = Object.values(uniqueAnswersMap);
+    const userIds = new Set(); // userId, adminId, childAdminId
+    const feedIds = new Set();
+    const commentIds = new Set();
 
-        // ========================================
-        // 1️⃣ Reporter Profile
-        // ========================================
-        const reporterProfile = await ProfileSettings.findOne({
-          userId: r.reportedBy?._id,
-        })
-          .select("userName profileAvatar")
-          .lean();
+    reports.forEach(r => {
+      if (r.reportedBy?._id) userIds.add(r.reportedBy._id.toString());
 
-        // ========================================
-        // 2️⃣ Target Data
-        // ========================================
-        let targetData = { contentUrl: null, createdBy: null };
+      if (r.targetType === "User") userIds.add(r.targetId.toString());
+      if (r.targetType === "Feed") feedIds.add(r.targetId.toString());
+      if (r.targetType === "Comment") commentIds.add(r.targetId.toString());
+    });
 
-        if (r.targetType === "Feed") {
-          const feed = await Feed.findById(r.targetId).lean();
+    // -----------------------------------------------------
+    // 3️⃣ Fetch Feeds (Feed owner can be User/Admin/ChildAdmin)
+    // -----------------------------------------------------
+    const feeds = await Feed.find({
+      _id: { $in: [...feedIds] }
+    })
+      .select("_id contentUrl createdByAccount roleRef")
+      .lean();
 
-          if (feed) {
-            let ownerProfile = null;
+    const feedMap = {};
+    const feedOwnerIds = new Set();
 
-            if (feed.roleRef === "User") {
-              ownerProfile = await ProfileSettings.findOne({
-                userId: feed.createdByAccount,
-              })
-                .select("userName profileAvatar")
-                .lean();
-            } else if (feed.roleRef === "Admin") {
-              ownerProfile = await ProfileSettings.findOne({
-                adminId: feed.createdByAccount,
-              })
-                .select("userName profileAvatar")
-                .lean();
-            } else if (feed.roleRef === "Child_Admin") {
-              ownerProfile = await ProfileSettings.findOne({
-                childAdminId: feed.createdByAccount,
-              })
-                .select("userName profileAvatar")
-                .lean();
-            }
+    feeds.forEach(f => {
+      feedMap[f._id.toString()] = f;
+      feedOwnerIds.add(f.createdByAccount.toString());
+    });
 
-            targetData = {
-              contentUrl: feed.contentUrl,
-              createdBy: ownerProfile,
-            };
-          }
-        }
+    // -----------------------------------------------------
+    // 4️⃣ Collect ALL profile lookup IDs:
+    // userId, adminId, childAdminId
+    // -----------------------------------------------------
+    const allProfileIds = new Set([
+      ...userIds,
+      ...feedOwnerIds
+    ]);
 
-        else if (r.targetType === "User") {
-          const userProfile = await ProfileSettings.findOne({
-            userId: r.targetId,
-          })
-            .select("userName profileAvatar")
-            .lean();
+    // -----------------------------------------------------
+    // 5️⃣ Fetch ProfileSettings for all roles
+    // -----------------------------------------------------
+    const profiles = await ProfileSettings.find({
+      $or: [
+        { userId: { $in: [...allProfileIds] } },
+        { adminId: { $in: [...allProfileIds] } },
+        { childAdminId: { $in: [...allProfileIds] } },
+      ]
+    })
+      .select("userId adminId childAdminId userName profileAvatar")
+      .lean();
 
-          targetData = {
-            contentUrl: null,
-            createdBy: userProfile,
+    const profileMap = {};
+
+    profiles.forEach(p => {
+      if (p.userId) profileMap[p.userId.toString()] = p;
+      if (p.adminId) profileMap[p.adminId.toString()] = p;
+      if (p.childAdminId) profileMap[p.childAdminId.toString()] = p;
+    });
+
+    // -----------------------------------------------------
+    // 6️⃣ Fetch Comments
+    // -----------------------------------------------------
+    const comments = await UserComments.find({
+      _id: { $in: [...commentIds] }
+    })
+      .select("_id commentText feedId userId")
+      .lean();
+
+    const commentMap = {};
+    comments.forEach(c => (commentMap[c._id.toString()] = c));
+
+    // -----------------------------------------------------
+    // 7️⃣ Build final response
+    // -----------------------------------------------------
+    const finalData = reports.map(r => {
+      const reporterProfile =
+        profileMap[r.reportedBy?._id?.toString()] || {};
+
+      const uniqueAnswers = Object.values(
+        (r.answers || []).reduce((acc, ans) => {
+          acc[ans.questionId] = ans;
+          return acc;
+        }, {})
+      );
+
+      let reportedTo = null;
+      let contentUrl = null;
+      let commentText = null;
+
+      // ---------------- FEED TARGET ----------------
+      if (r.targetType === "Feed") {
+        const feed = feedMap[r.targetId?.toString()];
+        if (feed) {
+          const ownerProfile =
+            profileMap[feed.createdByAccount?.toString()] || {};
+
+          reportedTo = {
+            _id: feed.createdByAccount,
+            userName: ownerProfile.userName || "Unknown User",
+            avatar: ownerProfile.profileAvatar || null,
           };
+
+          contentUrl = feed.contentUrl;
         }
+      }
 
-        res;
-        // ========================================
-        // FINAL RESPONSE
-        // ========================================
-        return {
-          _id: r._id,
-          target: targetData,
-          reportedBy: {
-            _id: r.reportedBy?._id || null,
-            userName: reporterProfile?.userName || "Unknown",
-            avatar: reporterProfile?.profileAvatar || null,
-          },
-          type: r.typeId?.name || "",
-          answers: uniqueAnswers,   // 🔥 Cleaned answers
-          status: r.status,
-          actionTaken: r.actionTaken || null,
-          actionDate: r.actionDate || null,
-          createdAt: r.createdAt,
+      // ---------------- USER TARGET ----------------
+      if (r.targetType === "User") {
+        const targetUser = profileMap[r.targetId?.toString()] || {};
+
+        reportedTo = {
+          _id: r.targetId,
+          userName: targetUser.userName || "Unknown User",
+          avatar: targetUser.profileAvatar || null,
         };
-      })
-    );
+      }
 
-    res.json({
+      // -------------- COMMENT TARGET --------------
+      if (r.targetType === "Comment") {
+        const comment = commentMap[r.targetId?.toString()];
+        if (comment) {
+          const ownerProfile =
+            profileMap[comment.userId?.toString()] || {};
+
+          commentText = comment.commentText;
+
+          reportedTo = {
+            _id: comment.userId,
+            userName: ownerProfile.userName || "Unknown User",
+            avatar: ownerProfile.profileAvatar || null,
+          };
+
+          const feed = feedMap[comment.feedId?.toString()];
+          contentUrl = feed?.contentUrl || null;
+        }
+      }
+
+      return {
+        _id: r._id,
+        type: r.typeId?.name || "",
+        targetType: r.targetType,
+
+        reportedBy: {
+          _id: r.reportedBy?._id || null,
+          userName: reporterProfile.userName || "Unknown",
+          avatar: reporterProfile.profileAvatar || null,
+        },
+
+        reportedTo,
+
+        target: {
+          contentUrl,
+          commentText,
+        },
+
+        answers: uniqueAnswers,
+        status: r.status,
+        actionTaken: r.actionTaken,
+        actionDate: r.actionDate,
+        createdAt: r.createdAt,
+      };
+    });
+
+    return res.json({
       message: "Reports fetched successfully",
-      data: formatted,
+      data: finalData,
     });
 
   } catch (err) {
-    console.error("Error fetching reports:", err);
-    res.status(500).json({ message: "Internal server error" });
+    console.error("❌ Error fetching reports:", err);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
+
+
+
+
 
 
 

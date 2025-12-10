@@ -6,6 +6,7 @@ const bcrypt = require('bcrypt');
 const otpStore=new Map();
 const ChildAdmin=require('../../models/childAdminModel');
 const ProfileSettings=require("../../models/profileSettingModel");
+const { sendTemplateEmail } = require("../../utils/templateMailer"); 
 
 
 // Create nodemailer transporter
@@ -179,47 +180,62 @@ exports.adminSendOtp = async (req, res) => {
     const { email } = req.body;
 
     if (!email) {
-      return res.status(400).json({ error: 'Email is required' });
+      return res.status(400).json({ error: "Email is required" });
     }
 
-    let tempOtp = Math.floor(1000 + Math.random() * 9000).toString();
-    let otpExpires;
+    // Generate OTP
+    const tempOtp = Math.floor(1000 + Math.random() * 9000).toString();
+    const otpExpires = Date.now() + 5 * 60 * 1000; // 5 minutes
 
-    const admin = await Admin.findOne({ email:email });
+    // Check user in Admin or ChildAdmin
+    let user = await Admin.findOne({ email: email.trim().toLowerCase() });
 
-    if (admin) {
-      otpExpires = new Date(Date.now() + 5 * 60 * 1000);
-      // Save OTP and expiry on user document
-      admin.otpCode = tempOtp;
-      admin.otpExpiresAt = otpExpires;
-      await admin.save();
+    if (!user) {
+      user = await ChildAdmin.findOne({ email: email.trim().toLowerCase() });
+    }
+
+    /* -----------------------------------------------------
+     * 1️⃣ Save OTP to DB if user exists
+     * ----------------------------------------------------- */
+    if (user) {
+      user.otpCode = tempOtp;
+      user.otpExpiresAt = new Date(otpExpires);
+      await user.save();
     } else {
-      otpExpires = Date.now() + 5 * 60 * 1000;
-      // Store OTP and expiration for this email in otpStore
-      otpStore.set(email, { tempOtp, expires: otpExpires });
+      /* -----------------------------------------------------
+       * 2️⃣ Save OTP in memory for non-existing emails
+       * ----------------------------------------------------- */
+      otpStore.set(email, {
+        tempOtp,
+        expires: otpExpires,
+      });
     }
 
-    // Send OTP email
-    const mailOptions = {
-      from: process.env.MAIL_USER,
+    /* -----------------------------------------------------
+     * 3️⃣ Send Template Email
+     * ----------------------------------------------------- */
+    await sendTemplateEmail({
+      templateName: "childAdminOtp.html", // your template filename
       to: email,
-      subject: 'Prithu Password Reset OTP',
-      text: `Your OTP for password reset is: ${tempOtp}. It is valid for 15 minutes.`,
-    };
-
-    console.log(tempOtp)
-
-    transporter.sendMailSafe(mailOptions, (error, info) => {
-      if (error) {
-        console.error('Error sending OTP email:', error);
-        return res.status(500).json({ error: 'Failed to send OTP email' });
-      } else {
-        console.log('OTP email sent:', info.response);
-        return res.json({ message: 'OTP sent to email' });
-      }
+      subject: "Your Prithu OTP Code",
+      embedLogo: true,
+      placeholders: {
+        otp: tempOtp,
+        email: email,
+        expiry: "5 minutes",
+      },
     });
+
+    console.log("OTP sent:", tempOtp);
+
+    return res.json({
+      success: true,
+      message: "OTP sent to email",
+    });
+
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("OTP sending error:", error);
+    return res.status(500).json({ error: error.message });
   }
 };
 
@@ -323,4 +339,76 @@ exports.verifyToken = async (req, res) => {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 };
+
+
+
+exports.checkAvailability = async (req, res) => {
+  try {
+    const { email, userName } = req.query;
+
+    if (!email && !userName) {
+      return res.status(400).json({
+        success: false,
+        message: "email or userName is required",
+      });
+    }
+
+    // Build search query
+    const query = {};
+    if (email) query.email = email.toLowerCase().trim();
+    if (userName) query.userName = userName.trim();
+
+    /* -------------------------------------------------------
+     * 1️⃣ CHECK IN ADMIN TABLE
+     * ------------------------------------------------------- */
+    const adminExists = await Admin.findOne(query).select(
+      "_id email userName adminType"
+    );
+
+    if (adminExists) {
+      return res.status(200).json({
+        success: true,
+        exists: true,
+        foundIn: "Admin",
+        message: "Already taken in Admin",
+        data: adminExists,
+      });
+    }
+
+    /* -------------------------------------------------------
+     * 2️⃣ CHECK IN CHILD ADMIN TABLE
+     * ------------------------------------------------------- */
+    const childExists = await ChildAdmin.findOne(query).select(
+      "_id email userName childAdminId parentAdminId isActive"
+    );
+
+    if (childExists) {
+      return res.status(200).json({
+        success: true,
+        exists: true,
+        foundIn: "ChildAdmin",
+        message: "Already taken in ChildAdmin",
+        data: childExists,
+      });
+    }
+
+    /* -------------------------------------------------------
+     * 3️⃣ AVAILABLE
+     * ------------------------------------------------------- */
+    return res.status(200).json({
+      success: true,
+      exists: false,
+      message: "Available",
+    });
+
+  } catch (error) {
+    console.error("Availability check error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};
+
 
