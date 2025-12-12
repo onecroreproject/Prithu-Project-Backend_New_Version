@@ -1,65 +1,68 @@
 const CompanyProfile = require("../../../models/Job/CompanyModel/companyProfile");
 const CompanyLogin = require("../../../models/Job/CompanyModel/companyLoginSchema");
-const { uploadAndReplace } = require("../../../middlewares/utils/jobReplaceImage");
 const JobPost=require("../../../models/Job/JobPost/jobSchema");
+const { deleteLocalCompanyFile } = require("../../../middlewares/services/JobsService/companyUploadSpydy");
+const path = require("path");
 
 exports.updateCompanyProfile = async (req, res) => {
   try {
-    const companyId = req.companyId || req.body.companyId;
+    const companyId = req.companyId;
 
-    if (!companyId) {
-      return res.status(400).json({
-        success: false,
-        message: "companyId is required",
-      });
-    }
+    if (!companyId)
+      return res.status(400).json({ success: false, message: "companyId is required" });
 
     const data = req.body;
 
-    // FETCH existing profile for replacing Cloudinary images
-    const existingProfile = await CompanyProfile.findOne({ companyId });
+    // Fetch existing profile
+    const existing = await CompanyProfile.findOne({ companyId });
 
-    /* ======================================================
-     *  🔥 Upload Logo (No Changes)
-     * ====================================================== */
-    if (req.files?.logo?.[0]) {
-      data.logo = await uploadAndReplace(
-        req.files.logo[0].buffer,
-        "company/logo",
-        existingProfile?.logo
-      );
+    // Host for generating URL
+    const host = `${req.protocol}://${req.get("host")}`;
+
+    /* ------------------------------------------------------
+     *  LOGO
+     * ------------------------------------------------------ */
+    if (req.files?.logo?.length > 0) {
+      const file = req.files.logo[0];
+
+      // Delete old logo
+      if (existing?.logo) {
+        const filePath = path.join(__dirname, "../../", existing.logo.replace(host, ""));
+        deleteLocalCompanyFile(filePath);
+      }
+
+      data.logo = `${host}/media/company/${companyId}/logo/${file._savedName}`;
     }
 
-    /* ======================================================
-     *  🔥 Upload Cover Image (No Changes)
-     * ====================================================== */
-    if (req.files?.coverImage?.[0]) {
-      data.coverImage = await uploadAndReplace(
-        req.files.coverImage[0].buffer,
-        "company/cover",
-        existingProfile?.coverImage
-      );
+    /* ------------------------------------------------------
+     *  COVER IMAGE
+     * ------------------------------------------------------ */
+    if (req.files?.coverImage?.length > 0) {
+      const file = req.files.coverImage[0];
+
+      if (existing?.coverImage) {
+        const filePath = path.join(__dirname, "../../", existing.coverImage.replace(host, ""));
+        deleteLocalCompanyFile(filePath);
+      }
+
+      data.coverImage = `${host}/media/company/${companyId}/cover/${file._savedName}`;
     }
 
-    /* ======================================================
-     *  🔥 Upload Person Profile Avatar (NEW)
-     * ====================================================== */
+    /* ------------------------------------------------------
+     *  PROFILE AVATAR
+     * ------------------------------------------------------ */
+    if (req.files?.profileAvatar?.length > 0) {
+      const file = req.files.profileAvatar[0];
 
-    if (req.files?.profileAvatar?.[0]) {
-      const avatarUrl = await uploadAndReplace(
-        req.files.profileAvatar[0].buffer,
-        "company/profileAvatar"
-      );
-
-      // Save avatar in CompanyLogin
+      // Save to CompanyLogin
       await CompanyLogin.findByIdAndUpdate(companyId, {
-        profileAvatar: avatarUrl
+        profileAvatar: `${host}/media/company/${companyId}/avatar/${file._savedName}`,
       });
     }
 
-    /* ======================================================
-     *  🔥 Convert googleLocation
-     * ====================================================== */
+    /* ------------------------------------------------------
+     *  Convert googleLocation
+     * ------------------------------------------------------ */
     if (data.latitude && data.longitude) {
       data.googleLocation = {
         type: "Point",
@@ -67,10 +70,10 @@ exports.updateCompanyProfile = async (req, res) => {
       };
     }
 
-    /* ======================================================
-     *  🔥 Sync Basic Fields with CompanyLogin
-     * ====================================================== */
-    const syncFields = {
+    /* ------------------------------------------------------
+     *  Sync with CompanyLogin
+     * ------------------------------------------------------ */
+    const syncMap = {
       name: "name",
       position: "position",
       companyName: "companyName",
@@ -79,19 +82,17 @@ exports.updateCompanyProfile = async (req, res) => {
     };
 
     const loginUpdates = {};
-    for (let key in syncFields) {
-      if (data[key] !== undefined) {
-        loginUpdates[syncFields[key]] = data[key];
-      }
-    }
+    Object.keys(syncMap).forEach((key) => {
+      if (data[key] !== undefined) loginUpdates[syncMap[key]] = data[key];
+    });
 
     if (Object.keys(loginUpdates).length > 0) {
       await CompanyLogin.findByIdAndUpdate(companyId, loginUpdates);
     }
 
-    /* ======================================================
-     *  🔥 Create / Update Company Profile (No Changes)
-     * ====================================================== */
+    /* ------------------------------------------------------
+     *  Save or Update Company Profile
+     * ------------------------------------------------------ */
     let profile = await CompanyProfile.findOne({ companyId });
 
     if (!profile) {
@@ -110,7 +111,6 @@ exports.updateCompanyProfile = async (req, res) => {
 
   } catch (error) {
     console.error("❌ Error updating company profile:", error);
-
     return res.status(500).json({
       success: false,
       message: "Server error while updating profile",

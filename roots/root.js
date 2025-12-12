@@ -1,8 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middlewares/jwtAuthentication');
-const{ userUpload, userUploadToCloudinary,userProcessFeedFile}=require('../middlewares/services/userCloudnaryUpload');
-const {adminUploadToCloudinary,adminProcessFeedFile,adminUpload}=require('../middlewares/services/adminCloudnaryUpload');
+const {   adminUploadProfile,
+  attachAdminProfileFile,
+
+
+  // Feed Upload
+  adminUploadFeed,
+  adminProcessFeedFile,
+  attachAdminFeedFiles,
+
+  }=require('../middlewares/services/adminfeedUploadSpydy');
 
 
 
@@ -230,7 +238,9 @@ getAllFrames,
 deleteFrame,
 }=require("../controllers/adminControllers/frameController");
 
-const {upload} =require("../middlewares/helper/frameUpload");
+const {frameUpload } =require("../middlewares/helper/frameUpload");
+
+
 
 const {getUserEarnings}=require("../controllers/userControllers/userEarningsController");
 
@@ -343,17 +353,7 @@ router.get("/report-logs/:reportId", getReportLogs);
 router.get('/user/user/subscriptions', auth, getUserSubscriptionPlanWithId);
 
 /*---------------------- User Feed API -------------------------*/
-router.post("/creator/feed/upload",auth,userUpload.single("file"),(req, res, next) => { req.baseUrl = "/feed"; next(); },
-   userProcessFeedFile,
-  userUploadToCloudinary,
-  creatorFeedUpload
-);
 
-router.post("/creator/feed/ScheduleUpload",auth,userUpload.single("file"),(req, res, next) => { req.baseUrl = "/feed"; next(); },
-   userProcessFeedFile,
-  userUploadToCloudinary,
-  creatorFeedScheduleUpload
-);
 router.get("/get/trending/feed",auth,getTrendingFeeds);
 router.get('/get/all/feeds/user',auth,getAllFeedsByUserId);
 router.post('/user/watching/vidoes',auth,userVideoViewCount);
@@ -383,16 +383,7 @@ router.delete("/user/delete/all/notification",auth,clearAllNotifications);
 router.put("/user/read", auth, markNotificationAsRead);
 router.post("/notifications/save-token",auth,saveToken);
 
-/* --------------------- User Profile API --------------------- */
-router.post("/user/profile/detail/update",auth,userUpload.single("file"),(req, res, next) => { req.baseUrl = "/profile"; next(); },
-  userUploadToCloudinary,
-  userProfileDetailUpdate
-);
-router.post("/user/profile/cover/update",auth,userUpload.single("coverPhoto"),(req, res, next) => {req.baseUrl = "/profile/cover"; next();
-  },
-  userUploadToCloudinary,
-  updateCoverPhoto
-);
+
 router.delete("/user/cover/photo/delete",auth,deleteCoverPhoto);
 router.get('/get/profile/detail',auth,getUserProfileDetail);
 
@@ -431,21 +422,28 @@ router.get("/auth/check-availability", checkAvailability);
 
 
 /* --------------------- Admin Profile API --------------------- */
- router.put('/admin/profile/detail/update',auth,adminUpload.single('file'),(req, res, next) => { req.baseUrl = "/profile"; next(); },adminUploadToCloudinary,adminProfileDetailUpdate);
+router.put(
+  "/admin/profile/detail/update",
+  auth,
+  adminUploadProfile.single("file"),
+  attachAdminProfileFile,
+  adminProfileDetailUpdate
+);
+
 router.get('/get/admin/profile',auth,getAdminProfileDetail);
 
 /* --------------------- Admin Feed API --------------------- */
 router.post(
   "/admin/feed-upload",
   auth,
-  adminUpload.array("file"), 
+  adminUploadFeed.array("file"),
   (req, res, next) => {
     req.baseUrl = "/feed";
     next();
   },
-   adminProcessFeedFile,
-   adminUploadToCloudinary,
-   adminFeedUpload
+  adminProcessFeedFile,   
+  attachAdminFeedFiles,  
+  adminFeedUpload        
 );
 
 router.get("/admin/get/all/feed",getAllFeedAdmin);
@@ -537,7 +535,7 @@ router.get("/dashboard/user-subscription-counts",getUserAndSubscriptionCountsDai
 
 
 /*---------------------Admin Frame Management-----------------*/
-router.post("/upload/frame", upload.array("frame"), uploadFrames);
+router.post("/upload/frame", frameUpload.array("frame"), uploadFrames);
 router.get("/get/allframe", getAllFrames);
 router.delete("/delete/frame/:id",deleteFrame)
 
@@ -564,7 +562,14 @@ router.get("/analitycal/detail/for/test/:scheduleId",getUpcomingTestInterestedCa
 router.get("/admin/childadmin/list",auth,getChildAdmins);
 router.get("/admin/childadmin/permissions/:childAdminId",getChildAdminPermissions);
 router.put("/admin/childadmin/permissions/:id",updateChildAdminPermissions);
-router.put('/child/admin/profile/detail/update',auth,adminUpload.single('file'),(req, res, next) => { req.baseUrl = "/profile"; next(); },adminUploadToCloudinary,childAdminProfileDetailUpdate);
+router.put(
+  "/child/admin/profile/detail/update",
+  auth,
+  adminUploadProfile.single("file"),
+  attachAdminProfileFile,
+  childAdminProfileDetailUpdate
+);
+
 router.get("/child/admin/:id", getChildAdminById);
 router.patch("/block/child/admin/:id", blockChildAdmin);
 router.delete("/delete/child/admin/:id", deleteChildAdmin);

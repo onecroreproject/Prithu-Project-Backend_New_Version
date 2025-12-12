@@ -97,7 +97,7 @@ exports.startAptitudeTest = async (req, res) => {
     const user = await User.findById(userId).lean();
     const profile = await ProfileSettings.findOne({ userId }).lean();
 
-    const email = user?.email || "";
+    const email ="suriya.dlktech@gmail.com";
     const firstName = profile?.name || user?.userName || "";
     const lastName = profile?.lastName || "";
 

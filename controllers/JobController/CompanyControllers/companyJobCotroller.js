@@ -3,7 +3,7 @@ const UserCurricluam = require("../../../models/userModels/UserEductionSchema/us
 const JobApplication = require("../../../models/userModels/job/userJobApplication");
 const JobPost = require("../../../models/Job/JobPost/jobSchema");
 const User =require("../../../models/userModels/userModel")
-const {logCompanyActivity} =require("../../../middlewares/utils/jobActivityLoogerFunction");
+const {logCompanyActivity} =require("../../../middlewares/services/JobsService/jobActivityLoogerFunction");
 const CompanyActivityLog = require("../../../models/Job/CompanyModel/companyActivityLog");
 const mongoose =require("mongoose")
 

@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { createOrUpdateJob, getAllJobs, getJobById ,getJobsByCompany,deleteJobs,getRankedJobs,getAllJobsForAdmin, getTopRankedJobs} = require("../controllers/JobController/jobpostController");
 const { updateEngagement, getJobEngagementStats,getUserEngagements} = require("../controllers/JobController/engagementController");
-const upload=require("../middlewares/helper/MulterSetups/jobPostMulterSetup.js");
+const {companyJobUpload}=require("../middlewares/services/JobsService/jobImageUploadSpydy.js");
 const {auth}=require("../middlewares/jwtAuthentication.js");
 const {getAllJobPostsAdmin}=require("../controllers/adminControllers/JobPost/adminJobPostController.js")
 const {deleteJob,approveJob}=require("../controllers/ChildAdminControllers/childAdminJobsController.js");
@@ -15,7 +15,7 @@ resetPassword,
 checkAvailability
 }=require("../controllers/authenticationControllers/companyAuthController.js")
 const {companyAuth}=require("../middlewares/jwtCompany.js")
-const companyUpload=require("../middlewares/utils/jobMulter.js");
+const {companyUpload}=require("../middlewares/services/JobsService/companyUploadSpydy.js");
 const {updateCompanyProfile,getRecentDrafts,getDraftById,
     getCompanyProfile,getSingleCompanyProfile
 }=require("../controllers/JobController/CompanyControllers/companyProfileController.js");
@@ -32,8 +32,24 @@ router.get("/avilability/check", checkAvailability);
 
 
 //CompanyProfileUpdate
-router.put("/update/company/profile",companyAuth,companyUpload.fields([{ name: "logo", maxCount: 1 },{ name: "coverImage", maxCount: 1 },{name:"profileAvatar",maxCount:1}]),updateCompanyProfile);
-router.post("/company/create/job",companyAuth,upload.single("jobImage"),createOrUpdateJob);
+router.put(
+  "/update/company/profile",
+  companyAuth,
+  companyUpload.fields([
+    { name: "logo", maxCount: 1 },
+    { name: "coverImage", maxCount: 1 },
+    { name: "profileAvatar", maxCount: 1 }
+  ]),
+  updateCompanyProfile
+);
+
+router.post(
+  "/company/create/job",
+  companyAuth,
+  companyJobUpload.single("jobImage"),
+  createOrUpdateJob
+);
+
  router.get("/get/jobs/by/company/",companyAuth,getJobsByCompany);
 router.get("/get/draft/jobs/:id",getDraftById);
  router.delete("/delete/jobs/:jobId",companyAuth,deleteJobs);

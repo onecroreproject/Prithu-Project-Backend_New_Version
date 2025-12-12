@@ -1,24 +1,41 @@
 const mongoose = require("mongoose");
-const {prithuDB}=require("../database");
+const { prithuDB } = require("../database");
 
 const feedSchema = new mongoose.Schema(
   {
-    type: { type: String, required: true }, // image/video
-    language: { type: String,  },
+    // image | video
+    type: { type: String, required: true },
+
+    language: { type: String },
+
     category: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Categories",
       required: true,
     },
 
+    // Video duration (if video)
     duration: { type: Number, default: null },
+
+    // Public URL of stored file
     contentUrl: { type: String, required: true },
 
-    dec: { type: String }, // HTML description
+    // Local filename for deletion / update
+    localFilename: { type: String },
 
-    cloudinaryId: { type: String },
+    // Optional: absolute local path
+    localPath: { type: String },
+
+    // Description
+    dec: { type: String },
+
+    // CLOUDINARY — remove this completely
+    // cloudinaryId: { type: String },
+
+    // Duplicate detection hash
     fileHash: { type: String, index: true },
 
+    // Creator
     createdByAccount: {
       type: mongoose.Schema.Types.ObjectId,
       refPath: "roleRef",
@@ -33,7 +50,7 @@ const feedSchema = new mongoose.Schema(
       index: true,
     },
 
-    // 🌈 Precomputed Theme Color (major performance upgrade)
+    // Precomputed colors
     themeColor: {
       primary: { type: String, default: "#ffffff" },
       secondary: { type: String, default: "#cccccc" },
@@ -44,15 +61,17 @@ const feedSchema = new mongoose.Schema(
       },
       text: { type: String, default: "#000000" },
     },
- hashtags: [{ type: String, index: true }],
-    // 🔥 Precomputed Stats reference (1 lookup only)
+
+    hashtags: [{ type: String, index: true }],
+
+    // Stats
     statsId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "FeedStats",
       index: true,
     },
 
-    // Scheduling
+    // Scheduling support
     isScheduled: { type: Boolean, default: false },
     scheduleDate: { type: Date, default: null, index: true },
 
@@ -70,7 +89,7 @@ feedSchema.pre("save", function (next) {
   next();
 });
 
-// 🚀 PERFORMANCE INDEXES
+// PERFORMANCE INDEXES
 feedSchema.index({ createdAt: -1 });
 feedSchema.index({ createdByAccount: 1 });
 feedSchema.index({ roleRef: 1 });

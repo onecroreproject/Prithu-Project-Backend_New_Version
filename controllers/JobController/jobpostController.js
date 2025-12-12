@@ -10,104 +10,28 @@ const JobEngagement = require("../../models/Job/JobPost/jobEngagementSchema");
 const Payment = require("../../models/Job/JobPost/jobPaymentSchema");
 const CompanyLogin = require("../../models/Job/CompanyModel/companyLoginSchema");
 const CompanyProfile = require("../../models/Job/CompanyModel/companyProfile");
-const { uploadAndReplace } = require("../../middlewares/utils/jobReplaceImage");
-const {logCompanyActivity} =require("../../middlewares/utils/jobActivityLoogerFunction");
+const {logCompanyActivity} =require("../../middlewares/services/JobsService/jobActivityLoogerFunction");
+const {deleteLocalFile} = require("../../middlewares/services/JobsService/jobImageUploadSpydy.js");
 
-/* =============================================================================================
-   1️⃣ CREATE OR UPDATE JOB POST
-   ============================================================================================= */
 exports.createOrUpdateJob = async (req, res) => {
   try {
     const companyId = req.companyId;
-
-    if (!companyId) {
-      return res.status(400).json({
-        success: false,
-        message: "Unauthorized: companyId missing",
-      });
-    }
-
     const body = req.body || {};
 
-    // Accept either jobId or id for backward compatibility
+    if (!companyId) {
+      return res.status(400).json({ success: false, message: "companyId missing" });
+    }
+
     const jobId = body.jobId || body.id || null;
 
-    // --- Helper: normalize status ---
-    const normalizeStatus = (s) => {
-      if (s === null || s === undefined) return undefined;
-      const lower = String(s).trim().toLowerCase();
-      // map common variants if needed (keep mapping minimal)
-      if (lower === "submit" || lower === "submitted") return "submit";
-      if (lower === "active") return "active";
-      if (lower === "draft") return "draft";
-      if (lower === "inactive") return "inactive";
-      if (lower === "expired") return "expired";
-      if (lower === "closed") return "closed";
-      return lower;
-    };
-
-    // --- Helper: Extract array-like fields robustly from req.body ---
-    // Supports:
-    // - real arrays: req.body.field === ['a','b']
-    // - repeated param: field=a&field=b => req.body.field === ['a','b'] (common)
-    // - indexed: field[0]=a, field[1]=b => parsed as body['field[0]'] etc
-    // - JSON string: '["a","b"]'
-    // - comma separated string: "a,b"
-    const extractArrayField = (name) => {
-      // 1) direct array
-      const val = body[name];
-      if (Array.isArray(val)) return val.map(String).filter(v => v !== '');
-
-      // 2) direct string that might be JSON or comma separated
-      if (typeof val === 'string') {
-        const trimmed = val.trim();
-        // try JSON parse
-        try {
-          const parsed = JSON.parse(trimmed);
-          if (Array.isArray(parsed)) return parsed.map(String).filter(v => v !== '');
-        } catch (e) {
-          // not JSON
-        }
-        // fallback split by comma
-        const parts = trimmed.split(',').map(p => p.trim()).filter(p => p !== '');
-        return parts.length ? parts : [];
-      }
-
-      // 3) collect indexed keys like "responsibilities[0]" / "responsibilities[1]"
-      const indexedKeys = Object.keys(body).filter(k => k.startsWith(`${name}[`));
-      if (indexedKeys.length > 0) {
-        // map by index
-        const withIndex = indexedKeys.map(k => {
-          const idxMatch = k.match(/\[(\d+)\]/);
-          const idx = idxMatch ? Number(idxMatch[1]) : 0;
-          return { key: k, idx, value: body[k] };
-        }).sort((a,b) => a.idx - b.idx);
-
-        return withIndex.map(i => String(i.value)).filter(v => v !== '');
-      }
-
-      // 4) collect bracketed "name[]" style keys if present (body may have 'name[]' key)
-      if (body[`${name}[]`]) {
-        const v2 = body[`${name}[]`];
-        if (Array.isArray(v2)) return v2.map(String).filter(v => v !== '');
-        if (typeof v2 === 'string') return v2.split(',').map(p => p.trim()).filter(p => p !== '');
-      }
-
-      return [];
-    };
-
-    /* =======================================================================================
-       🏢 Company Snapshot
-    ======================================================================================= */
+    /* --------------------------------------------------------
+     * Get Company Snapshot
+     * -------------------------------------------------------- */
     const company = await CompanyLogin.findById(companyId).lean();
     const profile = await CompanyProfile.findOne({ companyId }).lean();
 
-    if (!company) {
-      return res.status(404).json({
-        success: false,
-        message: "Company account not found",
-      });
-    }
+    if (!company)
+      return res.status(404).json({ success: false, message: "Company not found" });
 
     const companySnapshot = {
       companyId,
@@ -117,191 +41,73 @@ exports.createOrUpdateJob = async (req, res) => {
       companyWebsite: profile?.socialLinks?.website || "",
     };
 
-    /* =======================================================================================
-       📝 File Upload (multer)
-    ======================================================================================= */
-    const jobImage = req.files?.jobImage?.[0];
-    let finalImage = null;
+    /* --------------------------------------------------------
+     * Handle local job image upload
+     * -------------------------------------------------------- */
+    let jobImageUrl = null;
 
-    if (jobImage) {
-      // uploadAndReplace should accept buffer and optional oldImage and return new URL/path
-      finalImage = await uploadAndReplace(jobImage.buffer, "jobs/images", body.oldImage);
+    if (req.file) {
+      jobImageUrl = `${req.protocol}://${req.get("host")}/media/company/${companyId}/jobs/${req.savedJobFileName}`;
     }
 
-    if (jobImage) {
-    const newFileName = `${companyId}_${newJob._id}_${Date.now()}.png`;
+    /* --------------------------------------------------------
+     * Validate required fields only for ACTIVE jobs
+     * -------------------------------------------------------- */
+    const requiredFields = ["jobTitle", "employmentType", "workMode", "jobDescription"];
 
-    // Save into your uploads/jobs folder
-    const uploadPath = path.join("uploads", "jobs", newFileName);
-    fs.writeFileSync(uploadPath, jobImage.buffer);
-
-    // store filename in DB
-    newJob.jobImage = newFileName;
-    await newJob.save();
-}
-
-    /* =======================================================================================
-       📝 VALIDATION FOR ACTIVE ONLY
-       If the incoming status indicates active (or no status provided), and this is a create,
-       ensure required fields are present. Drafts bypass this strictness.
-    ======================================================================================= */
-    const incomingStatus = normalizeStatus(body.status);
-    if ((incomingStatus === "active" || !body.status) && !jobId) {
-      const requiredFields = [
-        "jobTitle",
-        "employmentType",
-        "workMode",
-        "jobDescription",
-      ];
-
+    if (!jobId && (body.status === "active" || !body.status)) {
       const missing = requiredFields.filter((f) => !body[f]);
-      if (missing.length > 0 && incomingStatus !== "draft") {
+      if (missing.length > 0) {
         return res.status(400).json({
           success: false,
-          message: "Missing required fields",
+          message: "Missing required fields for active job",
           fields: missing,
         });
       }
     }
 
-    /* =======================================================================================
-       🛠 Normalize & build jobData payload
-    ======================================================================================= */
+    /* --------------------------------------------------------
+     * Build job payload
+     * -------------------------------------------------------- */
     const jobData = {
       ...companySnapshot,
-
-      jobTitle: body.jobTitle || "",
-      jobRole: body.jobRole || "",
-      jobCategory: body.jobCategory || "",
-      jobSubCategory: body.jobSubCategory || "",
-      employmentType: body.employmentType || null,
-      workMode: body.workMode || null,
-      shiftType: body.shiftType || null,
-      openingsCount: Number(body.openingsCount) || 1,
-      urgencyLevel: body.urgencyLevel || null,
-      city: body.city || "",
-      state: body.state || "",
-      country: body.country || "",
-      pincode: body.pincode || "",
-      fullAddress: body.fullAddress || "",
-      // remoteEligibility might come as "true"/"false" or boolean
-      remoteEligibility: body.remoteEligibility === "true" || body.remoteEligibility === true || false,
-
-      googleLocation:
-        body.latitude && body.longitude
-          ? {
-              type: "Point",
-              coordinates: [Number(body.longitude), Number(body.latitude)],
-            }
-          : undefined,
-
-      jobDescription: body.jobDescription || "",
-      responsibilities: extractArrayField("responsibilities"),
-      dailyTasks: extractArrayField("dailyTasks"),
-      keyDuties: extractArrayField("keyDuties"),
-
-      requiredSkills: extractArrayField("requiredSkills"),
-      preferredSkills: extractArrayField("preferredSkills"),
-      technicalSkills: extractArrayField("technicalSkills"),
-      softSkills: extractArrayField("softSkills"),
-      toolsAndTechnologies: extractArrayField("toolsAndTechnologies"),
-
-      educationLevel: body.educationLevel || "",
-      degreeRequired: body.degreeRequired || "",
-      certificationRequired: extractArrayField("certificationRequired"),
-      minimumExperience: Number(body.minimumExperience) || 0,
-      maximumExperience: Number(body.maximumExperience) || 0,
-      freshersAllowed: body.freshersAllowed === "true" || body.freshersAllowed === true || false,
-
-      salaryType: body.salaryType || "monthly",
+      ...body,
+      remoteEligibility:
+        body.remoteEligibility === "true" || body.remoteEligibility === true,
+      freshersAllowed:
+        body.freshersAllowed === "true" || body.freshersAllowed === true,
       salaryMin: Number(body.salaryMin) || 0,
       salaryMax: Number(body.salaryMax) || 0,
-      salaryCurrency: body.salaryCurrency || "INR",
-      salaryVisibility: body.salaryVisibility || "public",
-      benefits: extractArrayField("benefits"),
-      perks: extractArrayField("perks"),
-      incentives: body.incentives || "",
-      bonuses: body.bonuses || "",
-
-      hiringManagerName: body.hiringManagerName || "",
-      hiringManagerEmail: body.hiringManagerEmail || "",
-      hiringManagerPhone: body.hiringManagerPhone || "",
-      interviewMode: body.interviewMode || null,
-      interviewLocation: body.interviewLocation || "",
-      interviewRounds: extractArrayField("interviewRounds"),
-      hiringProcess: extractArrayField("hiringProcess"),
-      interviewInstructions: body.interviewInstructions || "",
-
-      startDate: body.startDate || null,
-      endDate: body.endDate || null,
-      contractDuration: body.contractDuration || "",
-      jobTimings: body.jobTimings || "",
-      workingHours: body.workingHours || "",
-      workingDays: body.workingDays || "",
-      holidaysType: body.holidaysType || "",
-
-      resumeRequired: body.resumeRequired === "true" || body.resumeRequired === true,
-      coverLetterRequired: body.coverLetterRequired === "true" || body.coverLetterRequired === true,
-      documentsRequired: extractArrayField("documentsRequired"),
-
-      tags: extractArrayField("tags"),
-      skillKeywords: extractArrayField("skillKeywords"),
-      keywordSearch: extractArrayField("keywordSearch"),
-
-      // Status normalized; default to 'draft' if not present
-      status: normalizeStatus(body.status) || "draft",
-      isApproved: false,
-      isFeatured: false,
-      isPromoted: false,
-      priorityScore: normalizeStatus(body.status) === "active" ? 10 : 1,
+      openingsCount: Number(body.openingsCount) || 1,
+      minimumExperience: Number(body.minimumExperience) || 0,
+      maximumExperience: Number(body.maximumExperience) || 0,
+      status: body.status || "draft",
     };
 
-    if (finalImage) jobData.jobImage = finalImage;
+    if (jobImageUrl) jobData.jobImage = jobImageUrl;
 
-    /* =======================================================================================
-       🟦 UPDATE JOB (including draft updates)
-    ======================================================================================= */
+    /* --------------------------------------------------------
+     * UPDATE JOB
+     * -------------------------------------------------------- */
     if (jobId) {
       const existingJob = await JobPost.findOne({ _id: jobId, companyId });
 
-      if (!existingJob) {
-        return res.status(404).json({
-          success: false,
-          message: "Job not found or unauthorized",
-        });
+      if (!existingJob)
+        return res.status(404).json({ success: false, message: "Job not found" });
+
+      // Delete old image if new one uploaded
+      if (jobImageUrl && existingJob.jobImage) {
+        const oldPath = path.join(
+          __dirname,
+          "../../../media/company",
+          String(companyId),
+          "jobs",
+          path.basename(existingJob.jobImage)
+        );
+        deleteLocalFile(oldPath);
       }
 
-      // If existing job is a draft → always UPDATE in place
-      if (existingJob.status === "draft") {
-        await JobPost.updateOne({ _id: jobId }, { $set: jobData });
-
-        await logCompanyActivity({
-          companyId,
-          action: "JOB_DRAFT_UPDATED",
-          description: `Draft updated for job: ${existingJob.jobTitle}`,
-          jobId: existingJob._id,
-          changes: body,
-          req,
-        });
-
-        return res.status(200).json({
-          success: true,
-          message: "Draft updated successfully",
-          jobId,
-        });
-      }
-
-      // Normal update for non-draft job
       await JobPost.updateOne({ _id: jobId }, { $set: jobData });
-
-      await logCompanyActivity({
-        companyId,
-        action: jobData.status === "draft" ? "JOB_DRAFT_SAVED" : "JOB_UPDATED",
-        description: `${jobData.status === "draft" ? "Draft saved for" : "Updated"} job: ${existingJob.jobTitle}`,
-        jobId: existingJob._id,
-        changes: body,
-        req,
-      });
 
       return res.status(200).json({
         success: true,
@@ -310,19 +116,10 @@ exports.createOrUpdateJob = async (req, res) => {
       });
     }
 
-    /* =======================================================================================
-       🟩 CREATE NEW JOB
-    ======================================================================================= */
+    /* --------------------------------------------------------
+     * CREATE JOB
+     * -------------------------------------------------------- */
     const newJob = await JobPost.create(jobData);
-
-    await logCompanyActivity({
-      companyId,
-      action: jobData.status === "draft" ? "JOB_DRAFT_SAVED" : "JOB_CREATED",
-      description: `${jobData.status === "draft" ? "Draft created for" : "Created"} job: ${jobData.jobTitle || "Untitled Job"}`,
-      jobId: newJob._id,
-      changes: body,
-      req,
-    });
 
     return res.status(201).json({
       success: true,
@@ -332,10 +129,7 @@ exports.createOrUpdateJob = async (req, res) => {
 
   } catch (error) {
     console.error("❌ Error in createOrUpdateJob:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Internal server error",
-    });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -865,10 +659,19 @@ exports.deleteJobs = async (req, res) => {
     const job = await JobPost.findOne({ _id: jobId, companyId });
 
     if (!job)
-      return res.status(404).json({
-        success: false,
-        message: "Job not found or unauthorized",
-      });
+      return res.status(404).json({ success: false, message: "Job not found" });
+
+    // Delete job image
+    if (job.jobImage) {
+      const imgPath = path.join(
+        __dirname,
+        "../../../media/company",
+        String(companyId),
+        "jobs",
+        path.basename(job.jobImage)
+      );
+      deleteLocalFile(imgPath);
+    }
 
     await JobPost.deleteOne({ _id: jobId });
 
@@ -881,6 +684,7 @@ exports.deleteJobs = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
 
 /* =============================================================================================
    5️⃣ GET ALL JOBS BY COMPANY (Dashboard)
