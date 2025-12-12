@@ -81,22 +81,15 @@ exports.getPublicPortfolio = async (req, res) => {
       });
     }
 
-    // 🔹 Check if user's profile is published
+    // 🔹 Fetch profile settings (NO isPublished check)
     const profileSettings = await ProfileSettings.findOne({ userId: user._id }).lean();
 
-    if (!profileSettings || !profileSettings.isPublished) {
-      return res.status(403).json({
-        success: false,
-        message: "This user's profile is not published or unavailable",
-      });
-    }
-
-    // 🔹 Fetch the user's curriculum (UserCurricluam schema)
+    // 🔹 Fetch the user's curriculum
     const curriculum = await UserProfile.findOne({ userId: user._id })
       .populate("userId", "displayName email phoneNumber")
       .lean();
 
-    // If no curriculum found, still return empty structure instead of failing
+    // Default structure if empty
     const curriculumData = curriculum || {
       education: [],
       experience: [],
@@ -117,14 +110,14 @@ exports.getPublicPortfolio = async (req, res) => {
 
     // 🔹 Fetch Aptitude Test Results
     const aptitudeResults = await AptitudeResult.find({ userId: user._id })
-      .sort({ receivedAt: -1 })   // latest first
+      .sort({ receivedAt: -1 })
       .lean();
 
-    // 🔹 Merge All Portfolio Data
+    // 🔹 Merge all portfolio data
     const portfolioData = {
-      user,                     // basic details
-      profileSettings,          // publication settings
-      curriculum: curriculumData,  // full curriculum
+      user,
+      profileSettings,     // now returned regardless of publish status
+      curriculum: curriculumData,
       aptitudeTests: aptitudeResults || []
     };
 
@@ -137,8 +130,8 @@ exports.getPublicPortfolio = async (req, res) => {
       metadata: { platform: "web" },
     });
 
-    // 🔹 Send response
-    res.status(200).json({
+    // 🔹 Response
+    return res.status(200).json({
       success: true,
       data: portfolioData,
       message: "Public portfolio fetched successfully",
@@ -146,13 +139,14 @@ exports.getPublicPortfolio = async (req, res) => {
 
   } catch (error) {
     console.error("❌ getPublicPortfolio error:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Server error while fetching public portfolio",
       error: error.message,
     });
   }
 };
+
 
 
 

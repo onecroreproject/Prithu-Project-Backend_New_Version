@@ -1,4 +1,4 @@
-const CompanyActivityLog = require("../../models/Job/CompanyModel/companyActivityLog");
+const CompanyActivityLog = require("../../../models/Job/CompanyModel/companyActivityLog");
 
 exports.logCompanyActivity = async ({
   companyId,

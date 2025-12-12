@@ -15,6 +15,8 @@ const ImageStats = require("../../models/userModels/MediaSchema/imageViewModel.j
 const VideoStats = require("../../models/userModels/MediaSchema/videoViewStatusModel");
 const cloudinary = require("cloudinary").v2;
 const HiddenPost = require("../../models/userModels/hiddenPostSchema.js")
+const {deleteFeedFile}=require("../../middlewares/services/feedUploadSpydy.js");
+const Categories=require("../../models/categorySchema.js");
 
 
 
@@ -1738,8 +1740,6 @@ exports.deleteFeed = async (req, res) => {
   try {
     const { feedId } = req.body;
 
-    console.log(req);
-
     if (!feedId) {
       return res.status(400).json({
         success: false,
@@ -1747,11 +1747,8 @@ exports.deleteFeed = async (req, res) => {
       });
     }
 
-    // ---------------------------------------------
-    // 1️⃣ Fetch Feed (needed for cloudinaryId)
-    // ---------------------------------------------
-    const feed = await Feed.findById(feedId).lean(); // lean = faster
-
+    // 1️⃣ Fetch feed data
+    const feed = await Feed.findById(feedId).lean();
     if (!feed) {
       return res.status(404).json({
         success: false,
@@ -1759,27 +1756,32 @@ exports.deleteFeed = async (req, res) => {
       });
     }
 
-    // ---------------------------------------------
-    // 2️⃣ Prepare parallel delete tasks
-    // ---------------------------------------------
+    // 2️⃣ Prepare delete tasks
     const deleteTasks = [];
 
-    // Cloudinary delete (non-blocking)
-    if (feed.cloudinaryId) {
-      deleteTasks.push(
-        cloudinary.uploader
-          .destroy(feed.cloudinaryId)
-          .catch((err) => console.log("⚠ Cloudinary delete error:", err.message))
+    // 2a️⃣ Delete local feed file
+    if (feed.localPath) {
+      deleteFeedFile(feed.localPath);
+    } else if (feed.localFilename) {
+      // fallback: rebuild path
+      const typeFolder = feed.type === "video" ? "videos" : "images";
+      const filePath = path.join(
+        __dirname,
+        "../../media/feed/user",
+        String(feed.createdByAccount),
+        typeFolder,
+        feed.localFilename
       );
+      deleteFeedFile(filePath);
     }
 
-    // Feed document
+    // 2b️⃣ Delete feed document
     deleteTasks.push(Feed.findByIdAndDelete(feedId));
 
-    // Comments
+    // 2c️⃣ Delete comments
     deleteTasks.push(UserComment.deleteMany({ feedId }));
 
-    // Feed actions
+    // 2d️⃣ Remove from user actions
     deleteTasks.push(
       UserFeedActions.updateMany(
         {},
@@ -1795,17 +1797,22 @@ exports.deleteFeed = async (req, res) => {
       )
     );
 
-    // Views
+    // 2e️⃣ Remove Views
     deleteTasks.push(UserView.deleteMany({ feedId }));
 
-    // ---------------------------------------------
-    // 3️⃣ Execute all tasks in parallel
-    // ---------------------------------------------
+    // 2f️⃣ Remove feed from category
+    if (feed.category) {
+      deleteTasks.push(
+        Categories.findByIdAndUpdate(feed.category, {
+          $pull: { feedIds: feedId },
+        })
+      );
+    }
+
+    // 3️⃣ Execute all tasks
     await Promise.all(deleteTasks);
 
-    // ---------------------------------------------
     // 4️⃣ Response
-    // ---------------------------------------------
     return res.status(200).json({
       success: true,
       message: "Feed and all related data deleted successfully",

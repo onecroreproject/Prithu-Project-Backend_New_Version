@@ -9,82 +9,45 @@ const Account=require("../../models/accountSchemaModel");
 
 exports.adminFeedUpload = async (req, res) => {
   try {
-    const userId = req.Id || req.body.userId;
-    if (!userId) {
-      return res.status(400).json({ message: "User ID is required" });
-    }
-
+    const adminId = req.Id;
+    const roleRef = req.role; // "Admin" | "Child_Admin"
     const { language, categoryId, type, dec } = req.body;
 
-    if (!language || !categoryId || !type || !["image", "video"].includes(type)) {
-      return res.status(400).json({
-        message: "Invalid language, categoryId or type",
-      });
-    }
+    if (!adminId) return res.status(400).json({ message: "User ID missing" });
+    if (!language || !categoryId || !type)
+      return res.status(400).json({ message: "Missing required fields" });
 
-    const originalFiles = req.files || [];
-    if (originalFiles.length === 0) {
+    const files = req.localFiles || [];
+    if (files.length === 0)
       return res.status(400).json({ message: "No files uploaded" });
+
+    const results = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const description = Array.isArray(dec) ? dec[i] : dec;
+
+      const feed = await FeedService.uploadFeed(
+        { language, categoryId, type, dec: description },
+        file,
+        adminId,
+        roleRef
+      );
+
+      results.push(feed);
     }
-
-    const cloudFiles = req.cloudinaryFiles || [];
-    if (cloudFiles.length !== originalFiles.length) {
-      return res.status(400).json({
-        message: "Mismatch between uploaded files and Cloudinary files",
-      });
-    }
-
-    const uploadedFilesSet = new Set();
-
-    const feedResults = await Promise.all(
-      cloudFiles.map((cloudFile, index) => {
-        const fileKey =
-          cloudFile.url ||
-          cloudFile.secure_url ||
-          originalFiles[index].originalname;
-
-        if (uploadedFilesSet.has(fileKey)) return null;
-        uploadedFilesSet.add(fileKey);
-
-        // 🆕 Handle description — supports both single and multiple descriptions
-        const description =
-          Array.isArray(dec) && dec[index] ? dec[index] : dec || "";
-
-        // ✅ Pass duration + description to FeedService
-        return FeedService.uploadFeed(
-          { language, categoryId, type, dec: description },
-          {
-            ...cloudFile,
-            duration:
-              originalFiles[index].videoDuration ||
-              cloudFile.duration ||
-              null,
-          },
-          userId
-        );
-      })
-    );
-
-    const filteredResults = feedResults.filter(Boolean);
 
     return res.status(201).json({
-      message:
-        filteredResults.length > 1
-          ? "All feeds uploaded successfully"
-          : "Feed uploaded successfully",
-      feeds: filteredResults.map((r) => r.feed),
-      categories: filteredResults.map((r) => r.categoryId),
-      languages: filteredResults.map((r) => r.language),
-      roleTypes: filteredResults.map((r) => r.roleType),
-      types: filteredResults.map((r) => r.type),
+      message: results.length > 1 ? "All feeds uploaded" : "Feed uploaded",
+      feeds: results.map((r) => r.feed),
     });
-  } catch (error) {
-    console.error("Error uploading feed:", error);
-    return res
-      .status(500)
-      .json({ message: error.message || "Server error" });
+
+  } catch (err) {
+    console.error("Admin feed upload error:", err);
+    return res.status(500).json({ message: err.message });
   }
 };
+
 
 
 

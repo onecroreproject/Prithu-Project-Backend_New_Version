@@ -1617,98 +1617,72 @@ exports.deleteUserAndAllRelated = async (req, res) => {
 
 exports.getUpcomingBirthdays = async (req, res) => {
   try {
-    const today = new Date();
+    const userId = req.Id; // Logged-in user
 
-    // Fetch all users with valid DOB
-    const users = await ProfileSettings.aggregate([
+    // -----------------------------
+    // 1️⃣ Find all users current user follows
+    // -----------------------------
+    const following = await Followers.find({ followerId: userId }).select("creatorId");
+
+    const followingUserIds = following.map(f => f.creatorId);
+
+    if (followingUserIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        birthdays: [],
+        message: "No followed users"
+      });
+    }
+
+    // -----------------------------
+    // 2️⃣ Get current and next month
+    // -----------------------------
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1; // 1-12
+    const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
+
+    // -----------------------------
+    // 3️⃣ Query profiles with birthday in current or next month
+    // -----------------------------
+    const profiles = await ProfileSettings.aggregate([
       {
-        $match: { dateOfBirth: { $ne: null } },
-      },
-      {
-        $addFields: {
-          birthMonth: { $month: "$dateOfBirth" },
-          birthDay: { $dayOfMonth: "$dateOfBirth" },
-        },
+        $match: {
+          userId: { $in: followingUserIds },
+          dateOfBirth: { $ne: null }
+        }
       },
       {
         $project: {
-          _id: 1,
-          userName: 1,
-          displayName: 1,
+          userId: 1,
+          name: 1,
+          lastName: 1,
           profileAvatar: 1,
           dateOfBirth: 1,
-          birthMonth: 1,
-          birthDay: 1,
-        },
+          month: { $month: "$dateOfBirth" },
+          day: { $dayOfMonth: "$dateOfBirth" }
+        }
       },
-    ]);
-
-    if (!users.length) {
-      return res.status(404).json({
-        success: false,
-        message: "No users with date of birth found.",
-      });
-    }
-
-    // Map each user's next birthday date
-    const upcomingBirthdays = users.map((user) => {
-      const nextBirthday = new Date(
-        today.getFullYear(),
-        user.birthMonth - 1,
-        user.birthDay
-      );
-
-      // If birthday has already passed this year, move to next year
-      if (nextBirthday < today) {
-        nextBirthday.setFullYear(today.getFullYear() + 1);
+      {
+        $match: {
+          month: { $in: [currentMonth, nextMonth] }
+        }
+      },
+      {
+        $sort: { month: 1, day: 1 } // Upcoming order
       }
-
-      return { ...user, nextBirthday };
-    });
-
-    // Sort birthdays by soonest date
-    upcomingBirthdays.sort((a, b) => a.nextBirthday - b.nextBirthday);
-
-    // Filter birthdays within the next 12 months
-    const oneYearFromNow = new Date(
-      today.getFullYear() + 1,
-      today.getMonth(),
-      today.getDate()
-    );
-    const filteredBirthdays = upcomingBirthdays.filter(
-      (user) => user.nextBirthday <= oneYearFromNow
-    );
-
-    if (!filteredBirthdays.length) {
-      return res.status(404).json({
-        success: false,
-        message: "No upcoming birthdays in the next 12 months.",
-      });
-    }
-
-    // Format the final response
-    const formattedBirthdays = filteredBirthdays.map((user) => ({
-      _id: user._id,
-      userName: user.userName,
-      displayName: user.displayName,
-      profileAvatar: user.profileAvatar,
-      dateOfBirth: user.dateOfBirth,
-      nextBirthday: user.nextBirthday,
-      birthMonth: user.birthMonth,
-      birthDay: user.birthDay,
-    }));
+    ]);
 
     return res.status(200).json({
       success: true,
-      total: formattedBirthdays.length,
-      users: formattedBirthdays,
+      birthdays: profiles
     });
+
   } catch (error) {
-    console.error("Error fetching upcoming birthdays:", error);
-    res.status(500).json({
+    console.error("❌ Error fetching upcoming birthdays:", error);
+    return res.status(500).json({
       success: false,
-      message: "Server error while fetching upcoming birthdays.",
-      error: error.message,
+      message: "Server error",
+      error: error.message
     });
   }
 };
