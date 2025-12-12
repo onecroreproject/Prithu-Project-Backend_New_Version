@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middlewares/jwtAuthentication');
-const{ userUpload, userUploadToCloudinary,userProcessFeedFile}=require('../middlewares/services/userCloudnaryUpload');
+const{  userUploadToCloudinary,userProcessFeedFile}=require('../middlewares/services/userCloudnaryUpload');
+const {userUpload,attachUserFile}=require("../middlewares/services/userprofileUploadSpydy");
 const {adminUploadToCloudinary,adminProcessFeedFile,adminUpload}=require('../middlewares/services/adminCloudnaryUpload');
 
 
@@ -348,7 +349,13 @@ const{
   removeHiddenPost,
 }=require("../controllers/userControllers/hiddenPostController");
 const { applyForJob } = require('../controllers/userControllers/userJobController');
-const { startAptitudeTest ,aptitudeCallback,getLatestAptitudeResult} = require('../controllers/aptitudeController');
+const { startAptitudeTest ,
+  aptitudeCallback,
+  getLatestAptitudeResult,
+  addInterestedUser,
+  getInterestedUsers,
+  getAllUserTestSchedules,
+} = require('../controllers/aptitudeController');
 
 
 
@@ -470,6 +477,9 @@ router.get('/user/get/all/category', getUserPostCategories);
 router.post("/aptitude/start-test", auth, startAptitudeTest);
 router.post("/aptitude/callback", aptitudeCallback);
 router.get("/aptitude/latest/results", auth, getLatestAptitudeResult);
+router.get("/aptitude/schedule",auth,getAllUserTestSchedules);
+router.get("/aptitude/intrested/:scheduleId",getInterestedUsers);
+router.post("/aptitude/user/intrest",auth,addInterestedUser);
 
 
  /*_______________________User JOB API_____________________________*/
@@ -486,15 +496,38 @@ router.put("/user/read", auth, markNotificationAsRead);
 router.post("/notifications/save-token",auth,saveToken);
 
 /* --------------------- User Profile API --------------------- */
-router.post("/user/profile/detail/update",auth,userUpload.single("file"),(req, res, next) => { req.baseUrl = "/profile"; next(); },
-  userUploadToCloudinary,
+// router.post("/user/profile/detail/update",auth,userUpload.single("file"),(req, res, next) => { req.baseUrl = "/profile"; next(); },
+//   userUploadToCloudinary,
+//   userProfileDetailUpdate
+// );
+
+router.post(
+  "/user/profile/detail/update",
+  auth,
+  userUpload.single("file"),
+  (req, res, next) => { req.baseUrl = "/profile"; next(); },
+  attachUserFile,
   userProfileDetailUpdate
 );
-router.post("/user/profile/cover/update",auth,userUpload.single("coverPhoto"),(req, res, next) => {req.baseUrl = "/profile/cover"; next();
-  },
-  userUploadToCloudinary,
+
+
+// router.post("/user/profile/cover/update",auth,userUpload.single("coverPhoto"),(req, res, next) => {req.baseUrl = "/profile/cover"; next();
+//   },
+//   userUploadToCloudinary,
+//   updateCoverPhoto
+// );
+
+
+router.post(
+  "/user/profile/cover/update",
+  auth,
+  userUpload.single("coverPhoto"),
+  (req, res, next) => { req.baseUrl = "/cover"; next(); },
+  attachUserFile,
   updateCoverPhoto
 );
+
+
 router.delete("/user/cover/photo/delete",auth,deleteCoverPhoto);
 router.get('/get/profile/detail',auth,getUserProfileDetail);
 router.get('/get/single/profile/detail',getUserProfileDetail);

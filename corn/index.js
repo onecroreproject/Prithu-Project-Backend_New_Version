@@ -7,6 +7,7 @@ const deleteQueue = require("../queue/deleteReportQueue");
 const feedQueue = require("../queue/feedPostQueue");
 const trendingQueue = require("../queue/treandingQueue");
 const dailyAnalyticsQueue = require("../queue/salesMetricksUpdate");
+const certificateQueue = require("../queue/aptitudeCertificateSend");
 
 // NEW: hashtag trending queue (includes worker inside)
 const hashtagTrendingQueue = require("../queue/hashTagTrendingQueue");
@@ -66,6 +67,13 @@ cron.schedule(
     { timezone }
   );
 
+
+
+cron.schedule(
+  "*/10 * * * *",
+  () => certificateQueue.add({}),
+  { timezone }
+);
 
 
 

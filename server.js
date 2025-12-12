@@ -40,8 +40,11 @@ app.use("/web/job", jobRoot);
 app.use("/api", root);
 app.use("/web/api", webRoot);
 
+app.use("/media", express.static(path.join(__dirname, "media")));
+
+
 // Cron
-startCrons();
+//startCrons();
 
 // Start Server
 server.listen(process.env.PORT || 5000, () => {

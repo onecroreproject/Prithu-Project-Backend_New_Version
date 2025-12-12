@@ -1,5 +1,6 @@
 const { body, validationResult } = require("express-validator");
 const mongoose = require("mongoose");
+const path=require("path");
 const Profile = require("../../models/profileSettingModel");
 const User = require("../../models/userModels/userModel");
 const Admin = require("../../models/adminModels/adminModel");
@@ -18,6 +19,7 @@ const {calculateProfileCompletion} =require("../../middlewares/helper/profileCom
 const ProfileSettings=require("../../models/profileSettingModel");
 const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
 const Follower=require("../../models/creatorFollowerModel.js");
+const {deleteLocalFile}=require("../../middlewares/services/userprofileUploadSpydy.js");
 
 
 
@@ -51,7 +53,7 @@ exports.userProfileDetailUpdate = async (req, res) => {
     const userId = req.Id || req.body.userId;
     if (!userId) return res.status(400).json({ message: "User ID is required" });
 
-    // ✅ Validation
+    // Validation
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -60,7 +62,7 @@ exports.userProfileDetailUpdate = async (req, res) => {
       });
     }
 
-    // ✅ Allowed fields (added country, city)
+    // Allowed fields
     const allowedFields = [
       "phoneNumber",
       "bio",
@@ -78,9 +80,9 @@ exports.userProfileDetailUpdate = async (req, res) => {
       "maritalDate",
       "profileSummary",
       "address",
-      "country", // ✅ Added
-      "city", 
-      "whatsAppNumber",// ✅ Added
+      "country",
+      "city",
+      "whatsAppNumber",
     ];
 
     const updateData = {};
@@ -91,7 +93,7 @@ exports.userProfileDetailUpdate = async (req, res) => {
       if (value !== undefined) updateData[field] = value;
     }
 
-    // ✅ Parse & clean social links
+    // Parse social links
     if (req.body.socialLinks) {
       try {
         let links = {};
@@ -127,51 +129,55 @@ exports.userProfileDetailUpdate = async (req, res) => {
       }
     }
 
-    // ✅ Find or create profile
+    // Find profile
     const profile = await Profile.findOne({ userId });
 
-    // ✅ Handle Cloudinary avatar
-    if (req.cloudinaryFile) {
-      if (profile?.profileAvatarId && profile.profileAvatarId !== req.cloudinaryFile.public_id) {
-        await userDeleteFromCloudinary(profile.profileAvatarId);
-      }
+    // -----------------------------------------
+    // ✅ NEW LOCAL STORAGE HANDLING
+    // -----------------------------------------
+   if (req.localFile) {
+  if (profile?.profileAvatarFilename) {
+    const oldPath = path.join(
+      __dirname,
+      "../../media/user",
+      userId.toString(),
+      "profilepic",
+      profile.profileAvatarFilename
+    );
+    deleteLocalFile(oldPath);
+  }
 
-      updateData.profileAvatar = req.cloudinaryFile.url;
-      updateData.profileAvatarId = req.cloudinaryFile.public_id;
+  updateData.profileAvatar = req.localFile.url;
+  updateData.profileAvatarFilename = req.localFile.filename;
+  updateData.avatarUpdatedAt = req.localFile.uploadedAt;
+}
 
-      try {
-        const { secure_url, public_id } = await removeImageBackground(req.cloudinaryFile.url);
-        updateData.modifyAvatar = secure_url;
-        updateData.modifyAvatarPublicId = public_id;
-      } catch (err) {
-        console.error("⚠️ Background removal failed:", err.message);
-      }
-    }
 
-    // ✅ Handle username
+    // Handle username
     const userName = req.body.userName?.replace(/\s+/g, "").trim();
     if (userName) updateData.userName = userName;
 
-    // ✅ Update or create profile
+    // Update or create profile
     const updatedProfile = await Profile.findOneAndUpdate(
       { userId },
       { $set: updateData },
       { new: true, upsert: true }
     );
 
-    // ✅ Sync username in User model
+    // Sync username
     if (userName) {
-      await User.findByIdAndUpdate(userId, { $set: { userName } }, { new: true });
+      await User.findByIdAndUpdate(userId, { $set: { userName } });
     }
- await logUserActivity({
-                userId,
-                actionType: "UPDATE_PROFILE",
-                targetId:userId,
-                targetModel: "Feed",
-                metadata: { platform: "web" },
-              });
 
-    // ✅ Populate updated profile
+    await logUserActivity({
+      userId,
+      actionType: "UPDATE_PROFILE",
+      targetId: userId,
+      targetModel: "Feed",
+      metadata: { platform: "web" },
+    });
+
+    // Populate profile
     const populatedProfile = await Profile.findById(updatedProfile._id)
       .populate("userId", "userName email role")
       .lean();
@@ -185,6 +191,7 @@ exports.userProfileDetailUpdate = async (req, res) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
 
 
 
@@ -1043,25 +1050,38 @@ exports.updateCoverPhoto = async (req, res) => {
     const userId = req.Id || req.body.userId;
     if (!userId) return res.status(400).json({ message: "userId is required" });
 
-    if (!req.cloudinaryFile)
+    if (!req.localFile)
       return res.status(400).json({ message: "Cover photo file is missing" });
 
     const profile = await Profile.findOne({ userId });
 
-    // Delete old photo if exists and not same
-    if (profile?.coverPhotoId && profile.coverPhotoId !== req.cloudinaryFile.public_id) {
-      await userDeleteFromCloudinary(profile.coverPhotoId);
+    // ----------------------------------------------
+    // 1️⃣ DELETE OLD COVER IMAGE IF EXISTS
+    // ----------------------------------------------
+    if (profile?.coverPhotoFilename) {
+      const oldPath = path.join(
+        __dirname,
+        "../../media/user",
+        userId.toString(),
+        "coverpic",
+        profile.coverPhotoFilename
+      );
+
+      deleteLocalFile(oldPath);
     }
 
-    // Prepare new data
+    // ----------------------------------------------
+    // 2️⃣ PREPARE NEW DATA
+    // ----------------------------------------------
     const updateData = {
-      coverPhoto: req.cloudinaryFile.url,
-      coverPhotoId: req.cloudinaryFile.public_id,
-      modifiedCoverPhoto: req.cloudinaryFile.url,
-      modifiedCoverPhotoId: req.cloudinaryFile.public_id,
+      coverPhoto: req.localFile.url,
+      coverPhotoFilename: req.localFile.filename,
+      coverUpdatedAt: req.localFile.uploadedAt,
     };
 
-    // Create or Update
+    // ----------------------------------------------
+    // 3️⃣ UPDATE OR CREATE PROFILE
+    // ----------------------------------------------
     const updatedProfile = await Profile.findOneAndUpdate(
       { userId },
       { $set: updateData },
@@ -1073,8 +1093,9 @@ exports.updateCoverPhoto = async (req, res) => {
       coverPhoto: updatedProfile.coverPhoto,
       profile: updatedProfile,
     });
+
   } catch (error) {
-    console.error("Error updating cover photo:", error);
+    console.error("❌ Error updating cover photo:", error);
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };

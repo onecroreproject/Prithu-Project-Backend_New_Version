@@ -108,25 +108,34 @@ exports.sendOtp = async (req, res) => {
     const { email } = req.body;
 
     const otp = generateOTP(); // 4-digit OTP
-    const expiry = Date.now() + 5 * 60 * 1000; // 5 minutes
+    const expiryMinutes = 5;
+    const expiry = Date.now() + expiryMinutes * 60 * 1000; // 5 minutes
 
-    // --------------- CHECK IF COMPANY ALREADY EXISTS ---------------
+    // CHECK IF COMPANY EXISTS
     const company = await Company.findOne({ email });
 
+    // =====================================================================
+    // EXISTING COMPANY → SEND LOGIN OTP
+    // =====================================================================
     if (company) {
       company.otp = otp;
       company.otpExpiry = expiry;
       await company.save();
 
-      // Send login OTP email
       await sendTemplateEmail({
-        templateName: "company-otp.html",
+        templateName: "companyOtp.html",   // your new template
         to: email,
         subject: "Your OTP Code for Login",
+
         placeholders: {
+          logoCid: "companyLogo",              // your CID (or empty if not using)
+          companyName: company.companyName || "Prithu Company",
+          name: company.companyName || "User",
           otp,
-          email,
+          expiry: expiryMinutes,
+          redirectUrl: "https://prithu.app/company/login"
         },
+
         embedLogo: false,
       });
 
@@ -135,32 +144,29 @@ exports.sendOtp = async (req, res) => {
       return res.json({
         success: true,
         message: "OTP sent successfully.",
-        otp, // remove in production
+        otp, // REMOVE in production
       });
     }
 
-    // --------------- NEW USER (TEMP OTP STORE) ---------------
+    // =====================================================================
+    // NEW COMPANY → TEMP OTP STORE
+    // =====================================================================
     tempOtpStore[email] = { otp, expiry };
 
-    const registrationId = "REG-" + Math.floor(100000 + Math.random() * 900000);
-
-    // Send registration OTP template
     await sendTemplateEmail({
-      templateName: "bussinessTemplate.html",
+      templateName: "company-otp.html",
       to: email,
       subject: "Verify Your Email - OTP Code",
+
       placeholders: {
+        logoCid: "companyLogo",
+        companyName: "New Company",
+        name: "New User",
         otp,
-        company_name: "New Company",
-        company_email: email,
-        registration_id: registrationId,
-
-        dashboard_url: "https://prithu.app/company/login",
-        privacy_policy_url: "https://prithu.in/privacy-policy",
-        terms_url: "https://prithu.in/terms",
-
-        current_year: new Date().getFullYear(),
+        expiry: expiryMinutes,
+        redirectUrl: "https://prithu.app/company/register"
       },
+
       embedLogo: false,
     });
 
@@ -169,7 +175,7 @@ exports.sendOtp = async (req, res) => {
     return res.json({
       success: true,
       message: "OTP sent successfully.",
-      otp, // REMOVE IN PRODUCTION
+      otp, // REMOVE in production
     });
 
   } catch (error) {
@@ -180,6 +186,7 @@ exports.sendOtp = async (req, res) => {
     });
   }
 };
+
 
 
 
