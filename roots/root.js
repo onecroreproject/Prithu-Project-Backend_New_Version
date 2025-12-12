@@ -274,6 +274,23 @@ const { getPostVolumeWeekly,
 
 
 
+ const{
+  getDashboardStats,
+getSystemStatus,
+getRecentTests,
+getUpcomingTests,
+exportTestResults,
+getTopPerformers,
+createTestSchedule,
+getAllTestSchedules,
+getSingleTestSchedule,
+updateTestSchedule,
+deleteTestSchedule,
+getUpcomingTestInterestedCandidates,
+ }=require("../controllers/aptitudeController");
+
+
+
 
 
 // /* --------------------- User Referral API Actions --------------------- */
@@ -523,6 +540,21 @@ router.get("/dashboard/user-subscription-counts",getUserAndSubscriptionCountsDai
 router.post("/upload/frame", upload.array("frame"), uploadFrames);
 router.get("/get/allframe", getAllFrames);
 router.delete("/delete/frame/:id",deleteFrame)
+
+
+/*--------------------Admin Aptitude--------------------------*/
+router.get("/aptitude/dashboard/stats", getDashboardStats);
+router.get("/aptitude/system/status", getSystemStatus);
+router.get("/aptitude/tests/recent", getRecentTests);
+router.get("/aptitude/tests/upcoming", getUpcomingTests);
+router.get("/aptitude/tests/:testId/export", exportTestResults);
+router.get("/aptitude/results/top-performers", getTopPerformers);
+router.post("/aptitude/create/test/schedule",createTestSchedule);
+router.get("/get/all/aptitude/test",getAllTestSchedules);
+router.put("/aptitude/test/update/:scheduleId",updateTestSchedule);
+router.delete("/delete/aptitude/test/:scheduleId",deleteTestSchedule);
+router.get("/get/single/schedule/:scheduleId",getSingleTestSchedule);
+router.get("/analitycal/detail/for/test/:scheduleId",getUpcomingTestInterestedCandidates);
 
 
 /*---------------------Admin Notification API-------------------*/

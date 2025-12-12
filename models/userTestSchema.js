@@ -11,6 +11,8 @@ const TestSessionSchema = new mongoose.Schema({
     required: true
   },
 
+  testId:{ type: Number, required: true },
+
   sessionToken: { type: String, required: true },
 
   status: {
