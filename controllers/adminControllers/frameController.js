@@ -10,7 +10,7 @@ exports.uploadFrames = async (req, res) => {
     if (!files || files.length === 0)
       return res.status(400).json({ message: "No frame files uploaded" });
 
-    const host = `${req.protocol}://${req.get("host")}`;
+    const host = `https://${req.get("host")}`;
     const uploadedFrames = [];
 
     for (const file of files) {

@@ -730,7 +730,7 @@ exports.getUserDownloadedFeeds = async (req, res) => {
         feed.downloadUrl ||
         feed.fileUrl ||
         (feed.contentUrl
-          ? `http://192.168.1.48:5000/uploads/${folder}/${path.basename(feed.contentUrl)}`
+          ? `https://192.168.1.48:5000/uploads/${folder}/${path.basename(feed.contentUrl)}`
           : null);
 
       return {

@@ -17,7 +17,7 @@ exports.updateCompanyProfile = async (req, res) => {
     const existing = await CompanyProfile.findOne({ companyId });
 
     // Host for generating URL
-    const host = `${req.protocol}://${req.get("host")}`;
+    const host = `https://${req.get("host")}`;
 
     /* ------------------------------------------------------
      *  LOGO

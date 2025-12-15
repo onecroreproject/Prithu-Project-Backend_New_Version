@@ -5,7 +5,7 @@ const {   adminUploadProfile,
   attachAdminProfileFile,
 
 
-  // Feed Upload
+  // Feed Uploada
   adminUploadFeed,
   adminProcessFeedFile,
   attachAdminFeedFiles,

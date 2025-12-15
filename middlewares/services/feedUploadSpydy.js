@@ -123,7 +123,7 @@ const userProcessFeedFile = async (req, res, next) => {
 const attachFeedFile = (req, res, next) => {
   if (!req.file) return next();
 
-  const host = `${req.protocol}://${req.get("host")}`;
+  const host = `https://${req.get("host")}`;
 
   req.localFile = {
     url: `${host}/media/feed/user/${req.Id || req.body.userId}/${req.feedFolderType}/${req.feedSavedName}`,
