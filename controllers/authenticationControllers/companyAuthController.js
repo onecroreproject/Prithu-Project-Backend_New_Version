@@ -154,7 +154,7 @@ exports.sendOtp = async (req, res) => {
     tempOtpStore[email] = { otp, expiry };
 
     await sendTemplateEmail({
-      templateName: "company-otp.html",
+      templateName: "companyOtp.html",
       to: email,
       subject: "Verify Your Email - OTP Code",
 
