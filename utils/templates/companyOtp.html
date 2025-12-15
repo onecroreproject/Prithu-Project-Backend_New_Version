@@ -1,101 +1,185 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Test Interest Confirmation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Prithu - Company Registration OTP</title>
+
   <style>
     body {
+      margin: 0;
+      padding: 0;
+      background-color: #f9f9f7;
       font-family: Arial, sans-serif;
-      background: #f7f7f7;
-      padding: 20px;
-    }
-    .container {
-      background: #ffffff;
-      padding: 25px;
-      border-radius: 10px;
-      max-width: 600px;
-      margin: auto;
-      border: 1px solid #e6e6e6;
-    }
-    .header {
-      text-align: center;
-      margin-bottom: 20px;
-    }
-    .title {
-      font-size: 22px;
-      font-weight: bold;
       color: #333;
     }
+
+    .email-container {
+      max-width: 600px;
+      margin: 40px auto;
+      background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 2px 6px 30px rgba(0,0,0,0.12);
+      overflow: hidden;
+    }
+
+    .header {
+      background-color: #f9f9f7;
+      padding: 35px;
+      text-align: center;
+    }
+
+    .logo {
+      width: 60px;
+      margin-bottom: 10px;
+    }
+
+    .brand-name {
+      font-size: 34px;
+      font-family: serif;
+      color: #064d3b;
+      margin: 0;
+    }
+
     .content {
+      padding: 30px 40px;
+    }
+
+    .content h2 {
+      font-size: 22px;
+      color: #064d3b;
+      margin-bottom: 15px;
+    }
+
+    .content p {
       font-size: 16px;
-      color: #444;
       line-height: 1.6;
+      margin-bottom: 15px;
     }
-    .button {
-      margin-top: 20px;
+
+    .otp-box {
+      background-color: #f0f7ff;
+      border: 2px dashed #4169E1;
+      border-radius: 10px;
+      padding: 20px;
       text-align: center;
+      margin: 30px 0;
     }
-    .btn {
-      background: #4F46E5;
-      color: #fff !important;
-      padding: 12px 20px;
-      text-decoration: none;
-      border-radius: 8px;
+
+    .otp-label {
+      font-size: 14px;
+      color: #555;
+      margin-bottom: 8px;
+    }
+
+    .otp-code {
+      font-size: 34px;
       font-weight: bold;
-      display: inline-block;
+      letter-spacing: 6px;
+      color: #4169E1;
     }
-    .footer {
+
+    .expiry-text {
+      font-size: 14px;
+      color: #c0392b;
+      margin-top: 10px;
+    }
+
+    .security-note {
+      background-color: #fff8e1;
+      border-left: 4px solid #f1c40f;
+      padding: 15px;
+      border-radius: 6px;
+      font-size: 14px;
       margin-top: 25px;
-      font-size: 12px;
-      color: #888;
+    }
+
+    .footer {
+      background-color: #f9f9f7;
+      padding: 20px;
       text-align: center;
+      font-size: 14px;
+      color: #555;
+      border-top: 1px solid rgba(0,0,0,0.05);
+    }
+
+    .footer a {
+      color: #4169E1;
+      text-decoration: none;
+    }
+
+    @media only screen and (max-width: 600px) {
+      .content {
+        padding: 20px;
+      }
+      .otp-code {
+        font-size: 28px;
+        letter-spacing: 4px;
+      }
     }
   </style>
 </head>
 
 <body>
-  <div class="container">
+  <div class="email-container">
     
+    <!-- HEADER -->
     <div class="header">
-      <img src="{logoCid}" width="140" alt="Prithu Logo" />
+      <img 
+        src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg"
+        alt="Prithu Logo"
+        class="logo"
+      />
+      <h1 class="brand-name">Prithu</h1>
     </div>
 
-    <p class="title">Your Test Interest is Confirmed!</p>
-
+    <!-- CONTENT -->
     <div class="content">
-      <p>Hello <strong>{firstName} {lastName}</strong>,</p>
+      <h2>Verify Your Company Registration</h2>
 
       <p>
-        Thank you for showing interest in the test:
-        <strong>{testName}</strong>.
+        Hello <strong>{company_name} Team</strong>,
       </p>
 
       <p>
-        <strong>⏰ Test Start Time:</strong><br/>
-        {startTime}
+        Thank you for registering your company with <strong>Prithu</strong>.
+        To complete your registration, please use the One-Time Password (OTP) below.
       </p>
 
-      <p>
-        <strong>📝 Test Details:</strong><br/>
-        • Duration: {duration} minutes<br/>
-        • Total Questions: {totalQuestions}<br/>
-        • Passing Score: {passScore}%
-      </p>
-
-      <p>
-        Click below to add this test to your Google Calendar:
-      </p>
-
-      <div class="button">
-        <a href="{calendarLink}" class="btn" target="_blank">
-          ➕ Add to Google Calendar
-        </a>
+      <!-- OTP BOX -->
+      <div class="otp-box">
+        <div class="otp-label">Your Company Registration OTP</div>
+        <div class="otp-code">{otp_code}</div>
+        <div class="expiry-text">
+          ⏳ This OTP is valid for {otp_expiry_minutes} minutes
+        </div>
       </div>
 
+      <p>
+        Enter this OTP on the verification screen to activate your company account.
+      </p>
+
+      <!-- SECURITY NOTE -->
+      <div class="security-note">
+        🔒 <strong>Security Notice:</strong><br/>
+        Please do not share this OTP with anyone. Prithu will never ask for your OTP over phone or email.
+      </div>
+
+      <p style="margin-top: 25px;">
+        If you did not initiate this registration, please ignore this email or contact our support team immediately.
+      </p>
     </div>
 
+    <!-- FOOTER -->
     <div class="footer">
-      This is an automated message from PRITHU. Please do not reply.
+      <p><strong>Prithu Business Services</strong></p>
+      <p>
+        📧 <a href="mailto:business@prithu.in">business@prithu.in</a> |
+        🌐 <a href="{support_portal_url}">Support Portal</a>
+      </p>
+      <p style="font-size: 12px; color: #888;">
+        © {current_year} Prithu. All rights reserved.
+      </p>
     </div>
 
   </div>
