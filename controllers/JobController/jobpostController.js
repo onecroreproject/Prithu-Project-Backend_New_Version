@@ -164,30 +164,24 @@ exports.getAllJobs = async (req, res) => {
       category,
       salaryRange,
       experience,
-      location // Added for frontend compatibility
+      location
     } = req.query;
 
     const q = keyword || search;
 
-    /** -------------------------------------------
-     * JOB ID FILTER - HIGHEST PRIORITY
+    /* -------------------------------------------
+     * JOB ID FILTER (SINGLE JOB)
      * ------------------------------------------- */
     if (jobId) {
-      console.log(`Fetching single job with ID: ${jobId}`);
-      
       const job = await JobPost.findOne({
-        $or: [
-          { _id: jobId },
-          { jobId: jobId }
-        ],
+        $or: [{ _id: jobId }, { jobId }],
         status: "active",
         isApproved: true
       })
-      .populate('companyId', 'companyName logo industry')
-      .lean();
+        .populate("companyId", "companyName industry")
+        .lean();
 
       if (!job) {
-        console.log(`Job not found: ${jobId}`);
         return res.status(200).json({
           success: true,
           total: 0,
@@ -195,8 +189,15 @@ exports.getAllJobs = async (req, res) => {
         });
       }
 
+      // 🔹 Fetch company logo
+      const companyProfile = await CompanyProfile.findOne(
+        { companyId: job.companyId?._id },
+        { logo: 1 }
+      ).lean();
+
+      // 🔹 Engagement
       const engagementData = await JobEngagement.find({ jobId: job._id }).lean();
-      
+
       const engagementStats = {
         likeCount: 0,
         shareCount: 0,
@@ -209,7 +210,7 @@ exports.getAllJobs = async (req, res) => {
         isViewed: false
       };
 
-      engagementData.forEach((e) => {
+      engagementData.forEach(e => {
         if (e.liked) engagementStats.likeCount++;
         if (e.shared) engagementStats.shareCount++;
         if (e.saved) engagementStats.saveCount++;
@@ -224,24 +225,22 @@ exports.getAllJobs = async (req, res) => {
         }
       });
 
-      /** -------------------------------------------
-       * ADD companyId INTO RESPONSE
-       * ------------------------------------------- */
-      const finalJob = {
-        ...job,
-        companyId: job.companyId?._id,  // ✅ ADDED
-        ...engagementStats
-      };
-
       return res.status(200).json({
         success: true,
         total: 1,
-        jobs: [finalJob]
+        jobs: [
+          {
+            ...job,
+            companyId: job.companyId?._id,
+            companyLogo: companyProfile?.logo || null,
+            ...engagementStats
+          }
+        ]
       });
     }
 
-    /** -------------------------------------------
-     * BASE FILTER FOR MULTIPLE JOBS
+    /* -------------------------------------------
+     * BASE FILTER
      * ------------------------------------------- */
     const baseFilter = {
       status: "active",
@@ -282,21 +281,17 @@ exports.getAllJobs = async (req, res) => {
         { country: new RegExp(locationQuery, "i") }
       ];
     }
-    
+
     if (state) baseFilter.state = new RegExp(`^${state}$`, "i");
     if (country) baseFilter.country = new RegExp(`^${country}$`, "i");
 
     if (employmentType) {
-      const types = Array.isArray(employmentType)
-        ? employmentType
-        : employmentType.split(",");
+      const types = employmentType.split(",");
       baseFilter.employmentType = types.length > 1 ? { $in: types } : types[0];
     }
 
     if (workMode) {
-      const modes = Array.isArray(workMode)
-        ? workMode
-        : workMode.split(",");
+      const modes = workMode.split(",");
       baseFilter.workMode = modes.length > 1 ? { $in: modes } : modes[0];
     }
 
@@ -306,8 +301,8 @@ exports.getAllJobs = async (req, res) => {
     if (minSalary) baseFilter.salaryMin = { $gte: Number(minSalary) };
     if (maxSalary) baseFilter.salaryMax = { $lte: Number(maxSalary) };
 
-    /** -------------------------------------------
-     * SEARCH LOGIC
+    /* -------------------------------------------
+     * FETCH JOBS
      * ------------------------------------------- */
     let jobs = [];
 
@@ -316,40 +311,37 @@ exports.getAllJobs = async (req, res) => {
         ...baseFilter,
         $text: { $search: q }
       })
-      .populate('companyId', 'companyName logo industry')
-      .sort({ score: { $meta: "textScore" } })
-      .lean();
-
-      if (jobs.length === 0) {
-        jobs = await JobPost.find({
-          $and: [
-            {
-              $or: [
-                { jobTitle: new RegExp(q, "i") },
-                { jobRole: new RegExp(q, "i") },
-                { jobCategory: new RegExp(q, "i") },
-                { jobDescription: new RegExp(q, "i") },
-                { keywordSearch: new RegExp(q, "i") }
-              ]
-            },
-            baseFilter
-          ]
-        })
-        .populate('companyId', 'companyName logo industry')
-        .sort({ createdAt: -1 })
+        .populate("companyId", "companyName industry")
+        .sort({ score: { $meta: "textScore" } })
         .lean();
-      }
     } else {
       jobs = await JobPost.find(baseFilter)
-        .populate('companyId', 'companyName logo industry')
+        .populate("companyId", "companyName industry")
         .sort({ isFeatured: -1, priorityScore: -1, createdAt: -1 })
         .lean();
     }
 
-    /** -------------------------------------------
+    /* -------------------------------------------
+     * FETCH COMPANY LOGOS (ONE QUERY)
+     * ------------------------------------------- */
+    const companyIds = [
+      ...new Set(jobs.map(j => j.companyId?._id?.toString()).filter(Boolean))
+    ];
+
+    const companyProfiles = await CompanyProfile.find(
+      { companyId: { $in: companyIds } },
+      { companyId: 1, logo: 1 }
+    ).lean();
+
+    const companyLogoMap = {};
+    companyProfiles.forEach(cp => {
+      companyLogoMap[cp.companyId.toString()] = cp.logo;
+    });
+
+    /* -------------------------------------------
      * ENGAGEMENT MERGE
      * ------------------------------------------- */
-    const jobIds = jobs.map((j) => j._id);
+    const jobIds = jobs.map(j => j._id);
     const engagementData = await JobEngagement.find({ jobId: { $in: jobIds } }).lean();
 
     const engagementMap = {};
@@ -367,7 +359,7 @@ exports.getAllJobs = async (req, res) => {
       };
     });
 
-    engagementData.forEach((e) => {
+    engagementData.forEach(e => {
       const job = engagementMap[e.jobId];
       if (!job) return;
 
@@ -385,12 +377,13 @@ exports.getAllJobs = async (req, res) => {
       }
     });
 
-    /** -------------------------------------------
-     * FINAL RESPONSE + ADD companyId
+    /* -------------------------------------------
+     * FINAL RESPONSE
      * ------------------------------------------- */
-    const finalJobs = jobs.map((job) => ({
+    const finalJobs = jobs.map(job => ({
       ...job,
-      companyId: job.companyId?._id,  // ✅ ADDED HERE TOO
+      companyId: job.companyId?._id,
+      companyLogo: companyLogoMap[job.companyId?._id?.toString()] || null,
       ...engagementMap[job._id]
     }));
 
@@ -402,7 +395,10 @@ exports.getAllJobs = async (req, res) => {
 
   } catch (error) {
     console.error("GET ALL JOBS ERROR:", error);
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 };
 

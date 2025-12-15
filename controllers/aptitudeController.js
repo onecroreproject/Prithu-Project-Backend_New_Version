@@ -116,7 +116,7 @@ exports.startAptitudeTest = async (req, res) => {
     // Function to build final exam URL
     const buildTestUrl = (token) => {
       return (
-        `http://192.168.1.24:8000/student/student-exam` +
+        `http://192.168.1.22:8000/student/student-exam` +
         `?user=${userId}` +
         `&token=${token}` +
         `&testId=${finalTestId}` +
@@ -533,6 +533,109 @@ exports.addInterestedUser = async (req, res) => {
     });
   }
 };
+
+
+
+
+
+
+
+
+exports.getTopAptitudePerformers = async (req, res) => {
+  try {
+    // 📅 Last 7 days
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const topPerformers = await AptitudeResult.aggregate([
+      // 1️⃣ Filter last 7 days
+      {
+        $match: {
+          receivedAt: { $gte: sevenDaysAgo }
+        }
+      },
+
+      // 2️⃣ Sort (best performance first)
+      {
+        $sort: {
+          score: -1,
+          timeTaken: 1,
+          receivedAt: -1
+        }
+      },
+
+      // 3️⃣ Limit top 10
+      { $limit: 10 },
+
+      // 4️⃣ Join ProfileSettings
+      {
+        $lookup: {
+          from: "ProfileSettings",
+          localField: "userId",
+          foreignField: "userId",
+          as: "profile"
+        }
+      },
+
+      // 5️⃣ Unwind profile (optional user may not have profile)
+      {
+        $unwind: {
+          path: "$profile",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+
+      // 6️⃣ (Optional) Only published profiles
+      {
+        $match: {
+          $or: [
+            { "profile.isPublished": true },
+            { profile: { $exists: false } }
+          ]
+        }
+      },
+
+      // 7️⃣ Shape response
+      {
+        $project: {
+          _id: 1,
+          testName: 1,
+          score: 1,
+          timeTaken: 1,
+          certificateId: 1,
+          certificateUrl: 1,
+          receivedAt: 1,
+
+          user: {
+            userId: "$userId",
+            userName: "$profile.userName",
+            name: "$profile.name",
+            lastName: "$profile.lastName",
+            bio: "$profile.bio",
+            city: "$profile.city",
+            country: "$profile.country",
+            profileAvatar: "$profile.profileAvatar",
+            shareableLink: "$profile.shareableLink"
+          }
+        }
+      }
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      count: topPerformers.length,
+      data: topPerformers
+    });
+
+  } catch (error) {
+    console.error("❌ Error fetching top aptitude performers:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch top aptitude performers"
+    });
+  }
+};
+
 
 
 

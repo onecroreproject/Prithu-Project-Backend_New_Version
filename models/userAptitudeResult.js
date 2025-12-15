@@ -4,7 +4,7 @@ const {prithuDB}=require("../database");
 const AptitudeResultSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
+    ref: "ProfileSettings",
     required: true
   },
 
