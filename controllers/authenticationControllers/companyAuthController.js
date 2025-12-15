@@ -122,22 +122,22 @@ exports.sendOtp = async (req, res) => {
       company.otpExpiry = expiry;
       await company.save();
 
-      await sendTemplateEmail({
-        templateName: "companyOtp.html",   // your new template
-        to: email,
-        subject: "Your OTP Code for Login",
+     await sendTemplateEmail({
+  templateName: "companyOtp.html", // ✅ correct template
+  to: email,
+  subject: "🔐 Prithu | Your Company Login OTP",
 
-        placeholders: {
-          logoCid: "companyLogo",              // your CID (or empty if not using)
-          companyName: company.companyName || "Prithu Company",
-          name: company.companyName || "User",
-          otp,
-          expiry: expiryMinutes,
-          redirectUrl: "https://prithu.app/company/login"
-        },
+  placeholders: {
+    company_name: company.companyName || "Prithu Company",
+    otp_code: otp,
+    otp_expiry_minutes: expiryMinutes,
+    support_portal_url: "https://prithu.app/support",
+    current_year: new Date().getFullYear()
+  },
 
-        embedLogo: false,
-      });
+  embedLogo: false
+});
+
 
       console.log("📨 OTP (Existing Company):", otp);
 
@@ -153,22 +153,22 @@ exports.sendOtp = async (req, res) => {
     // =====================================================================
     tempOtpStore[email] = { otp, expiry };
 
-    await sendTemplateEmail({
-      templateName: "companyOtp.html",
-      to: email,
-      subject: "Verify Your Email - OTP Code",
+  await sendTemplateEmail({
+  templateName: "companyOtp.html",
+  to: email,
+  subject: "🔐 Prithu | Verify Your Company Registration (OTP)",
 
-      placeholders: {
-        logoCid: "companyLogo",
-        companyName: "New Company",
-        name: "New User",
-        otp,
-        expiry: expiryMinutes,
-        redirectUrl: "https://prithu.app/company/register"
-      },
+  placeholders: {
+    company_name: companyName || "Your Company",
+    otp_code: otp,
+    otp_expiry_minutes: expiryMinutes,
+    support_portal_url: "https://prithu.app/support",
+    current_year: new Date().getFullYear()
+  },
 
-      embedLogo: false,
-    });
+  embedLogo: false
+});
+
 
     console.log("📨 OTP (New Registration):", otp);
 
