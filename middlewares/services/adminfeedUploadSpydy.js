@@ -75,7 +75,7 @@ const adminUploadProfile = multer({
 const attachAdminProfileFile = (req, res, next) => {
   if (!req.file) return next();
 
-  const host = `${req.protocol}://${req.get("host")}`;
+  const host = `https://${req.get("host")}`;
   const fileUrl = `${host}/media/${req.uploadFolderType}/${req.Id}/profilepic/${req.savedFileName}`;
 
   req.localFile = {
@@ -195,7 +195,7 @@ const attachAdminFeedFiles = (req, res, next) => {
   const files = req.files || [];
   if (files.length === 0) return next();
 
-  const host = `${req.protocol}://${req.get("host")}`;
+  const host = `https://${req.get("host")}`;
 
   req.localFiles = files.map((file) => ({
     url: `${host}/media/feed/admin/${req.Id}/${file._folder}/${file._savedName}`,

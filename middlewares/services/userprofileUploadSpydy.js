@@ -63,7 +63,7 @@ const attachUserFile = (req, res, next) => {
   if (!req.file) return next();
 
   // Auto-detect host (http/https + domain)
-  const host = `${req.protocol}://${req.get("host")}`;
+  const host = `https://${req.get("host")}`;
 
   req.localFile = {
     url: `${host}/media/user/${req.Id}/${req.finalFolderType}/${req.savedFileName}`,

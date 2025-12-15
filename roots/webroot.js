@@ -357,6 +357,7 @@ const { startAptitudeTest ,
   addInterestedUser,
   getInterestedUsers,
   getAllUserTestSchedules,
+  getTopAptitudePerformers,
 } = require('../controllers/aptitudeController');
 
 
@@ -488,6 +489,7 @@ router.get("/aptitude/latest/results", auth, getLatestAptitudeResult);
 router.get("/aptitude/schedule",auth,getAllUserTestSchedules);
 router.get("/aptitude/intrested/:scheduleId",getInterestedUsers);
 router.post("/aptitude/user/intrest",auth,addInterestedUser);
+router.post("/top/aptitude/performars",getTopAptitudePerformers)
 
 
  /*_______________________User JOB API_____________________________*/
