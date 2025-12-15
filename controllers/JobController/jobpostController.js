@@ -396,9 +396,24 @@ exports.getAllJobs = async (req, res) => {
     /* -------------------------------------------
      * COMPANY LOGOS
      * ------------------------------------------- */
-    const companyIds = [
-      ...new Set(jobs.map(j => j.companyId?.toString()).filter(Boolean))
-    ];
+   const companyIds = [
+  ...new Set(
+    jobs
+      .map(j => {
+        if (!j.companyId) return null;
+
+        // If populated → take _id
+        if (typeof j.companyId === "object" && j.companyId._id) {
+          return j.companyId._id.toString();
+        }
+
+        // If ObjectId
+        return j.companyId.toString();
+      })
+      .filter(Boolean)
+  )
+];
+
 
     const companyProfiles = await CompanyProfile.find(
       { companyId: { $in: companyIds } },
