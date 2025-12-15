@@ -359,6 +359,7 @@ const { startAptitudeTest ,
   getAllUserTestSchedules,
   getTopAptitudePerformers,
 } = require('../controllers/aptitudeController');
+const { getManiBoardStats } = require('../controllers/mainHomeControlle');
 
 
 
@@ -741,6 +742,10 @@ router.get("/get/non-interested-categories", auth, getNonInterestedCategories);
 router.get("/get/feeds/by/hashtag/:tag",auth, getFeedsByHashtag);
 
 router.get("/get/user/birthday", getUpcomingBirthdays);
+
+
+
+router.get("/main/board/status",getManiBoardStats)
 
 
 
