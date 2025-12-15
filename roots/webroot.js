@@ -489,7 +489,7 @@ router.get("/aptitude/latest/results", auth, getLatestAptitudeResult);
 router.get("/aptitude/schedule",auth,getAllUserTestSchedules);
 router.get("/aptitude/intrested/:scheduleId",getInterestedUsers);
 router.post("/aptitude/user/intrest",auth,addInterestedUser);
-router.post("/top/aptitude/performars",getTopAptitudePerformers)
+router.get("/top/aptitude/performers",getTopAptitudePerformers);
 
 
  /*_______________________User JOB API_____________________________*/
