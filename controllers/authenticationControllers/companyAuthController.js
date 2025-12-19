@@ -23,30 +23,50 @@ const generateToken = (companyId) => {
  */
 exports.registerCompany = async (req, res) => {
   try {
-    const { 
-      email, 
-      password, 
-      name, 
-      position, 
-      phone, 
-      companyName, 
+    const {
+      email,
+      password,
+      name,
+      position,
+      phone,
+      companyName,
       companyEmail,
-      whatsAppNumber 
+      whatsAppNumber,
+      accountType // 🔑 company | consultant
     } = req.body;
 
-    // Check existing account
+    /* --------------------------------------------------
+     * 1️⃣ Validate accountType
+     * -------------------------------------------------- */
+    const allowedTypes = ["company", "consultant"];
+    const finalAccountType = allowedTypes.includes(accountType)
+      ? accountType
+      : "company"; // fallback for safety
+
+    /* --------------------------------------------------
+     * 2️⃣ Check existing account
+     * -------------------------------------------------- */
     const existing = await Company.findOne({ email });
     if (existing) {
-      return res.status(400).json({ success: false, message: "Email already exists" });
+      return res.status(400).json({
+        success: false,
+        message: "Email already exists"
+      });
     }
 
-    // Hash password
+    /* --------------------------------------------------
+     * 3️⃣ Hash password
+     * -------------------------------------------------- */
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create OTP
+    /* --------------------------------------------------
+     * 4️⃣ Generate OTP
+     * -------------------------------------------------- */
     const otp = generateOTP();
 
-    // Create new company
+    /* --------------------------------------------------
+     * 5️⃣ Create company / consultant
+     * -------------------------------------------------- */
     const newCompany = await Company.create({
       email,
       password: hashedPassword,
@@ -56,25 +76,31 @@ exports.registerCompany = async (req, res) => {
       companyName,
       companyEmail,
       whatsAppNumber,
+      accountType: finalAccountType, // ✅ stored here
       otp,
       otpExpiry: Date.now() + 5 * 60 * 1000 // 5 minutes
     });
 
-    // ------------------- SEND REGISTRATION SUCCESS EMAIL -------------------
+    /* --------------------------------------------------
+     * 6️⃣ Send Registration Email
+     * -------------------------------------------------- */
     await sendTemplateEmail({
-      templateName: "companyRegistration.html", 
+      templateName: "companyRegistration.html",
       to: email,
-      subject: "🎉 Your Company Registration is Successful — Welcome to Prithu!",
+      subject: `🎉 ${finalAccountType === "consultant" ? "Consultant" : "Company"} Registration Successful — Welcome to Prithu!`,
       placeholders: {
         company_name: companyName,
         company_account_id: newCompany._id.toString(),
         registration_date: new Date().toLocaleDateString(),
-        account_type: "Standard",
+        account_type: finalAccountType.toUpperCase(),
         contact_person_name: name,
         contact_email: email,
         subscription_plan: "Free Plan",
         plan_expiry_date: "Unlimited",
-        dashboard_url: "https://prithu.app/company/login",
+        dashboard_url:
+          finalAccountType === "consultant"
+            ? "https://prithu.app/consultant/login"
+            : "https://prithu.app/company/login",
         profile_setup_url: "https://prithu.in/company/profile/setup",
         post_job_url: "https://prithu.in/company/job/post",
         support_phone: "+91 98765 43210",
@@ -88,16 +114,22 @@ exports.registerCompany = async (req, res) => {
       embedLogo: false
     });
 
-    // Response
-    res.status(201).json({
+    /* --------------------------------------------------
+     * 7️⃣ Response
+     * -------------------------------------------------- */
+    return res.status(201).json({
       success: true,
-      message: "Company registered successfully. Email sent.",
-      companyId: newCompany._id
+      message: `${finalAccountType === "consultant" ? "Consultant" : "Company"} registered successfully. Email sent.`,
+      companyId: newCompany._id,
+      accountType: finalAccountType
     });
 
   } catch (error) {
-    console.error("❌ Register Error:", error);
-    res.status(500).json({ success: false, error: "Server error during registration" });
+    console.error("❌ Register Company Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error during registration"
+    });
   }
 };
 

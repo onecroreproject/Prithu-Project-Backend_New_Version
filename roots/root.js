@@ -298,6 +298,19 @@ updateTestSchedule,
 deleteTestSchedule,
 getUpcomingTestInterestedCandidates,
  }=require("../controllers/aptitudeController");
+const { getJobDashboardStats } = require('../controllers/companyDashboardController');
+const { getAllCompanies,
+  getCompanyById,
+  inactivateCompany,
+  removeCompany,
+  activateCompany,
+ } = require('../controllers/adminCompany/adminCompanyController');
+const { getAllJobs ,
+  approveJob,
+  rejectJob,
+  deleteJob,
+  suspendJob
+} = require('../controllers/adminCompany/adminJobController');
 
 
 
@@ -538,6 +551,23 @@ router.get("/dashboard/user-subscription-counts",getUserAndSubscriptionCountsDai
 router.post("/upload/frame", frameUpload.array("frame"), uploadFrames);
 router.get("/get/allframe", getAllFrames);
 router.delete("/delete/frame/:id",deleteFrame)
+
+/*-------------------AdminCompny---------------------------*/
+router.get("/get/comapany/status",getJobDashboardStats);
+router.get("/get/all/companies",getAllCompanies);
+router.delete('/companies/:companyId',removeCompany);
+router.put('/companies/:companyId/suspend',inactivateCompany);
+router.put('/companies/:companyId/activate', activateCompany);
+router.get('/companies/:companyId', getCompanyById);
+
+
+/*----------------AdminJos--------------------------------- */
+router.get("/get/all/company/jobs",getAllJobs)
+router.put('/jobs/:jobId/approve',approveJob);
+router.put('/jobs/:jobId/suspend', suspendJob);
+router.put("/jobs/:jobId/reject",rejectJob);
+
+
 
 
 /*--------------------Admin Aptitude--------------------------*/

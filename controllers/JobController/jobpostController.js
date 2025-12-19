@@ -14,141 +14,89 @@ const {logCompanyActivity} =require("../../middlewares/services/JobsService/jobA
 const {deleteLocalFile} = require("../../middlewares/services/JobsService/jobImageUploadSpydy.js");
 const { upsertJobGeo, removeJobGeo } = require("../../middlewares/helper/jobGeo.js");
 
+
+
+
 exports.createOrUpdateJob = async (req, res) => {
   try {
-    const companyId = req.companyId ;
+    const companyId = req.companyId;
     const body = req.body || {};
 
     if (!companyId) {
-      return res.status(400).json({
-        success: false,
-        message: "companyId missing"
-      });
+      return res.status(400).json({ success: false, message: "companyId missing" });
     }
 
-    const jobId = body.jobId || body.id || null;
+    const jobId = body.id || body.jobId || null;
+    const incomingStatus = body.status || "draft"; // draft | submit | active
 
     /* --------------------------------------------------------
-     * GET COMPANY SNAPSHOT
+     * 1️⃣ FETCH COMPANY
      * -------------------------------------------------------- */
     const company = await CompanyLogin.findById(companyId).lean();
     const profile = await CompanyProfile.findOne({ companyId }).lean();
 
     if (!company) {
-      return res.status(404).json({
-        success: false,
-        message: "Company not found"
-      });
+      return res.status(404).json({ success: false, message: "Company not found" });
     }
 
-    const companySnapshot = {
-      companyId,
-      companyName: company.companyName,
-      companyLogo: profile?.logo || "",
-      companyIndustry: profile?.businessCategory || "",
-      companyWebsite: profile?.socialLinks?.website || ""
-    };
-
     /* --------------------------------------------------------
-     * RESOLVE GOOGLE LOCATION (lat/lng)
-     * Priority:
-     * 1️⃣ Request body
-     * 2️⃣ Company profile
+     * 2️⃣ RESOLVE GOOGLE LOCATION
      * -------------------------------------------------------- */
-    let googleLocation = body.googleLocation;
+    let googleLocation = null;
 
-    if (!googleLocation?.coordinates?.length && profile?.googleLocation) {
+    if (body.googleLocation?.coordinates?.length === 2) {
+      googleLocation = {
+        type: "Point",
+        coordinates: body.googleLocation.coordinates.map(Number),
+      };
+    } else if (
+      profile?.googleLocation?.coordinates?.length === 2 &&
+      profile.googleLocation.coordinates.some(v => v !== 0)
+    ) {
       googleLocation = profile.googleLocation;
     }
 
     /* --------------------------------------------------------
-     * HANDLE JOB IMAGE UPLOAD
-     * -------------------------------------------------------- */
-    let jobImageUrl = null;
-
-    if (req.file) {
-      jobImageUrl = `https://${req.get("host")}/media/company/${companyId}/jobs/${req.savedJobFileName}`;
-    }
-
-    /* --------------------------------------------------------
-     * VALIDATE REQUIRED FIELDS (ACTIVE JOBS ONLY)
-     * -------------------------------------------------------- */
-    const requiredFields = [
-      "jobTitle",
-      "employmentType",
-      "workMode",
-      "jobDescription"
-    ];
-
-    if (!jobId && (body.status === "active" || !body.status)) {
-      const missing = requiredFields.filter((f) => !body[f]);
-      if (missing.length) {
-        return res.status(400).json({
-          success: false,
-          message: "Missing required fields for active job",
-          fields: missing
-        });
-      }
-    }
-
-    /* --------------------------------------------------------
-     * BUILD JOB PAYLOAD (UNCHANGED LOGIC)
+     * 3️⃣ BUILD JOB PAYLOAD
      * -------------------------------------------------------- */
     const jobData = {
-      ...companySnapshot,
+      companyId,
+      companyName: company.companyName,
+      companyLogo: profile?.logo || "",
+      companyIndustry: profile?.businessCategory || "",
+      companyWebsite: profile?.socialLinks?.website || "",
+
       ...body,
-      googleLocation, // ✅ ADDED (non-breaking)
-      remoteEligibility:
-        body.remoteEligibility === "true" || body.remoteEligibility === true,
-      freshersAllowed:
-        body.freshersAllowed === "true" || body.freshersAllowed === true,
+      ...(googleLocation && { googleLocation }),
+
+      remoteEligibility: body.remoteEligibility === true || body.remoteEligibility === "true",
+      freshersAllowed: body.freshersAllowed === true || body.freshersAllowed === "true",
+
       salaryMin: Number(body.salaryMin) || 0,
       salaryMax: Number(body.salaryMax) || 0,
       openingsCount: Number(body.openingsCount) || 1,
       minimumExperience: Number(body.minimumExperience) || 0,
       maximumExperience: Number(body.maximumExperience) || 0,
-      status: body.status || "draft"
+
+      status: incomingStatus,
     };
 
-    if (jobImageUrl) {
-      jobData.jobImage = jobImageUrl;
+    if (req.file) {
+      jobData.jobImage = `https://${req.get("host")}/media/company/${companyId}/jobs/${req.savedJobFileName}`;
     }
 
     /* --------------------------------------------------------
-     * UPDATE JOB
+     * 4️⃣ UPDATE (ID PRESENT)
      * -------------------------------------------------------- */
     if (jobId) {
-      const existingJob = await JobPost.findOne({
-        _id: jobId,
-        companyId
-      });
-
+      const existingJob = await JobPost.findOne({ _id: jobId, companyId });
       if (!existingJob) {
-        return res.status(404).json({
-          success: false,
-          message: "Job not found"
-        });
-      }
-
-      // Remove old image if replaced
-      if (jobImageUrl && existingJob.jobImage) {
-        const oldPath = path.join(
-          __dirname,
-          "../../../media/company",
-          String(companyId),
-          "jobs",
-          path.basename(existingJob.jobImage)
-        );
-        deleteLocalFile(oldPath);
+        return res.status(404).json({ success: false, message: "Job not found" });
       }
 
       await JobPost.updateOne({ _id: jobId }, { $set: jobData });
 
-      /* 🔄 REDIS GEO SYNC (SAFE) */
-      if (
-        jobData.status === "active" &&
-        googleLocation?.coordinates?.length
-      ) {
+      if (googleLocation?.coordinates?.length === 2) {
         await upsertJobGeo(jobId, googleLocation.coordinates);
       } else {
         await removeJobGeo(jobId);
@@ -157,37 +105,39 @@ exports.createOrUpdateJob = async (req, res) => {
       return res.status(200).json({
         success: true,
         message: "Job updated successfully",
-        jobId
+        jobId,
       });
     }
 
     /* --------------------------------------------------------
-     * CREATE JOB
+     * 5️⃣ CREATE (NO ID)
      * -------------------------------------------------------- */
     const newJob = await JobPost.create(jobData);
 
-    /* 🔄 REDIS GEO SYNC (SAFE) */
-    if (
-      newJob.status === "active" &&
-      googleLocation?.coordinates?.length
-    ) {
+    if (googleLocation?.coordinates?.length === 2) {
       await upsertJobGeo(newJob._id, googleLocation.coordinates);
     }
 
     return res.status(201).json({
       success: true,
       message: "Job created successfully",
-      job: newJob
+      job: newJob,
     });
 
   } catch (error) {
-    console.error("❌ Error in createOrUpdateJob:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    console.error("❌ createOrUpdateJob error:", error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+
+
+
+
+
+
+
 
 
 
@@ -198,11 +148,9 @@ exports.createOrUpdateJob = async (req, res) => {
    ============================================================================================= */
 exports.getAllJobs = async (req, res) => {
   try {
-    const userId = req.Id || req.body.userId;
+    const userId = req.Id || req.body?.userId;
 
     const {
-      jobCategory,
-      jobRole,
       jobId,
       city,
       state,
@@ -229,78 +177,41 @@ exports.getAllJobs = async (req, res) => {
     const q = keyword || search;
     const geoEnabled = lat && lng;
 
-    /* -------------------------------------------
-     * JOB ID FILTER (SINGLE JOB) – UNCHANGED
-     * ------------------------------------------- */
+    /* ---------------------------------------------------
+     * 1️⃣ SINGLE JOB FETCH
+     * --------------------------------------------------- */
     if (jobId) {
       const job = await JobPost.findOne({
         $or: [{ _id: jobId }, { jobId }],
         status: "active",
-        isApproved: true
+        $or: [
+          { isApproved: true },
+          { isApproved: { $exists: false } }
+        ]
       })
         .populate("companyId", "companyName industry")
         .lean();
 
       if (!job) {
-        return res.status(200).json({
-          success: true,
-          total: 0,
-          jobs: []
-        });
+        return res.status(200).json({ success: true, total: 0, jobs: [] });
       }
-
-      const companyProfile = await CompanyProfile.findOne(
-        { companyId: job.companyId?._id },
-        { logo: 1 }
-      ).lean();
-
-      const engagementData = await JobEngagement.find({ jobId: job._id }).lean();
-
-      const engagementStats = {
-        likeCount: 0,
-        shareCount: 0,
-        saveCount: 0,
-        applyCount: 0,
-        viewCount: 0,
-        isLiked: false,
-        isSaved: false,
-        isApplied: false,
-        isViewed: false
-      };
-
-      engagementData.forEach(e => {
-        if (e.liked) engagementStats.likeCount++;
-        if (e.shared) engagementStats.shareCount++;
-        if (e.saved) engagementStats.saveCount++;
-        if (e.applied) engagementStats.applyCount++;
-        if (e.view) engagementStats.viewCount++;
-
-        if (e.userId?.toString() === userId?.toString()) {
-          engagementStats.isLiked = e.liked;
-          engagementStats.isSaved = e.saved;
-          engagementStats.isApplied = e.applied;
-          engagementStats.isViewed = e.view;
-        }
-      });
 
       return res.status(200).json({
         success: true,
         total: 1,
-        jobs: [{
-          ...job,
-          companyId: job.companyId?._id,
-          companyLogo: companyProfile?.logo || null,
-          ...engagementStats
-        }]
+        jobs: [job]
       });
     }
 
-    /* -------------------------------------------
-     * BASE FILTER (UNCHANGED)
-     * ------------------------------------------- */
+    /* ---------------------------------------------------
+     * 2️⃣ BASE FILTER (NON-GEO)
+     * --------------------------------------------------- */
     const baseFilter = {
       status: "active",
-      isApproved: true
+      $or: [
+        { isApproved: true },
+        { isApproved: { $exists: false } }
+      ]
     };
 
     if (companyId) {
@@ -315,6 +226,7 @@ exports.getAllJobs = async (req, res) => {
     if (experience) {
       const [minE, maxE] = experience.split("-").map(Number);
       baseFilter.$and = [
+        ...(baseFilter.$and || []),
         { minimumExperience: { $gte: minE } },
         { maximumExperience: { $lte: maxE } }
       ];
@@ -328,18 +240,6 @@ exports.getAllJobs = async (req, res) => {
         { salaryMax: { $lte: maxS } }
       ];
     }
-
-    const locationQuery = location || city;
-    if (locationQuery) {
-      baseFilter.$or = [
-        { city: new RegExp(locationQuery, "i") },
-        { state: new RegExp(locationQuery, "i") },
-        { country: new RegExp(locationQuery, "i") }
-      ];
-    }
-
-    if (state) baseFilter.state = new RegExp(`^${state}$`, "i");
-    if (country) baseFilter.country = new RegExp(`^${country}$`, "i");
 
     if (employmentType) {
       const types = employmentType.split(",");
@@ -357,11 +257,33 @@ exports.getAllJobs = async (req, res) => {
     if (minSalary) baseFilter.salaryMin = { $gte: Number(minSalary) };
     if (maxSalary) baseFilter.salaryMax = { $lte: Number(maxSalary) };
 
-    /* -------------------------------------------
-     * FETCH JOBS (WITH GEO IF PROVIDED)
-     * ------------------------------------------- */
+    /* ---------------------------------------------------
+     * 3️⃣ LOCATION TEXT FILTER (ONLY IF NO GEO)
+     * --------------------------------------------------- */
+    const locationQuery = location || city;
+
+    if (locationQuery && !geoEnabled) {
+      baseFilter.$and = [
+        ...(baseFilter.$and || []),
+        {
+          $or: [
+            { city: new RegExp(locationQuery, "i") },
+            { state: new RegExp(locationQuery, "i") },
+            { country: new RegExp(locationQuery, "i") }
+          ]
+        }
+      ];
+    }
+
+    if (state && !geoEnabled) baseFilter.state = new RegExp(`^${state}$`, "i");
+    if (country && !geoEnabled) baseFilter.country = new RegExp(`^${country}$`, "i");
+
+    /* ---------------------------------------------------
+     * 4️⃣ FETCH JOBS
+     * --------------------------------------------------- */
     let jobs = [];
 
+    // ✅ GEO SEARCH (PRIORITY)
     if (geoEnabled) {
       jobs = await JobPost.aggregate([
         {
@@ -372,13 +294,22 @@ exports.getAllJobs = async (req, res) => {
             },
             distanceField: "distance",
             maxDistance: (Number(radius) || 10) * 1000,
-            spherical: true
+            spherical: true,
+            query: {
+              status: "active",
+              $or: [
+                { isApproved: true },
+                { isApproved: { $exists: false } }
+              ]
+            }
           }
         },
-        { $match: baseFilter },
         { $sort: { isFeatured: -1, priorityScore: -1, createdAt: -1 } }
       ]);
-    } else if (q) {
+    }
+
+    // 🔍 TEXT SEARCH
+    else if (q) {
       jobs = await JobPost.find({
         ...baseFilter,
         $text: { $search: q }
@@ -386,34 +317,30 @@ exports.getAllJobs = async (req, res) => {
         .populate("companyId", "companyName industry")
         .sort({ score: { $meta: "textScore" } })
         .lean();
-    } else {
+    }
+
+    // 📄 NORMAL FETCH
+    else {
       jobs = await JobPost.find(baseFilter)
         .populate("companyId", "companyName industry")
         .sort({ isFeatured: -1, priorityScore: -1, createdAt: -1 })
         .lean();
     }
 
-    /* -------------------------------------------
-     * COMPANY LOGOS
-     * ------------------------------------------- */
-   const companyIds = [
-  ...new Set(
-    jobs
-      .map(j => {
-        if (!j.companyId) return null;
-
-        // If populated → take _id
-        if (typeof j.companyId === "object" && j.companyId._id) {
-          return j.companyId._id.toString();
-        }
-
-        // If ObjectId
-        return j.companyId.toString();
-      })
-      .filter(Boolean)
-  )
-];
-
+    /* ---------------------------------------------------
+     * 5️⃣ COMPANY LOGOS
+     * --------------------------------------------------- */
+    const companyIds = [
+      ...new Set(
+        jobs
+          .map(j =>
+            typeof j.companyId === "object"
+              ? j.companyId?._id?.toString()
+              : j.companyId?.toString()
+          )
+          .filter(Boolean)
+      )
+    ];
 
     const companyProfiles = await CompanyProfile.find(
       { companyId: { $in: companyIds } },
@@ -425,11 +352,13 @@ exports.getAllJobs = async (req, res) => {
       companyLogoMap[cp.companyId.toString()] = cp.logo;
     });
 
-    /* -------------------------------------------
-     * ENGAGEMENT
-     * ------------------------------------------- */
+    /* ---------------------------------------------------
+     * 6️⃣ ENGAGEMENT
+     * --------------------------------------------------- */
     const jobIds = jobs.map(j => j._id);
-    const engagementData = await JobEngagement.find({ jobId: { $in: jobIds } }).lean();
+    const engagementData = await JobEngagement.find({
+      jobId: { $in: jobIds }
+    }).lean();
 
     const engagementMap = {};
     jobIds.forEach(id => {
@@ -464,14 +393,21 @@ exports.getAllJobs = async (req, res) => {
       }
     });
 
-    /* -------------------------------------------
-     * FINAL RESPONSE
-     * ------------------------------------------- */
-    const finalJobs = jobs.map(job => ({
-      ...job,
-      companyLogo: companyLogoMap[job.companyId?.toString()] || null,
-      ...engagementMap[job._id]
-    }));
+    /* ---------------------------------------------------
+     * 7️⃣ FINAL RESPONSE
+     * --------------------------------------------------- */
+    const finalJobs = jobs.map(job => {
+      const cid =
+        typeof job.companyId === "object"
+          ? job.companyId?._id?.toString()
+          : job.companyId?.toString();
+
+      return {
+        ...job,
+        companyLogo: companyLogoMap[cid] || null,
+        ...engagementMap[job._id]
+      };
+    });
 
     return res.status(200).json({
       success: true,
@@ -487,6 +423,7 @@ exports.getAllJobs = async (req, res) => {
     });
   }
 };
+
 
 
 
