@@ -116,7 +116,7 @@ exports.startAptitudeTest = async (req, res) => {
     // Function to build final exam URL
     const buildTestUrl = (token) => {
       return (
-        `http://192.168.1.22:8000/student/student-exam` +
+        `https://aptitude.1croreprojects.com/student/student-exam` +
         `?user=${userId}` +
         `&token=${token}` +
         `&testId=${finalTestId}` +

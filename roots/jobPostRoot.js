@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { createOrUpdateJob, getAllJobs, getJobById ,getJobsByCompany,deleteJobs,getRankedJobs,getAllJobsForAdmin, getTopRankedJobs} = require("../controllers/JobController/jobpostController");
+const { createJob,updateJob,saveJobDraft,createOrUpdateJob, getAllJobs, getJobById ,getJobsByCompany,deleteJobs,getRankedJobs,getAllJobsForAdmin, getTopRankedJobs} = require("../controllers/JobController/jobpostController");
 const { updateEngagement, getJobEngagementStats,getUserEngagements} = require("../controllers/JobController/engagementController");
 const {companyJobUpload}=require("../middlewares/services/JobsService/jobImageUploadSpydy.js");
 const {auth}=require("../middlewares/jwtAuthentication.js");
@@ -49,6 +49,10 @@ router.post(
   companyJobUpload.single("jobImage"),
   createOrUpdateJob
 );
+
+
+// router.put("/company/update/job",companyAuth,updateJob);
+// router.post("/company/draft/job",companyAuth,saveJobDraft);
 
  router.get("/get/jobs/by/company/",companyAuth,getJobsByCompany);
 router.get("/get/draft/jobs/:id",getDraftById);

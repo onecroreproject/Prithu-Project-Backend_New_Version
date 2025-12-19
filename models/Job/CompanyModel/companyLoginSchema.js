@@ -9,47 +9,66 @@ const CompanyLoginSchema = new mongoose.Schema(
       required: true,
       unique: true,
       lowercase: true,
-      index: true, // FAST login lookup
+      index: true,
       trim: true,
     },
+
     password: {
       type: String,
       required: true,
       minlength: 6,
     },
 
-    // 👤 Login Person Details
+    /* ---------------------------------------------------
+     * 👤 Login Person Details
+     * --------------------------------------------------- */
     name: {
       type: String,
       required: true,
       trim: true,
       index: true,
     },
+
     position: {
       type: String,
       required: true,
       trim: true,
       index: true,
     },
+
     phone: {
       type: String,
       required: true,
       trim: true,
     },
 
-    whatsAppNumber:{
+    whatsAppNumber: {
       type: String,
       required: true,
       trim: true,
     },
 
-    // 🏢 Company Basic Details (Profile is separate)
+    /* ---------------------------------------------------
+     * 🏢 Account Segregation (IMPORTANT)
+     * --------------------------------------------------- */
+    accountType: {
+      type: String,
+      enum: ["company", "consultant"],
+      required: true,
+      default: "company",
+      index: true,
+    },
+
+    /* ---------------------------------------------------
+     * 🏢 Company / Consultant Details
+     * --------------------------------------------------- */
     companyName: {
       type: String,
       required: true,
       trim: true,
-      index: true, // FAST filtering
+      index: true,
     },
+
     companyEmail: {
       type: String,
       required: true,
@@ -57,15 +76,19 @@ const CompanyLoginSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // 🟢 Status + Verification
+    /* ---------------------------------------------------
+     * 🟢 Status & Verification
+     * --------------------------------------------------- */
     isVerified: {
       type: Boolean,
       default: false,
+      index: true,
     },
-profileAvatar: {
-  type: String,
-  default: null,
-},
+
+    profileAvatar: {
+      type: String,
+      default: null,
+    },
 
     status: {
       type: String,
@@ -74,24 +97,35 @@ profileAvatar: {
       index: true,
     },
 
-    // OTP for login / forgot password
+    /* ---------------------------------------------------
+     * 🔐 OTP
+     * --------------------------------------------------- */
     otp: {
       type: String,
       default: null,
     },
+
     otpExpiry: {
       type: Date,
       default: null,
       index: true,
-    }
+    },
   },
   {
-    timestamps: true, // stores createdAt + updatedAt
-    versionKey: false // removes __v for cleaner documents
+    timestamps: true,
+    versionKey: false,
   }
 );
 
-// Compound index for high-speed queries
-CompanyLoginSchema.index({ email: 1, companyName: 1 });
+/* ---------------------------------------------------
+ * ⚡ Indexes
+ * --------------------------------------------------- */
+CompanyLoginSchema.index({ email: 1 });
+CompanyLoginSchema.index({ companyName: 1 });
+CompanyLoginSchema.index({ accountType: 1 });
 
-module.exports = jobDB.model("CompanyLogin", CompanyLoginSchema,"CompanyLogin");
+module.exports = jobDB.model(
+  "CompanyLogin",
+  CompanyLoginSchema,
+  "CompanyLogin"
+);
