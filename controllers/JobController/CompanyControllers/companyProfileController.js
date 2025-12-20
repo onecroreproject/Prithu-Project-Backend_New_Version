@@ -3,6 +3,7 @@ const CompanyLogin = require("../../../models/Job/CompanyModel/companyLoginSchem
 const JobPost=require("../../../models/Job/JobPost/jobSchema");
 const { deleteLocalCompanyFile } = require("../../../middlewares/services/JobsService/companyUploadSpydy");
 const path = require("path");
+const mongoose=require("mongoose")
 
 exports.updateCompanyProfile = async (req, res) => {
   try {
@@ -193,26 +194,32 @@ exports.getRecentDrafts = async (req, res) => {
 
 exports.getDraftById = async (req, res) => {
   try {
- // from auth middleware
-    const jobId = req.params.id;  // from URL params
+    const companyId = req.companyId;   // from auth middleware
+    const jobId = req.params.id;       // from URL params
 
- 
-    
-
-    if (!jobId) {
+    if (!companyId || !jobId) {
       return res.status(400).json({
         success: false,
-        message: "jobId is required",
+        message: "companyId and jobId are required",
       });
     }
 
-    // Fetch a single draft job
-    const draft = await JobPost.findOne(
-      {
-        _id: jobId,
-       // ensure it's a draft
-      }
-    ).lean();
+    // ✅ Validate Mongo ObjectId
+    if (!mongoose.Types.ObjectId.isValid(jobId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid jobId",
+      });
+    }
+
+    /* --------------------------------------------------
+     * 🔍 FETCH DRAFT JOB (SCHEMA SAFE)
+     * -------------------------------------------------- */
+    const draft = await JobPost.findOne({
+      _id: jobId,
+      companyId,
+
+    }).lean();
 
     if (!draft) {
       return res.status(404).json({
@@ -228,7 +235,7 @@ exports.getDraftById = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get Draft By ID Error:", error);
+    console.error("❌ Get Draft By ID Error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error while fetching draft job",
@@ -236,6 +243,7 @@ exports.getDraftById = async (req, res) => {
     });
   }
 };
+
 
 
 

@@ -262,11 +262,7 @@ exports.approveJob = async (req, res) => {
 
     await job.save();
 
-    /* 🔄 Optional: GEO sync if location exists */
-    if (job.googleLocation?.coordinates?.length) {
-      await upsertJobGeo(job._id, job.googleLocation.coordinates);
-    }
-
+   
     return res.status(200).json({
       success: true,
       message: "Job approved and activated successfully",

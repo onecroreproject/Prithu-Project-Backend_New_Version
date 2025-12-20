@@ -569,7 +569,6 @@ router.put("/jobs/:jobId/reject",rejectJob);
 
 
 
-
 /*--------------------Admin Aptitude--------------------------*/
 router.get("/aptitude/dashboard/stats", getDashboardStats);
 router.get("/aptitude/system/status", getSystemStatus);
