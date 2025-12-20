@@ -55,7 +55,7 @@ router.post(
 // router.post("/company/draft/job",companyAuth,saveJobDraft);
 
  router.get("/get/jobs/by/company/",companyAuth,getJobsByCompany);
-router.get("/get/draft/jobs/:id",getDraftById);
+router.get("/get/draft/jobs/:id",companyAuth,getDraftById);
  router.delete("/delete/jobs/:jobId",companyAuth,deleteJobs);
 router.get("/get/company/profile",companyAuth,getCompanyProfile);
 router.get("/get/single/company/profile/:companyId",getSingleCompanyProfile);

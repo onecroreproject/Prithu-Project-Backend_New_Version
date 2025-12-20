@@ -15,49 +15,174 @@ const {deleteLocalFile} = require("../../middlewares/services/JobsService/jobIma
 const { upsertJobGeo, removeJobGeo } = require("../../middlewares/helper/jobGeo.js");
 
 
-
-
 exports.createOrUpdateJob = async (req, res) => {
   try {
     const companyId = req.companyId;
     const body = req.body || {};
 
     if (!companyId) {
-      return res.status(400).json({ success: false, message: "companyId missing" });
+      return res.status(400).json({
+        success: false,
+        message: "companyId missing",
+      });
     }
 
-    const jobId = body.id || body.jobId || null;
-    const incomingStatus = body.status || "draft"; // draft | submit | active
+    /* --------------------------------------------------------
+     * 🛡️ HELPERS (CRITICAL FOR multipart/form-data)
+     * -------------------------------------------------------- */
+    const safeValue = (val) =>
+      Array.isArray(val) ? val[0] : val;
+
+    const safeString = (val) => {
+      const v = safeValue(val);
+      return typeof v === "string" ? v.trim() : "";
+    };
+
+    const safeNumber = (val, def = 0) => {
+      const n = Number(safeValue(val));
+      return isNaN(n) ? def : n;
+    };
+
+    const safeBoolean = (val) =>
+      val === true || val === "true";
+
+    const safeArray = (val) =>
+      Array.isArray(val)
+        ? val.map(v => String(v).trim()).filter(Boolean)
+        : [];
+
+    const safeDate = (val) => {
+      const raw = safeValue(val);
+      if (!raw) return null;
+      const d = new Date(raw);
+      return isNaN(d.getTime()) ? null : d;
+    };
 
     /* --------------------------------------------------------
-     * 1️⃣ FETCH COMPANY
+     * 🎓 QUALIFICATION NORMALIZER (FIXES CastError)
+     * -------------------------------------------------------- */
+    const normalizeQualification = (q = {}) => {
+      const pick = (v) => (Array.isArray(v) ? v[0] : v);
+
+      const educationLevel =
+        typeof pick(q.educationLevel) === "string"
+          ? pick(q.educationLevel).trim()
+          : "";
+
+      const course =
+        typeof pick(q.course) === "string"
+          ? pick(q.course).trim()
+          : "";
+
+      const specialization =
+        typeof pick(q.specialization) === "string"
+          ? pick(q.specialization).trim()
+          : "";
+
+      let fullQualification = "";
+      if (educationLevel) fullQualification += educationLevel;
+      if (course)
+        fullQualification += fullQualification
+          ? ` - ${course}`
+          : course;
+      if (specialization)
+        fullQualification += ` (${specialization})`;
+
+      return {
+        educationLevel,
+        course,
+        specialization,
+        fullQualification: fullQualification || undefined,
+      };
+    };
+
+    /* --------------------------------------------------------
+     * ✅ JOB TITLE (MANDATORY)
+     * -------------------------------------------------------- */
+    const jobTitle = safeString(body.jobTitle);
+
+    if (!jobTitle) {
+      return res.status(400).json({
+        success: false,
+        message: "Job title is required",
+      });
+    }
+
+    let jobId = safeValue(body.id) || null;
+    const incomingStatus = safeString(body.status) || "draft";
+
+    /* --------------------------------------------------------
+     * 🚫 CREATE GUARD
+     * -------------------------------------------------------- */
+    if (!jobId && incomingStatus !== "draft") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Only draft jobs can be created. Submit/active jobs must already exist.",
+      });
+    }
+
+    /* --------------------------------------------------------
+     * ♻️ REUSE EXISTING DRAFT
+     * -------------------------------------------------------- */
+    if (!jobId && incomingStatus === "draft") {
+      const existingDraft = await JobPost.findOne({
+        companyId,
+        jobTitle,
+        status: "draft",
+      });
+
+      if (existingDraft) {
+        jobId = existingDraft._id;
+      }
+    }
+
+    /* --------------------------------------------------------
+     * 🏢 FETCH COMPANY
      * -------------------------------------------------------- */
     const company = await CompanyLogin.findById(companyId).lean();
     const profile = await CompanyProfile.findOne({ companyId }).lean();
 
     if (!company) {
-      return res.status(404).json({ success: false, message: "Company not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Company not found",
+      });
     }
 
     /* --------------------------------------------------------
-     * 2️⃣ RESOLVE GOOGLE LOCATION
+     * 🌍 GOOGLE LOCATION
      * -------------------------------------------------------- */
-    let googleLocation = null;
+    const latitude = safeString(body.latitude);
+    const longitude = safeString(body.longitude);
 
-    if (body.googleLocation?.coordinates?.length === 2) {
-      googleLocation = {
-        type: "Point",
-        coordinates: body.googleLocation.coordinates.map(Number),
-      };
-    } else if (
-      profile?.googleLocation?.coordinates?.length === 2 &&
-      profile.googleLocation.coordinates.some(v => v !== 0)
-    ) {
-      googleLocation = profile.googleLocation;
+    let googleLocation = null;
+    if (latitude && longitude) {
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+      if (!isNaN(lat) && !isNaN(lng)) {
+        googleLocation = {
+          type: "Point",
+          coordinates: [lng, lat],
+        };
+      }
     }
 
     /* --------------------------------------------------------
-     * 3️⃣ BUILD JOB PAYLOAD
+     * 🎓 BUILD QUALIFICATIONS (SAFE)
+     * -------------------------------------------------------- */
+    let qualifications = [];
+
+    if (Array.isArray(body.qualifications)) {
+      qualifications = body.qualifications
+        .map(normalizeQualification)
+        .filter(q =>
+          q.educationLevel || q.course || q.specialization
+        );
+    }
+
+    /* --------------------------------------------------------
+     * 🧱 BUILD JOB PAYLOAD
      * -------------------------------------------------------- */
     const jobData = {
       companyId,
@@ -66,69 +191,149 @@ exports.createOrUpdateJob = async (req, res) => {
       companyIndustry: profile?.businessCategory || "",
       companyWebsite: profile?.socialLinks?.website || "",
 
-      ...body,
-      ...(googleLocation && { googleLocation }),
+      jobTitle,
+      jobRole: safeArray(body.jobRole),
+      jobIndustry: safeString(body.jobIndustry),
 
-      remoteEligibility: body.remoteEligibility === true || body.remoteEligibility === "true",
-      freshersAllowed: body.freshersAllowed === true || body.freshersAllowed === "true",
+      employmentType: safeString(body.employmentType) || undefined,
+      contractDuration:
+        safeString(body.employmentType) === "contract"
+          ? safeNumber(body.contractDuration, null)
+          : null,
+      contractDurationUnit:
+        safeString(body.employmentType) === "contract"
+          ? safeString(body.contractDurationUnit)
+          : null,
 
-      salaryMin: Number(body.salaryMin) || 0,
-      salaryMax: Number(body.salaryMax) || 0,
-      openingsCount: Number(body.openingsCount) || 1,
-      minimumExperience: Number(body.minimumExperience) || 0,
-      maximumExperience: Number(body.maximumExperience) || 0,
+      workMode: safeString(body.workMode) || undefined,
+      shiftType: safeString(body.shiftType) || undefined,
+      openingsCount: safeNumber(body.openingsCount, 1),
+      urgencyLevel: safeString(body.urgencyLevel) || undefined,
+
+      country: safeString(body.country),
+      state: safeString(body.state),
+      city: safeString(body.city),
+      area: safeString(body.area),
+      pincode: safeString(body.pincode),
+      fullAddress: safeString(body.fullAddress),
+
+      remoteEligibility: safeBoolean(body.remoteEligibility),
+
+      latitude,
+      longitude,
+      googleLocation,
+
+      jobDescription: safeString(body.jobDescription),
+
+      requiredSkills: safeArray(body.requiredSkills),
+
+      qualifications,
+      degreeRequired: qualifications
+        .map(q => q.fullQualification)
+        .filter(Boolean),
+
+      certificationRequired: safeArray(body.certificationRequired),
+
+      minimumExperience: safeNumber(body.minimumExperience, 0),
+      maximumExperience: safeNumber(body.maximumExperience, 0),
+      freshersAllowed: safeBoolean(body.freshersAllowed),
+
+      salaryType: safeString(body.salaryType) || undefined,
+      salaryMin: safeNumber(body.salaryMin, 0),
+      salaryMax: safeNumber(body.salaryMax, 0),
+      salaryCurrency: safeString(body.salaryCurrency) || "INR",
+
+      benefits: safeArray(body.benefits),
+
+      startDate: safeDate(body.startDate),
+      endDate: safeDate(body.endDate),
 
       status: incomingStatus,
     };
 
+    /* --------------------------------------------------------
+     * 📅 DATE VALIDATION (NON-DRAFT)
+     * -------------------------------------------------------- */
+    if (incomingStatus !== "draft") {
+      if (!jobData.startDate || !jobData.endDate) {
+        return res.status(400).json({
+          success: false,
+          message: "Start date and End date are required",
+        });
+      }
+
+      if (jobData.startDate > jobData.endDate) {
+        return res.status(400).json({
+          success: false,
+          message: "End date must be after start date",
+        });
+      }
+    }
+
+    /* --------------------------------------------------------
+     * 🖼️ JOB IMAGE
+     * -------------------------------------------------------- */
     if (req.file) {
       jobData.jobImage = `https://${req.get("host")}/media/company/${companyId}/jobs/${req.savedJobFileName}`;
     }
 
+    if (safeBoolean(body.removeExistingImage)) {
+      jobData.jobImage = null;
+    }
+
     /* --------------------------------------------------------
-     * 4️⃣ UPDATE (ID PRESENT)
+     * ✏️ UPDATE JOB
      * -------------------------------------------------------- */
     if (jobId) {
       const existingJob = await JobPost.findOne({ _id: jobId, companyId });
       if (!existingJob) {
-        return res.status(404).json({ success: false, message: "Job not found" });
+        return res.status(404).json({
+          success: false,
+          message: "Job not found",
+        });
+      }
+
+      if (!jobData.jobImage && !safeBoolean(body.removeExistingImage)) {
+        jobData.jobImage = existingJob.jobImage;
       }
 
       await JobPost.updateOne({ _id: jobId }, { $set: jobData });
 
-      if (googleLocation?.coordinates?.length === 2) {
-        await upsertJobGeo(jobId, googleLocation.coordinates);
-      } else {
-        await removeJobGeo(jobId);
-      }
-
       return res.status(200).json({
         success: true,
-        message: "Job updated successfully",
+        message: `Job ${incomingStatus} updated successfully`,
         jobId,
       });
     }
 
     /* --------------------------------------------------------
-     * 5️⃣ CREATE (NO ID)
+     * ➕ CREATE JOB (DRAFT ONLY)
      * -------------------------------------------------------- */
     const newJob = await JobPost.create(jobData);
 
-    if (googleLocation?.coordinates?.length === 2) {
-      await upsertJobGeo(newJob._id, googleLocation.coordinates);
-    }
-
     return res.status(201).json({
       success: true,
-      message: "Job created successfully",
-      job: newJob,
+      message: "Draft job created successfully",
+      jobId: newJob._id,
     });
 
   } catch (error) {
     console.error("❌ createOrUpdateJob error:", error);
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
+
+
+
+
+
+
+
+
+
 
 
 
@@ -442,12 +647,16 @@ exports.getJobById = async (req, res) => {
     const jobId = req.params.id;
     const userId = req.Id;
 
-    const userObjectId = new mongoose.Types.ObjectId(userId);
+    if (!jobId) {
+      return res.status(400).json({ success: false, message: "Job ID missing" });
+    }
+
     const jobObjectId = new mongoose.Types.ObjectId(jobId);
+    const userObjectId = userId ? new mongoose.Types.ObjectId(userId) : null;
 
     const jobData = await JobPost.aggregate([
       /* --------------------------------------------------
-       * 1️⃣ FILTER SPECIFIC JOB + ACTIVE + APPROVED
+       * 1️⃣ MATCH JOB (ACTIVE / EXPIRED + APPROVED)
        * -------------------------------------------------- */
       {
         $match: {
@@ -458,11 +667,7 @@ exports.getJobById = async (req, res) => {
       },
 
       /* --------------------------------------------------
-       * ❌ REMOVED PAYMENT LOOKUP
-       * -------------------------------------------------- */
-
-      /* --------------------------------------------------
-       * 2️⃣ JOIN ENGAGEMENT DATA
+       * 2️⃣ JOB ENGAGEMENT LOOKUP
        * -------------------------------------------------- */
       {
         $lookup: {
@@ -487,15 +692,6 @@ exports.getJobById = async (req, res) => {
               },
             },
           },
-          shareCount: {
-            $size: {
-              $filter: {
-                input: "$engagementData",
-                as: "e",
-                cond: { $eq: ["$$e.shared", true] },
-              },
-            },
-          },
           saveCount: {
             $size: {
               $filter: {
@@ -514,6 +710,15 @@ exports.getJobById = async (req, res) => {
               },
             },
           },
+          shareCount: {
+            $size: {
+              $filter: {
+                input: "$engagementData",
+                as: "e",
+                cond: { $eq: ["$$e.shared", true] },
+              },
+            },
+          },
           viewCount: {
             $size: {
               $filter: {
@@ -527,21 +732,25 @@ exports.getJobById = async (req, res) => {
       },
 
       /* --------------------------------------------------
-       * 4️⃣ CURRENT USER'S ENGAGEMENT
+       * 4️⃣ CURRENT USER ENGAGEMENT
        * -------------------------------------------------- */
-      {
-        $addFields: {
-          userEngagement: {
-            $first: {
-              $filter: {
-                input: "$engagementData",
-                as: "e",
-                cond: { $eq: ["$$e.userId", userObjectId] },
+      ...(userObjectId
+        ? [
+            {
+              $addFields: {
+                userEngagement: {
+                  $first: {
+                    $filter: {
+                      input: "$engagementData",
+                      as: "e",
+                      cond: { $eq: ["$$e.userId", userObjectId] },
+                    },
+                  },
+                },
               },
             },
-          },
-        },
-      },
+          ]
+        : []),
 
       /* --------------------------------------------------
        * 5️⃣ USER FLAGS
@@ -557,11 +766,7 @@ exports.getJobById = async (req, res) => {
       },
 
       /* --------------------------------------------------
-       * ❌ REMOVED ENGAGEMENT SCORE
-       * -------------------------------------------------- */
-
-      /* --------------------------------------------------
-       * 6️⃣ JOIN COMPANY LOGIN
+       * 6️⃣ COMPANY LOGIN
        * -------------------------------------------------- */
       {
         $lookup: {
@@ -574,7 +779,7 @@ exports.getJobById = async (req, res) => {
       { $unwind: "$companyLogin" },
 
       /* --------------------------------------------------
-       * 7️⃣ JOIN COMPANY PROFILE
+       * 7️⃣ COMPANY PROFILE
        * -------------------------------------------------- */
       {
         $lookup: {
@@ -592,7 +797,7 @@ exports.getJobById = async (req, res) => {
       },
 
       /* --------------------------------------------------
-       * 8️⃣ FINAL PROJECTION (NO PAYMENT / NO SCORE)
+       * 8️⃣ FINAL PROJECTION (SCHEMA SAFE)
        * -------------------------------------------------- */
       {
         $project: {
@@ -601,28 +806,59 @@ exports.getJobById = async (req, res) => {
           jobTitle: 1,
           jobRole: 1,
           jobCategory: 1,
-          jobSubCategory: 1,
+
           employmentType: 1,
+          contractDuration: 1,
+          contractDurationUnit: 1,
+
           workMode: 1,
           shiftType: 1,
+          openingsCount: 1,
+          urgencyLevel: 1,
+
           country: 1,
           state: 1,
           city: 1,
+          area: 1,
+          pincode: 1,
+          fullAddress: 1,
+          remoteEligibility: 1,
+
+          latitude: 1,
+          longitude: 1,
+          googleLocation: 1,
+
+          jobDescription: 1,
+          preferredSkills: 1,
+
+          educationLevels: 1,
+          degreeRequired: 1,
+          certificationRequired: 1,
+          minimumExperience: 1,
+          maximumExperience: 1,
+          freshersAllowed: 1,
+
+          salaryType: 1,
           salaryMin: 1,
           salaryMax: 1,
-          salaryType: 1,
-          jobDescription: 1,
-          requiredSkills: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          status: 1,
+          salaryCurrency: 1,
+
+          benefits: 1,
+
+          startDate: 1,
           endDate: 1,
 
-          /* Counts */
+          jobImage: 1,
+
+          status: 1,
+          createdAt: 1,
+          updatedAt: 1,
+
+          /* Engagement counts */
           likeCount: 1,
-          shareCount: 1,
           saveCount: 1,
           applyCount: 1,
+          shareCount: 1,
           viewCount: 1,
 
           /* User flags */
@@ -636,7 +872,6 @@ exports.getJobById = async (req, res) => {
           companyId: 1,
           postedBy: {
             companyName: "$companyLogin.companyName",
-            name: "$companyLogin.name",
             email: "$companyLogin.email",
             phone: "$companyLogin.phone",
             whatsAppNumber: "$companyLogin.whatsAppNumber",
@@ -665,6 +900,7 @@ exports.getJobById = async (req, res) => {
     });
   }
 };
+
 
 
 
