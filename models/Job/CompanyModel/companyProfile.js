@@ -18,11 +18,9 @@ const CompanyProfileSchema = new mongoose.Schema(
     logo: { type: String },
     coverImage: { type: String },
 
-    tagline: { type: String, trim: true },
+
     description: { type: String, trim: true },
-    mission: { type: String, trim: true },
-    vision: { type: String, trim: true },
-    about: { type: String, trim: true },
+ 
 
     /* ----------------------------------------
      * CONTACT DETAILS
@@ -87,6 +85,15 @@ const CompanyProfileSchema = new mongoose.Schema(
 
     hiringProcess: { type: [String], default: [] }, // e.g., ["Resume Screening", "Interview", "HR Round"]
 
+
+    galleryImages: {
+  type: [String],
+  default: [],
+  validate: {
+    validator: v => v.length <= 5,
+    message: "Maximum 5 gallery images allowed"
+  }
+},
     /* ----------------------------------------
      * BUSINESS DETAILS
      * -------------------------------------- */

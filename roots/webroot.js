@@ -360,6 +360,9 @@ const { startAptitudeTest ,
   getTopAptitudePerformers,
 } = require('../controllers/aptitudeController');
 const { getManiBoardStats } = require('../controllers/mainHomeControlle');
+const { getPostInterestStatus ,
+  requestPostInterest
+} = require('../controllers/postIntrestedController');
 
 
 
@@ -505,6 +508,11 @@ router.delete("/user/delete/notification",auth,deleteNotification);
 router.delete("/user/delete/all/notification",auth,clearAllNotifications);
 router.put("/user/read", auth, markNotificationAsRead);
 router.post("/notifications/save-token",auth,saveToken);
+
+
+/*--------------UserPostController--------------------------*/
+router.get("/post/allowed/status",auth,getPostInterestStatus);
+router.post("/post/intrested",auth,requestPostInterest);
 
 /* --------------------- User Profile API --------------------- */
 

@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { createJob,updateJob,saveJobDraft,createOrUpdateJob, getAllJobs, getJobById ,getJobsByCompany,deleteJobs,getRankedJobs,getAllJobsForAdmin, getTopRankedJobs} = require("../controllers/JobController/jobpostController");
 const { updateEngagement, getJobEngagementStats,getUserEngagements} = require("../controllers/JobController/engagementController");
-const {companyJobUpload}=require("../middlewares/services/JobsService/jobImageUploadSpydy.js");
+const {companyJobUpload}=require("../middlewares/services/jobImageUploadSpydy.js");
 const {auth}=require("../middlewares/jwtAuthentication.js");
 const {getAllJobPostsAdmin}=require("../controllers/adminControllers/JobPost/adminJobPostController.js")
 const {deleteJob,approveJob}=require("../controllers/ChildAdminControllers/childAdminJobsController.js");
@@ -15,7 +15,7 @@ resetPassword,
 checkAvailability
 }=require("../controllers/authenticationControllers/companyAuthController.js")
 const {companyAuth}=require("../middlewares/jwtCompany.js")
-const {companyUpload}=require("../middlewares/services/JobsService/companyUploadSpydy.js");
+const {companyUpload}=require("../middlewares/services/companyUploadSpydy.js");
 const {updateCompanyProfile,getRecentDrafts,getDraftById,
     getCompanyProfile,getSingleCompanyProfile
 }=require("../controllers/JobController/CompanyControllers/companyProfileController.js");
@@ -38,7 +38,8 @@ router.put(
   companyUpload.fields([
     { name: "logo", maxCount: 1 },
     { name: "coverImage", maxCount: 1 },
-    { name: "profileAvatar", maxCount: 1 }
+    { name: "profileAvatar", maxCount: 1 },
+     { name: "galleryImages", maxCount: 5 },
   ]),
   updateCompanyProfile
 );
