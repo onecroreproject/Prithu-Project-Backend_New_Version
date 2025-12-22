@@ -11,7 +11,7 @@ const Payment = require("../../models/Job/JobPost/jobPaymentSchema");
 const CompanyLogin = require("../../models/Job/CompanyModel/companyLoginSchema");
 const CompanyProfile = require("../../models/Job/CompanyModel/companyProfile");
 const {logCompanyActivity} =require("../../middlewares/services/JobsService/jobActivityLoogerFunction");
-const {deleteLocalFile} = require("../../middlewares/services/JobsService/jobImageUploadSpydy.js");
+const {deleteLocalFile} = require("../../middlewares/services/jobImageUploadSpydy.js");
 const { upsertJobGeo, removeJobGeo } = require("../../middlewares/helper/jobGeo.js");
 
 
@@ -353,27 +353,28 @@ exports.createOrUpdateJob = async (req, res) => {
    ============================================================================================= */
 exports.getAllJobs = async (req, res) => {
   try {
-    const userId = req.Id || req.body?.userId;
+    const userId = req.Id;
 
     const {
       jobId,
-      city,
-      state,
-      country,
-      employmentType,
-      workMode,
       keyword,
       search,
-      tags,
+      country,
+      state,
+      city,
+      area,
+      employmentType,
+      workMode,
+      jobIndustry,
+      jobRole,
+      requiredSkills,
+      experience,
+      salaryRange,
       minExp,
       maxExp,
       minSalary,
       maxSalary,
       companyId,
-      category,
-      salaryRange,
-      experience,
-      location,
       lat,
       lng,
       radius
@@ -381,42 +382,30 @@ exports.getAllJobs = async (req, res) => {
 
     const q = keyword || search;
     const geoEnabled = lat && lng;
-
+   
     /* ---------------------------------------------------
      * 1️⃣ SINGLE JOB FETCH
      * --------------------------------------------------- */
     if (jobId) {
       const job = await JobPost.findOne({
-        $or: [{ _id: jobId }, { jobId }],
+        _id: jobId,
         status: "active",
-        $or: [
-          { isApproved: true },
-          { isApproved: { $exists: false } }
-        ]
-      })
-        .populate("companyId", "companyName industry")
-        .lean();
-
-      if (!job) {
-        return res.status(200).json({ success: true, total: 0, jobs: [] });
-      }
+        $or: [{ isApproved: true }, { isApproved: { $exists: false } }]
+      }).lean();
 
       return res.status(200).json({
         success: true,
-        total: 1,
-        jobs: [job]
+        total: job ? 1 : 0,
+        jobs: job ? [job] : []
       });
     }
 
     /* ---------------------------------------------------
-     * 2️⃣ BASE FILTER (NON-GEO)
+     * 2️⃣ BASE FILTER
      * --------------------------------------------------- */
     const baseFilter = {
       status: "active",
-      $or: [
-        { isApproved: true },
-        { isApproved: { $exists: false } }
-      ]
+      $or: [{ isApproved: true }, { isApproved: { $exists: false } }]
     };
 
     if (companyId) {
@@ -424,71 +413,71 @@ exports.getAllJobs = async (req, res) => {
       baseFilter.companyId = ids.length > 1 ? { $in: ids } : ids[0];
     }
 
-    if (category && category !== "All") {
-      baseFilter.jobCategory = new RegExp(category, "i");
+    if (employmentType) {
+      baseFilter.employmentType = { $in: employmentType.split(",") };
     }
 
+    if (workMode) {
+      baseFilter.workMode = { $in: workMode.split(",") };
+    }
+
+    if (jobIndustry) {
+      baseFilter.jobIndustry = new RegExp(jobIndustry, "i");
+    }
+
+    if (jobRole) {
+      baseFilter.jobRole = { $in: jobRole.split(",") };
+    }
+
+    if (requiredSkills) {
+      baseFilter.requiredSkills = { $in: requiredSkills.split(",") };
+    }
+
+    /* ---------------------------------------------------
+     * 3️⃣ EXPERIENCE FILTER
+     * --------------------------------------------------- */
     if (experience) {
       const [minE, maxE] = experience.split("-").map(Number);
       baseFilter.$and = [
-        ...(baseFilter.$and || []),
-        { minimumExperience: { $gte: minE } },
-        { maximumExperience: { $lte: maxE } }
+        { minimumExperience: { $lte: maxE } },
+        { maximumExperience: { $gte: minE } }
       ];
     }
 
+    if (minExp) baseFilter.minimumExperience = { $gte: Number(minExp) };
+    if (maxExp) baseFilter.maximumExperience = { $lte: Number(maxExp) };
+
+    /* ---------------------------------------------------
+     * 4️⃣ SALARY FILTER
+     * --------------------------------------------------- */
     if (salaryRange) {
       const [minS, maxS] = salaryRange.split("-").map(Number);
       baseFilter.$and = [
         ...(baseFilter.$and || []),
-        { salaryMin: { $gte: minS } },
-        { salaryMax: { $lte: maxS } }
+        { salaryMin: { $lte: maxS } },
+        { salaryMax: { $gte: minS } }
       ];
     }
 
-    if (employmentType) {
-      const types = employmentType.split(",");
-      baseFilter.employmentType = types.length > 1 ? { $in: types } : types[0];
-    }
-
-    if (workMode) {
-      const modes = workMode.split(",");
-      baseFilter.workMode = modes.length > 1 ? { $in: modes } : modes[0];
-    }
-
-    if (tags) baseFilter.tags = { $in: tags.split(",") };
-    if (minExp) baseFilter.minimumExperience = { $gte: Number(minExp) };
-    if (maxExp) baseFilter.maximumExperience = { $lte: Number(maxExp) };
     if (minSalary) baseFilter.salaryMin = { $gte: Number(minSalary) };
     if (maxSalary) baseFilter.salaryMax = { $lte: Number(maxSalary) };
 
     /* ---------------------------------------------------
-     * 3️⃣ LOCATION TEXT FILTER (ONLY IF NO GEO)
+     * 5️⃣ LOCATION FILTER (TEXT)
      * --------------------------------------------------- */
-    const locationQuery = location || city;
-
-    if (locationQuery && !geoEnabled) {
-      baseFilter.$and = [
-        ...(baseFilter.$and || []),
-        {
-          $or: [
-            { city: new RegExp(locationQuery, "i") },
-            { state: new RegExp(locationQuery, "i") },
-            { country: new RegExp(locationQuery, "i") }
-          ]
-        }
-      ];
+    if (!geoEnabled) {
+      if (country) baseFilter.country = new RegExp(`^${country}$`, "i");
+      if (state) baseFilter.state = new RegExp(`^${state}$`, "i");
+      if (city) baseFilter.city = new RegExp(`^${city}$`, "i");
+      if (area) baseFilter.area = new RegExp(area, "i");
     }
 
-    if (state && !geoEnabled) baseFilter.state = new RegExp(`^${state}$`, "i");
-    if (country && !geoEnabled) baseFilter.country = new RegExp(`^${country}$`, "i");
-
     /* ---------------------------------------------------
-     * 4️⃣ FETCH JOBS
+     * 6️⃣ FETCH JOBS
      * --------------------------------------------------- */
     let jobs = [];
 
-    // ✅ GEO SEARCH (PRIORITY)
+    // 🌍 GEO SEARCH
     if (geoEnabled) {
       jobs = await JobPost.aggregate([
         {
@@ -500,18 +489,22 @@ exports.getAllJobs = async (req, res) => {
             distanceField: "distance",
             maxDistance: (Number(radius) || 10) * 1000,
             spherical: true,
-            query: {
-              status: "active",
-              $or: [
-                { isApproved: true },
-                { isApproved: { $exists: false } }
-              ]
-            }
+            query: baseFilter
           }
         },
-        { $sort: { isFeatured: -1, priorityScore: -1, createdAt: -1 } }
+        { $sort: { isFeatured: -1, isPromoted: -1, priorityScore: -1, createdAt: -1 } }
       ]);
     }
+
+    if (geoEnabled && jobs.length === 0) {
+  jobs = await JobPost.find({
+    status: "active",
+    isApproved: true,
+    state: new RegExp(state, "i"),
+    country: new RegExp(country, "i")
+  });
+}
+
 
     // 🔍 TEXT SEARCH
     else if (q) {
@@ -519,7 +512,6 @@ exports.getAllJobs = async (req, res) => {
         ...baseFilter,
         $text: { $search: q }
       })
-        .populate("companyId", "companyName industry")
         .sort({ score: { $meta: "textScore" } })
         .lean();
     }
@@ -527,97 +519,17 @@ exports.getAllJobs = async (req, res) => {
     // 📄 NORMAL FETCH
     else {
       jobs = await JobPost.find(baseFilter)
-        .populate("companyId", "companyName industry")
-        .sort({ isFeatured: -1, priorityScore: -1, createdAt: -1 })
+        .sort({ isFeatured: -1, isPromoted: -1, priorityScore: -1, createdAt: -1 })
         .lean();
     }
-
-    /* ---------------------------------------------------
-     * 5️⃣ COMPANY LOGOS
-     * --------------------------------------------------- */
-    const companyIds = [
-      ...new Set(
-        jobs
-          .map(j =>
-            typeof j.companyId === "object"
-              ? j.companyId?._id?.toString()
-              : j.companyId?.toString()
-          )
-          .filter(Boolean)
-      )
-    ];
-
-    const companyProfiles = await CompanyProfile.find(
-      { companyId: { $in: companyIds } },
-      { companyId: 1, logo: 1 }
-    ).lean();
-
-    const companyLogoMap = {};
-    companyProfiles.forEach(cp => {
-      companyLogoMap[cp.companyId.toString()] = cp.logo;
-    });
-
-    /* ---------------------------------------------------
-     * 6️⃣ ENGAGEMENT
-     * --------------------------------------------------- */
-    const jobIds = jobs.map(j => j._id);
-    const engagementData = await JobEngagement.find({
-      jobId: { $in: jobIds }
-    }).lean();
-
-    const engagementMap = {};
-    jobIds.forEach(id => {
-      engagementMap[id] = {
-        likeCount: 0,
-        shareCount: 0,
-        saveCount: 0,
-        applyCount: 0,
-        viewCount: 0,
-        isLiked: false,
-        isSaved: false,
-        isApplied: false,
-        isViewed: false
-      };
-    });
-
-    engagementData.forEach(e => {
-      const job = engagementMap[e.jobId];
-      if (!job) return;
-
-      if (e.liked) job.likeCount++;
-      if (e.shared) job.shareCount++;
-      if (e.saved) job.saveCount++;
-      if (e.applied) job.applyCount++;
-      if (e.view) job.viewCount++;
-
-      if (e.userId?.toString() === userId?.toString()) {
-        job.isLiked = e.liked;
-        job.isSaved = e.saved;
-        job.isApplied = e.applied;
-        job.isViewed = e.view;
-      }
-    });
-
+console.log(jobs)
     /* ---------------------------------------------------
      * 7️⃣ FINAL RESPONSE
      * --------------------------------------------------- */
-    const finalJobs = jobs.map(job => {
-      const cid =
-        typeof job.companyId === "object"
-          ? job.companyId?._id?.toString()
-          : job.companyId?.toString();
-
-      return {
-        ...job,
-        companyLogo: companyLogoMap[cid] || null,
-        ...engagementMap[job._id]
-      };
-    });
-
     return res.status(200).json({
       success: true,
-      total: finalJobs.length,
-      jobs: finalJobs
+      total: jobs.length,
+      jobs
     });
 
   } catch (error) {
@@ -639,6 +551,7 @@ exports.getAllJobs = async (req, res) => {
 
 
 
+
 /* =============================================================================================
    3️⃣ GET JOB BY ID + Company Snapshot
    ============================================================================================= */
@@ -648,20 +561,23 @@ exports.getJobById = async (req, res) => {
     const userId = req.Id;
 
     if (!jobId) {
-      return res.status(400).json({ success: false, message: "Job ID missing" });
+      return res.status(400).json({
+        success: false,
+        message: "Job ID missing",
+      });
     }
 
     const jobObjectId = new mongoose.Types.ObjectId(jobId);
     const userObjectId = userId ? new mongoose.Types.ObjectId(userId) : null;
 
-    const jobData = await JobPost.aggregate([
+    const pipeline = [
       /* --------------------------------------------------
-       * 1️⃣ MATCH JOB (ACTIVE / EXPIRED + APPROVED)
+       * 1️⃣ MATCH JOB
        * -------------------------------------------------- */
       {
         $match: {
           _id: jobObjectId,
-          status: { $in: ["active", "expired"] },
+          status: { $in: ["active"] },
           isApproved: true,
         },
       },
@@ -679,7 +595,7 @@ exports.getJobById = async (req, res) => {
       },
 
       /* --------------------------------------------------
-       * 3️⃣ GLOBAL COUNTS
+       * 3️⃣ GLOBAL ENGAGEMENT COUNTS
        * -------------------------------------------------- */
       {
         $addFields: {
@@ -797,15 +713,16 @@ exports.getJobById = async (req, res) => {
       },
 
       /* --------------------------------------------------
-       * 8️⃣ FINAL PROJECTION (SCHEMA SAFE)
+       * 8️⃣ FINAL PROJECTION (100% SCHEMA SAFE)
        * -------------------------------------------------- */
       {
         $project: {
           jobId: "$_id",
 
+          /* Job Basics */
           jobTitle: 1,
           jobRole: 1,
-          jobCategory: 1,
+          jobIndustry: 1,
 
           employmentType: 1,
           contractDuration: 1,
@@ -816,6 +733,7 @@ exports.getJobById = async (req, res) => {
           openingsCount: 1,
           urgencyLevel: 1,
 
+          /* Location */
           country: 1,
           state: 1,
           city: 1,
@@ -823,21 +741,23 @@ exports.getJobById = async (req, res) => {
           pincode: 1,
           fullAddress: 1,
           remoteEligibility: 1,
-
           latitude: 1,
           longitude: 1,
           googleLocation: 1,
 
+          /* Description */
           jobDescription: 1,
-          preferredSkills: 1,
+          requiredSkills: 1,
 
-          educationLevels: 1,
+          /* Qualifications */
+          qualifications: 1,
           degreeRequired: 1,
           certificationRequired: 1,
           minimumExperience: 1,
           maximumExperience: 1,
           freshersAllowed: 1,
 
+          /* Salary */
           salaryType: 1,
           salaryMin: 1,
           salaryMax: 1,
@@ -845,11 +765,14 @@ exports.getJobById = async (req, res) => {
 
           benefits: 1,
 
+          /* Timeline */
           startDate: 1,
           endDate: 1,
 
+          /* Media */
           jobImage: 1,
 
+          /* Status */
           status: 1,
           createdAt: 1,
           updatedAt: 1,
@@ -881,17 +804,21 @@ exports.getJobById = async (req, res) => {
           companyProfile: 1,
         },
       },
-    ]);
+    ];
+
+    const jobData = await JobPost.aggregate(pipeline);
 
     if (!jobData || jobData.length === 0) {
-      return res.status(404).json({ success: false, message: "Job not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Job not found",
+      });
     }
 
     return res.status(200).json({
       success: true,
       job: jobData[0],
     });
-
   } catch (error) {
     console.error("❌ GET JOB BY ID ERROR:", error);
     return res.status(500).json({
@@ -900,6 +827,7 @@ exports.getJobById = async (req, res) => {
     });
   }
 };
+
 
 
 

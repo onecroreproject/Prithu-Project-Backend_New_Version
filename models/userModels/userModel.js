@@ -1,11 +1,10 @@
 const mongoose = require("mongoose");
-const {prithuDB}=require("../../database");
-
+const { prithuDB } = require("../../database");
 
 // ------------ FCM SUB-SCHEMA -------------
 const FcmTokenSchema = new mongoose.Schema(
   {
-    token: { type: String, required: true, index: true }, // ⚡ fast lookup
+    token: { type: String, required: true, index: true },
     platform: { type: String, enum: ["web", "ios", "android"], required: true },
     topics: { type: [String], default: [] },
     lastSeenAt: { type: Date, default: Date.now },
@@ -68,12 +67,7 @@ const UserSchema = new mongoose.Schema(
 
     activeAccount: { type: mongoose.Schema.Types.ObjectId, ref: "Account" },
 
-    accounts: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Account",
-      },
-    ],
+    accounts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Account" }],
 
     profileSettings: {
       type: mongoose.Schema.Types.ObjectId,
@@ -82,15 +76,12 @@ const UserSchema = new mongoose.Schema(
 
     // ------------ REFERRAL LOGIC --------------
     referralCode: { type: String, unique: true, sparse: true, trim: true },
-
     referralCodeIsValid: { type: Boolean, default: false },
-
     referredByUserId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       index: true,
     },
-
     referralCodeUsageCount: { type: Number, default: 0 },
     referralCodeUsageLimit: { type: Number, default: 2 },
 
@@ -124,26 +115,33 @@ const UserSchema = new mongoose.Schema(
     // ------------ TERMS & COMPLIANCE --------------
     termsAccepted: { type: Boolean, default: false, required: true },
     termsAcceptedAt: { type: Date },
-
     trialUsed: { type: Boolean, default: false },
+
+    // ------------ USER POST STATUS --------------
+    allowToPost: {
+      type: String,
+      enum: ["allow", "interest", "notallow"],
+      default: "notallow",
+      index: true,
+    },
   },
   {
     timestamps: true,
-    versionKey: false, // ⚡ remove __v
-    minimize: true, // ⚡ remove empty objects
+    versionKey: false,
+    minimize: true,
   }
 );
 
-// ------------ INDEXES FOR PERFORMANCE --------------
+// ------------ INDEXES --------------
 UserSchema.index({ email: 1 }, { unique: true });
 UserSchema.index({ userName: 1 }, { unique: true });
 UserSchema.index({ referralCode: 1 }, { unique: true, sparse: true });
 UserSchema.index({ referralCodeIsValid: 1 });
 UserSchema.index({ accountType: 1 });
 UserSchema.index({ "subscription.isActive": 1 });
-UserSchema.index({ isOnline: 1 }); // For efficient presence queries
+UserSchema.index({ isOnline: 1 });
 
-// ------------ AUTO UPDATE SUBSCRIPTION TIMESTAMP --------------
+// ------------ HOOK --------------
 UserSchema.pre("save", function (next) {
   if (this.subscription) {
     this.subscription.updatedAt = Date.now();
@@ -151,4 +149,6 @@ UserSchema.pre("save", function (next) {
   next();
 });
 
-module.exports = mongoose.models.User || prithuDB.model("User", UserSchema, "User");
+module.exports =
+  mongoose.models.User ||
+  prithuDB.model("User", UserSchema, "User");

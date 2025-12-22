@@ -1,7 +1,7 @@
 const CompanyProfile = require("../../../models/Job/CompanyModel/companyProfile");
 const CompanyLogin = require("../../../models/Job/CompanyModel/companyLoginSchema");
 const JobPost=require("../../../models/Job/JobPost/jobSchema");
-const { deleteLocalCompanyFile } = require("../../../middlewares/services/JobsService/companyUploadSpydy");
+const { deleteLocalCompanyFile } = require("../../../middlewares/services/companyUploadSpydy");
 const path = require("path");
 const mongoose=require("mongoose")
 
@@ -9,74 +9,163 @@ exports.updateCompanyProfile = async (req, res) => {
   try {
     const companyId = req.companyId;
 
-    if (!companyId)
-      return res.status(400).json({ success: false, message: "companyId is required" });
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        message: "companyId is required",
+      });
+    }
 
     const data = req.body;
+
+    // Handle potential array values for string fields
+    const stringFields = [
+      'companyEmail', 'companyPhone', 'phone', 'companyName',
+      'description', 'address', 'city', 'state', 'country',
+      'pincode', 'yearEstablished', 'employeeCount',
+      'workingHours', 'workingDays', 'registrationCertificate',
+      'gstNumber', 'panNumber', 'cinNumber', 'hiringEmail',
+      'hrName', 'hrPhone', 'businessCategory'
+    ];
+
+    // Convert any array values to strings (take first element)
+    stringFields.forEach(field => {
+      if (data[field] && Array.isArray(data[field])) {
+        data[field] = data[field][0] || '';
+      }
+    });
+
+    // Handle socialLinks if it's a string (JSON)
+    if (typeof data.socialLinks === 'string') {
+      try {
+        data.socialLinks = JSON.parse(data.socialLinks);
+      } catch (e) {
+        data.socialLinks = {};
+      }
+    }
+
+    // Handle array fields
+    const arrayFields = ['servicesOffered', 'clients', 'awards', 'hiringProcess', 'galleryImages'];
+    arrayFields.forEach(field => {
+      if (typeof data[field] === 'string') {
+        try {
+          data[field] = JSON.parse(data[field]);
+        } catch (e) {
+          data[field] = [];
+        }
+      }
+    });
+
+    // Handle googleLocation
+    if (typeof data.googleLocation === 'string') {
+      try {
+        data.googleLocation = JSON.parse(data.googleLocation);
+      } catch (e) {
+        data.googleLocation = null;
+      }
+    }
 
     // Fetch existing profile
     const existing = await CompanyProfile.findOne({ companyId });
 
-    // Host for generating URL
-    const host = `https://${req.get("host")}`;
+    // Host for generating URLs
+    const host = `${req.protocol}://${req.get("host")}`;
 
     /* ------------------------------------------------------
-     *  LOGO
+     * LOGO
      * ------------------------------------------------------ */
     if (req.files?.logo?.length > 0) {
       const file = req.files.logo[0];
 
-      // Delete old logo
       if (existing?.logo) {
-        const filePath = path.join(__dirname, "../../", existing.logo.replace(host, ""));
-        deleteLocalCompanyFile(filePath);
+        const oldPath = path.join(
+          __dirname,
+          "../../",
+          existing.logo.replace(host, "")
+        );
+        deleteLocalCompanyFile(oldPath);
       }
 
       data.logo = `${host}/media/company/${companyId}/logo/${file._savedName}`;
     }
 
     /* ------------------------------------------------------
-     *  COVER IMAGE
+     * COVER IMAGE
      * ------------------------------------------------------ */
     if (req.files?.coverImage?.length > 0) {
       const file = req.files.coverImage[0];
 
       if (existing?.coverImage) {
-        const filePath = path.join(__dirname, "../../", existing.coverImage.replace(host, ""));
-        deleteLocalCompanyFile(filePath);
+        const oldPath = path.join(
+          __dirname,
+          "../../",
+          existing.coverImage.replace(host, "")
+        );
+        deleteLocalCompanyFile(oldPath);
       }
 
       data.coverImage = `${host}/media/company/${companyId}/cover/${file._savedName}`;
+      console.log("cover", data.coverImage);
     }
 
     /* ------------------------------------------------------
-     *  PROFILE AVATAR
+     * GALLERY IMAGES (REPLACE MODE – MAX 5)
+     * ------------------------------------------------------ */
+    if (req.files?.galleryImages?.length > 0) {
+      const galleryFiles = req.files.galleryImages;
+
+      // delete old gallery images
+      if (existing?.galleryImages?.length > 0) {
+        for (const oldUrl of existing.galleryImages) {
+          const oldPath = path.join(
+            __dirname,
+            "../../",
+            oldUrl.replace(host, "")
+          );
+          deleteLocalCompanyFile(oldPath);
+        }
+      }
+
+      // save new gallery URLs
+      data.galleryImages = galleryFiles
+        .slice(0, 5)
+        .map(
+          (file) =>
+            `${host}/media/company/${companyId}/gallery/${file._savedName}`
+        );
+    }
+
+    /* ------------------------------------------------------
+     * PROFILE AVATAR (SAVE TO COMPANY LOGIN)
      * ------------------------------------------------------ */
     if (req.files?.profileAvatar?.length > 0) {
       const file = req.files.profileAvatar[0];
 
-      // Save to CompanyLogin
       await CompanyLogin.findByIdAndUpdate(companyId, {
         profileAvatar: `${host}/media/company/${companyId}/avatar/${file._savedName}`,
       });
     }
 
     /* ------------------------------------------------------
-     *  Convert googleLocation
+     * GOOGLE LOCATION
      * ------------------------------------------------------ */
+    // Use latitude/longitude if provided
     if (data.latitude && data.longitude) {
       data.googleLocation = {
         type: "Point",
         coordinates: [Number(data.longitude), Number(data.latitude)],
       };
     }
+    // Or use googleLocation from JSON
+    else if (data.googleLocation && data.googleLocation.coordinates) {
+      // Ensure coordinates are numbers
+      data.googleLocation.coordinates = data.googleLocation.coordinates.map(Number);
+    }
 
     /* ------------------------------------------------------
-     *  Sync with CompanyLogin
+     * SYNC BASIC FIELDS WITH COMPANY LOGIN
      * ------------------------------------------------------ */
     const syncMap = {
-      name: "name",
-      position: "position",
       companyName: "companyName",
       companyEmail: "companyEmail",
       companyPhone: "phone",
@@ -84,7 +173,9 @@ exports.updateCompanyProfile = async (req, res) => {
 
     const loginUpdates = {};
     Object.keys(syncMap).forEach((key) => {
-      if (data[key] !== undefined) loginUpdates[syncMap[key]] = data[key];
+      if (data[key] !== undefined && data[key] !== '') {
+        loginUpdates[syncMap[key]] = data[key];
+      }
     });
 
     if (Object.keys(loginUpdates).length > 0) {
@@ -92,14 +183,21 @@ exports.updateCompanyProfile = async (req, res) => {
     }
 
     /* ------------------------------------------------------
-     *  Save or Update Company Profile
+     * SAVE / UPDATE PROFILE
      * ------------------------------------------------------ */
-    let profile = await CompanyProfile.findOne({ companyId });
+    let profile;
 
-    if (!profile) {
+    if (!existing) {
       data.companyId = companyId;
       profile = await CompanyProfile.create(data);
     } else {
+      // Clean up undefined/null values to avoid overwriting with null
+      Object.keys(data).forEach(key => {
+        if (data[key] === undefined || data[key] === null) {
+          delete data[key];
+        }
+      });
+      
       await CompanyProfile.updateOne({ companyId }, { $set: data });
       profile = await CompanyProfile.findOne({ companyId });
     }
@@ -111,7 +209,7 @@ exports.updateCompanyProfile = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Error updating company profile:", error);
+    console.error("❌ UPDATE COMPANY PROFILE ERROR:", error);
     return res.status(500).json({
       success: false,
       message: "Server error while updating profile",

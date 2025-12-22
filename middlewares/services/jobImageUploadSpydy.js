@@ -3,8 +3,13 @@ const path = require("path");
 const fs = require("fs");
 const { v4: uuidv4 } = require("uuid");
 
-const BASE_DIR = path.join(__dirname, "../../../media/company");
-if (!fs.existsSync(BASE_DIR)) fs.mkdirSync(BASE_DIR, { recursive: true });
+const BASE_DIR = path.join(__dirname, "../../media/company");
+
+// Ensure base directory exists
+if (!fs.existsSync(BASE_DIR)) {
+  fs.mkdirSync(BASE_DIR, { recursive: true });
+  console.log("📁 Created base directory:", BASE_DIR);
+}
 
 // Generate timestamp
 const timestamp = () => {
@@ -15,28 +20,52 @@ const timestamp = () => {
     .replace(/:/g, "-")}`;
 };
 
+// Ensure directory exists with log
+const ensureDir = (dirPath) => {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+    console.log("📁 Directory created:", dirPath);
+  }
+};
+
 // ---------------------------
 // Multer Storage
 // ---------------------------
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const companyId = req.companyId;
-    const uploadPath = path.join(BASE_DIR, String(companyId), "jobs");
+    try {
+      const companyId = req.companyId;
 
-    fs.mkdirSync(uploadPath, { recursive: true });
+      if (!companyId) {
+        return cb(new Error("companyId missing in request"));
+      }
 
-    req.uploadPath = uploadPath;
+      const companyDir = path.join(BASE_DIR, String(companyId));
+      const uploadPath = path.join(companyDir, "jobs");
 
-    cb(null, uploadPath);
+      // ✅ Create directories only if missing
+      ensureDir(companyDir);
+      ensureDir(uploadPath);
+
+      req.uploadPath = uploadPath;
+
+      cb(null, uploadPath);
+    } catch (err) {
+      cb(err);
+    }
   },
 
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const fileName = `${timestamp()}_${uuidv4()}${ext}`;
+    try {
+      const ext = path.extname(file.originalname);
+      const fileName = `${timestamp()}_${uuidv4()}${ext}`;
 
-    req.savedJobFileName = fileName;
+      req.savedJobFileName = fileName;
 
-    cb(null, fileName);
+      cb(null, fileName);
+    } catch (err) {
+      cb(err);
+    }
   },
 });
 
@@ -68,7 +97,7 @@ function deleteLocalJobFile(filePath) {
   }
 }
 
-// Export both
+// Export
 module.exports = {
   companyJobUpload,
   deleteLocalJobFile,
