@@ -116,7 +116,7 @@ exports.startAptitudeTest = async (req, res) => {
     // Function to build final exam URL
     const buildTestUrl = (token) => {
       return (
-        `http://192.168.1.42:8000/student/student-exam` +
+        `https://aptitude.1croreprojects.com/student/student-exam` +
         `?user=${userId}` +
         `&token=${token}` +
         `&testId=${finalTestId}` +
@@ -1419,7 +1419,14 @@ exports.createTestSchedule = async (req, res) => {
     } = req.body;
 
     // Validation
-    if (!testName || !testId || !startTime || !testDuration || !totalQuestions || !passScore) {
+    if (
+      !testName ||
+      !testId ||
+      !startTime ||
+      !testDuration ||
+      !totalQuestions ||
+      !passScore
+    ) {
       return res.status(400).json({
         success: false,
         message:
@@ -1436,13 +1443,35 @@ exports.createTestSchedule = async (req, res) => {
     }
 
     /* --------------------------------------------------
-     * ✅ CORRECT: Let JS handle timezone (IST → UTC)
+     * 🕒 TIMEZONE HANDLING (UTC → IST only if needed)
      * -------------------------------------------------- */
-    const startUTC = new Date(startTime);
 
-    const finalEndTime = endTime
-      ? new Date(endTime)
-      : new Date(startUTC.getTime() + testDuration * 60000);
+    const isUTC = (time) =>
+      typeof time === "string" &&
+      (time.endsWith("Z") || /[+-]00:00$/.test(time));
+
+    const toIST = (date) =>
+      new Date(date.getTime() + 5.5 * 60 * 60 * 1000);
+
+    let startDate = new Date(startTime);
+
+    if (isUTC(startTime)) {
+      startDate = toIST(startDate);
+    }
+
+    let finalEndTime;
+
+    if (endTime) {
+      let endDate = new Date(endTime);
+      if (isUTC(endTime)) {
+        endDate = toIST(endDate);
+      }
+      finalEndTime = endDate;
+    } else {
+      finalEndTime = new Date(
+        startDate.getTime() + testDuration * 60000
+      );
+    }
 
     const totalScore = passScore;
 
@@ -1450,7 +1479,7 @@ exports.createTestSchedule = async (req, res) => {
       testName,
       testId,
       description,
-      startTime: startUTC,
+      startTime: startDate,
       endTime: finalEndTime,
       testDuration,
       totalQuestions,
@@ -1473,6 +1502,7 @@ exports.createTestSchedule = async (req, res) => {
     });
   }
 };
+
 
 
 
