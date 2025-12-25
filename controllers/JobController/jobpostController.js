@@ -25,8 +25,7 @@ const mapCompany = (job, companyMap, companyLoginMap = new Map()) => {
   // 🔥 Company Login (NEW – hiring info)
   const companyLogin = companyLoginMap.get(String(job.companyId)) || null;
 
-  console.log("company profile:", company);
-  console.log("company login:", companyLogin);
+ 
 
   return {
     ...job,
@@ -36,6 +35,7 @@ const mapCompany = (job, companyMap, companyLoginMap = new Map()) => {
      * --------------------------------------------------- */
     companyName: company.companyName || job.companyName,
     companyLogo: company.logo || null,
+    companyCoverImage:company.coverImage||null,
 
     country: company.country || job.country,
     state: company.state || job.state,
@@ -806,6 +806,7 @@ exports.getJobById = async (req, res) => {
   try {
     const jobId = req.params.id;
     const userId = req.Id;
+    console.log("woking")
 
     if (!jobId) {
       return res.status(400).json({
@@ -1072,6 +1073,7 @@ exports.getJobById = async (req, res) => {
     return res.status(200).json({
       success: true,
       job,
+      companyProfile:job.companyProfile
     });
   } catch (error) {
     console.error("❌ GET JOB BY ID ERROR:", error);
@@ -1664,6 +1666,164 @@ exports.getPlatformStats = async (req, res) => {
   }
 };
 
+
+
+
+
+// GET /api/jobs
+// GET /api/jobs/:jobId/similar
+exports.getSimilarJobs = async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const { limit = 6 } = req.query;
+
+    /* --------------------------------------------------
+     * 🔍 BASE JOB
+     * -------------------------------------------------- */
+    const baseJob = await JobPost.findOne({
+      _id: jobId,
+      status: "active",
+      isApproved: true,
+    }).lean();
+
+    if (!baseJob) {
+      return res.status(404).json({
+        success: false,
+        message: "Job not found",
+      });
+    }
+
+    /* --------------------------------------------------
+     * 🧠 SIMILARITY CONDITIONS
+     * -------------------------------------------------- */
+    const conditions = [];
+
+    if (baseJob.jobIndustry) {
+      conditions.push({
+        jobIndustry: { $regex: baseJob.jobIndustry, $options: "i" },
+      });
+    }
+
+    if (baseJob.jobRole?.length) {
+      conditions.push({
+        jobRole: { $in: baseJob.jobRole },
+      });
+    }
+
+    if (baseJob.jobTitle) {
+      conditions.push({
+        jobTitle: {
+          $regex: baseJob.jobTitle.split(" ")[0],
+          $options: "i",
+        },
+      });
+    }
+
+    /* --------------------------------------------------
+     * 🧩 AGGREGATION PIPELINE
+     * -------------------------------------------------- */
+    const jobs = await JobPost.aggregate([
+      {
+        $match: {
+          _id: { $ne: baseJob._id },
+          status: "active",
+          isApproved: true,
+          $or: conditions,
+        },
+      },
+
+      /* -------- Company Profile -------- */
+      {
+        $lookup: {
+          from: "CompanyProfile",
+          localField: "companyId",
+          foreignField: "companyId",
+          as: "companyProfile",
+        },
+      },
+      {
+        $unwind: {
+          path: "$companyProfile",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      /* -------- Company Login (HR + Company Name) -------- */
+      {
+        $lookup: {
+          from: "CompanyLogin",
+          localField: "companyId",
+          foreignField: "_id",
+          as: "companyLogin",
+        },
+      },
+      {
+        $unwind: {
+          path: "$companyLogin",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      /* --------------------------------------------------
+       * 🎯 FINAL SHAPE
+       * -------------------------------------------------- */
+      {
+        $project: {
+          jobTitle: 1,
+          jobRole: 1,
+          jobIndustry: 1,
+          city: 1,
+          workMode: 1,
+          employmentType: 1,
+          salaryMin: 1,
+          salaryMax: 1,
+          createdAt: 1,
+
+          /* ---- Company Profile ---- */
+          companyProfile: {
+            logo: "$companyProfile.logo",
+            coverImage: "$companyProfile.coverImage",
+            businessCategory: "$companyProfile.businessCategory",
+            city: "$companyProfile.city",
+            state: "$companyProfile.state",
+            country: "$companyProfile.country",
+            employeeCount: "$companyProfile.employeeCount",
+            yearEstablished: "$companyProfile.yearEstablished",
+            socialLinks: "$companyProfile.socialLinks",
+          },
+
+          /* ---- Company Login / HR ---- */
+          company: {
+            companyName: "$companyLogin.companyName",
+            hrName: "$companyLogin.name",
+            hrPosition: "$companyLogin.position",
+            hrPhone: "$companyLogin.phone",
+            hrWhatsApp: "$companyLogin.whatsAppNumber",
+            hrEmail: "$companyLogin.companyEmail",
+            profileAvatar: "$companyLogin.profileAvatar",
+            companyId:"$companyLogin._id"
+          },
+        },
+      },
+
+      { $sort: { isFeatured: -1, priorityScore: -1, createdAt: -1 } },
+      { $limit: Number(limit) },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      count: jobs.length,
+      jobs,
+    });
+
+  } catch (error) {
+    console.error("❌ getSimilarJobs error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 
 

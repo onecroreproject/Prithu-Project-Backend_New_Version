@@ -116,7 +116,7 @@ exports.startAptitudeTest = async (req, res) => {
     // Function to build final exam URL
     const buildTestUrl = (token) => {
       return (
-        `https://aptitude.1croreprojects.com/student/student-exam` +
+        `http://192.168.1.42:8000/student/student-exam` +
         `?user=${userId}` +
         `&token=${token}` +
         `&testId=${finalTestId}` +
@@ -1422,41 +1422,46 @@ exports.createTestSchedule = async (req, res) => {
     if (!testName || !testId || !startTime || !testDuration || !totalQuestions || !passScore) {
       return res.status(400).json({
         success: false,
-        message: "Missing required fields: testId, testName, startTime, testDuration, totalQuestions, passScore"
+        message:
+          "Missing required fields: testId, testName, startTime, testDuration, totalQuestions, passScore",
       });
     }
 
-    // Prevent duplicate testId for same testName
     const duplicate = await TestSchedule.findOne({ testId, testName });
     if (duplicate) {
       return res.status(400).json({
         success: false,
-        message: "A test with this testId already exists"
+        message: "A test with this testId already exists",
       });
     }
 
-    // Auto calculate endTime if not provided
-    let finalEndTime = endTime;
-    if (!finalEndTime) {
-      finalEndTime = new Date(new Date(startTime).getTime() + testDuration * 60000);
-    }
-const totalScore=passScore
+    /* --------------------------------------------------
+     * ✅ CORRECT: Let JS handle timezone (IST → UTC)
+     * -------------------------------------------------- */
+    const startUTC = new Date(startTime);
+
+    const finalEndTime = endTime
+      ? new Date(endTime)
+      : new Date(startUTC.getTime() + testDuration * 60000);
+
+    const totalScore = passScore;
+
     const schedule = await TestSchedule.create({
       testName,
       testId,
       description,
-      startTime,
+      startTime: startUTC,
       endTime: finalEndTime,
       testDuration,
       totalQuestions,
       totalScore,
-      createdBy: req.adminId || null
+      createdBy: req.adminId || null,
     });
 
     res.status(200).json({
       success: true,
       message: "Test schedule created successfully",
-      schedule
+      schedule,
     });
 
   } catch (err) {
@@ -1464,10 +1469,13 @@ const totalScore=passScore
     res.status(500).json({
       success: false,
       message: "Unable to create test schedule",
-      details: err.message
+      details: err.message,
     });
   }
 };
+
+
+
 
 
 
