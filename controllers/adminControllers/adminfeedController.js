@@ -4,6 +4,7 @@ const Category=require('../../models/categorySchema');
 const Feed=require("../../models/feedModel");
 const ProfileSettings=require("../../models/profileSettingModel");
 const Account=require("../../models/accountSchemaModel");
+const User=require("../../models/userModels/userModel");
 
 
 
@@ -180,3 +181,155 @@ if (feed.roleRef === "Admin") {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+
+
+
+exports.getUsersWillingToPost = async (req, res) => {
+  try {
+    const users = await User.aggregate([
+      /* -------------------------------------------
+       * 1️⃣ FILTER USERS WILLING TO POST
+       * ----------------------------------------- */
+      {
+        $match: {
+          allowToPost: { $in: ["interest", "allow"] },
+          isActive: true,
+          isBlocked: false,
+        },
+      },
+
+      /* -------------------------------------------
+       * 2️⃣ JOIN PROFILE SETTINGS
+       * ----------------------------------------- */
+      {
+        $lookup: {
+          from: "ProfileSettings",
+          localField: "_id",
+          foreignField: "userId",
+          as: "profileSettings",
+        },
+      },
+      {
+        $unwind: {
+          path: "$profileSettings",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      /* -------------------------------------------
+       * 3️⃣ FINAL PROJECTION
+       * ----------------------------------------- */
+      {
+        $project: {
+          _id: 1,
+          userName: 1,
+          email: 1,
+          roles: 1,
+          accountType: 1,
+          allowToPost: 1,
+          isActive: 1,
+          createdAt: 1,
+          lastActiveAt: 1,
+
+          /* ---- SUBSCRIPTION ---- */
+          subscription: {
+            isActive: "$subscription.isActive",
+          },
+
+          /* ---- PROFILE DETAILS ---- */
+          profile: {
+            name: "$profileSettings.name",
+            lastName: "$profileSettings.lastName",
+            gender: "$profileSettings.gender",
+            bio: "$profileSettings.bio",
+            profileSummary: "$profileSettings.profileSummary",
+
+            phoneNumber: "$profileSettings.phoneNumber",
+            whatsAppNumber: "$profileSettings.whatsAppNumber",
+
+            city: "$profileSettings.city",
+            country: "$profileSettings.country",
+
+            profileAvatar: "$profileSettings.profileAvatar",
+            coverPhoto: "$profileSettings.coverPhoto",
+
+            socialLinks: "$profileSettings.socialLinks",
+
+            isPublished: "$profileSettings.isPublished",
+          },
+        },
+      },
+
+      /* -------------------------------------------
+       * 4️⃣ SORT LATEST FIRST
+       * ----------------------------------------- */
+      {
+        $sort: { createdAt: -1 },
+      },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      total: users.length,
+      users,
+    });
+  } catch (error) {
+    console.error("❌ GET USERS WILLING TO POST ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch users",
+    });
+  }
+};
+
+
+
+exports.updateUserPostPermission = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { allowToPost } = req.body;
+
+    if (!userId || !allowToPost) {
+      return res.status(400).json({
+        success: false,
+        message: "userId and allowToPost are required"
+      });
+    }
+
+    if (!["allow", "interest", "notallow"].includes(allowToPost)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid allowToPost value"
+      });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { allowToPost },
+      { new: true }
+    ).select("userName email allowToPost");
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "User post permission updated",
+      user: updatedUser
+    });
+
+  } catch (error) {
+    console.error("❌ UPDATE USER POST STATUS ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update user status"
+    });
+  }
+};
+
+

@@ -1,21 +1,36 @@
 // utils/sendMail.js
 const nodemailer = require("nodemailer");
+require("dotenv").config();
 
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host:process.env.MAIL_HOST,
+  port: process.env.MAIL_PORT,
+  secure: true, // ✅ SSL
   auth: {
-    user: process.env.MAIL_USER,
+    user: process.env.MAIL_USER, // info@prithu.app
     pass: process.env.MAIL_PASS,
+  },
+  authMethod: "LOGIN", // ✅ IMPORTANT for cPanel
+  tls: {
+    rejectUnauthorized: false,
   },
 });
 
+/* 🔍 VERIFY SMTP ON SERVER START */
+transporter.verify((error, success) => {
+  if (error) {
+    console.error("❌ SMTP VERIFY FAILED:", error.message);
+  } else {
+    console.log("✅ SMTP SERVER READY");
+  }
+});
+
 /**
- * Send mail. Accepts attachments array in same shape as Nodemailer.
- * @param {{to:string, subject:string, html:string, attachments?:Array}} opts
+ * Send mail
  */
 const sendMail = async ({ to, subject, html, attachments = [] }) => {
   const mailOptions = {
-    from: `"Prithu" <${process.env.MAIL_USER}>`,
+    from: `"PRITHU" <${process.env.MAIL_USER}>`,
     to,
     subject,
     html,
@@ -23,19 +38,20 @@ const sendMail = async ({ to, subject, html, attachments = [] }) => {
   };
 
   const info = await transporter.sendMail(mailOptions);
-  console.log("Email sent:", info.messageId);
+  console.log("✅ Email sent:", info.messageId);
   return info;
 };
 
 const sendMailSafeSafe = async ({ to, subject, html, attachments = [] }) => {
   if (!to) {
-    console.warn("Email not sent: 'to' address is missing");
+    console.warn("⚠️ Email not sent: 'to' missing");
     return;
   }
   try {
     return await sendMail({ to, subject, html, attachments });
   } catch (err) {
-    console.error("Failed to send email:", err);
+    console.error("❌ Failed to send email:", err.message);
+    throw err;
   }
 };
 

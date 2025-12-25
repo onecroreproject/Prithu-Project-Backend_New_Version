@@ -5,13 +5,17 @@ const { v4: uuidv4 } = require("uuid");
 
 const BASE_DIR = path.join(__dirname, "../../media/company");
 
-// Ensure base directory exists
+/* --------------------------------------------------
+ * Ensure base directory exists
+ * -------------------------------------------------- */
 if (!fs.existsSync(BASE_DIR)) {
   fs.mkdirSync(BASE_DIR, { recursive: true });
   console.log("📁 Created base directory:", BASE_DIR);
 }
 
-// Generate timestamp
+/* --------------------------------------------------
+ * Helpers
+ * -------------------------------------------------- */
 const timestamp = () => {
   const now = new Date();
   return `${now.toISOString().split("T")[0]}_${now
@@ -20,7 +24,6 @@ const timestamp = () => {
     .replace(/:/g, "-")}`;
 };
 
-// Ensure directory exists with log
 const ensureDir = (dirPath) => {
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true });
@@ -28,26 +31,36 @@ const ensureDir = (dirPath) => {
   }
 };
 
-// ---------------------------
-// Multer Storage
-// ---------------------------
+/* --------------------------------------------------
+ * Multer Storage
+ * -------------------------------------------------- */
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     try {
       const companyId = req.companyId;
-
       if (!companyId) {
         return cb(new Error("companyId missing in request"));
       }
 
       const companyDir = path.join(BASE_DIR, String(companyId));
-      const uploadPath = path.join(companyDir, "jobs");
 
-      // ✅ Create directories only if missing
+      let uploadPath;
+
+      // 🔥 Decide folder based on field name
+      if (file.fieldname === "jobImage") {
+        uploadPath = path.join(companyDir, "jobs");
+      } else if (file.fieldname === "postImage") {
+        uploadPath = path.join(companyDir, "posts");
+      } else {
+        return cb(new Error("Invalid file field"));
+      }
+
       ensureDir(companyDir);
       ensureDir(uploadPath);
 
-      req.uploadPath = uploadPath;
+      // Store paths for controller use
+      if (!req.uploadPaths) req.uploadPaths = {};
+      req.uploadPaths[file.fieldname] = uploadPath;
 
       cb(null, uploadPath);
     } catch (err) {
@@ -60,7 +73,8 @@ const storage = multer.diskStorage({
       const ext = path.extname(file.originalname);
       const fileName = `${timestamp()}_${uuidv4()}${ext}`;
 
-      req.savedJobFileName = fileName;
+      if (!req.savedFiles) req.savedFiles = {};
+      req.savedFiles[file.fieldname] = fileName;
 
       cb(null, fileName);
     } catch (err) {
@@ -69,36 +83,38 @@ const storage = multer.diskStorage({
   },
 });
 
-// ---------------------------
-// Multer Configuration
-// ---------------------------
+/* --------------------------------------------------
+ * Multer Middleware
+ * -------------------------------------------------- */
 const companyJobUpload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
     if (!file.mimetype.startsWith("image/")) {
-      return cb(new Error("Only images allowed"), false);
+      return cb(new Error("Only image files are allowed"), false);
     }
     cb(null, true);
   },
 });
 
-// ---------------------------
-// Delete Job Image (Local)
-// ---------------------------
-function deleteLocalJobFile(filePath) {
+/* --------------------------------------------------
+ * Delete Local File Utility
+ * -------------------------------------------------- */
+function deleteLocalFile(filePath) {
   try {
     if (filePath && fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
-      console.log("🗑️ Deleted local job image:", filePath);
+      console.log("🗑️ Deleted file:", filePath);
     }
   } catch (err) {
-    console.error("❌ Error deleting job image:", err.message);
+    console.error("❌ File delete error:", err.message);
   }
 }
 
-// Export
+/* --------------------------------------------------
+ * Export
+ * -------------------------------------------------- */
 module.exports = {
   companyJobUpload,
-  deleteLocalJobFile,
+  deleteLocalFile,
 };

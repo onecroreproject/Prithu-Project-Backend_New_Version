@@ -135,6 +135,8 @@ const {
   adminFeedUpload,
   childAdminFeedUpload,
   getAllFeedAdmin,
+  getUsersWillingToPost,
+  updateUserPostPermission,
 } = require('../controllers/adminControllers/adminfeedController');
 
 const {
@@ -309,7 +311,8 @@ const { getAllJobs ,
   approveJob,
   rejectJob,
   deleteJob,
-  suspendJob
+  suspendJob,
+  getJobByIdforAdmin,
 } = require('../controllers/adminCompany/adminJobController');
 
 
@@ -376,6 +379,12 @@ router.get('/user/get/feed/with/search/cat/:categoryId',getFeedWithCategoryId);
  router.get('/get/creator/detail/feed/:feedId',auth,getUserInfoAssociatedFeed);
  router.get('/get/user/hide/post',auth,getUserHidePost);
 
+ router.get("/user/list/willingtopost", getUsersWillingToPost);
+ router.put("/update/user/post/status/:userId",updateUserPostPermission);
+
+
+
+
 
 router.post('/user/get/post',getUserPost);
 router.get('/user/get/feed/category',auth,getFeedLanguageCategories);
@@ -388,6 +397,8 @@ router.get('/user/get/all/category', getUserPostCategories);
 
  /* --------------------- User Notifiction API --------------------- */
  router.post("/admin/send/notification", sendAdminNotification )
+
+
 // router.post("/user/follow", auth, notifyUserFollow);
 router.put("/mark/all/notification/read",auth,markAllRead);
 router.get("/get/user/all/notification",auth,getNotifications);
@@ -395,8 +406,6 @@ router.delete("/user/delete/notification",auth,deleteNotification);
 router.delete("/user/delete/all/notification",auth,clearAllNotifications);
 router.put("/user/read", auth, markNotificationAsRead);
 router.post("/notifications/save-token",auth,saveToken);
-
-
 router.delete("/user/cover/photo/delete",auth,deleteCoverPhoto);
 router.get('/get/profile/detail',auth,getUserProfileDetail);
 
@@ -566,6 +575,8 @@ router.get("/get/all/company/jobs",getAllJobs)
 router.put('/jobs/:jobId/approve',approveJob);
 router.put('/jobs/:jobId/suspend', suspendJob);
 router.put("/jobs/:jobId/reject",rejectJob);
+router.get("/admin/get/job/:jobId", getJobByIdforAdmin);
+
 
 
 

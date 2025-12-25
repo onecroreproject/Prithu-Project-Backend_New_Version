@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+      padding: 20px;
+    }
+    .box {
+      background: #ffffff;
+      padding: 25px;
+      border-radius: 12px;
+      max-width: 600px;
+      margin: auto;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+    }
+    .title {
+      font-size: 22px;
+      font-weight: bold;
+      color: #4f46e5;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .btn {
+      display: inline-block;
+      margin-top: 20px;
+      padding: 12px 20px;
+      background: #4f46e5;
+      color: #ffffff;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    .footer {
+      margin-top: 30px;
+      font-size: 12px;
+      color: #9ca3af;
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="box">
+    <img src="{logoCid}" width="140" style="display:block;margin:auto;" />
+
+    <p class="title">Application Submitted 🎉</p>
+
+    <p>Hi <strong>{firstName}</strong>,</p>
+
+    <p>
+      Your application for the position of
+      <strong>{jobTitle}</strong> at
+      <strong>{companyName}</strong> has been successfully submitted.
+    </p>
+
+    <p>
+      <strong>Applied On:</strong> {appliedDate}
+    </p>
+
+    <p>
+      The employer will review your profile and you will be notified if you are
+      shortlisted for the next stage.
+    </p>
+
+    <a href="{dashboardUrl}" class="btn" target="_blank">
+      View My Applications
+    </a>
+
+    <div class="footer">
+      This is an automated email from PRITHU.<br/>
+      Please do not reply to this email.
+    </div>
+  </div>
+</body>
+</html>

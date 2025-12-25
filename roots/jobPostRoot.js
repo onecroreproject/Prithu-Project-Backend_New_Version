@@ -17,9 +17,11 @@ checkAvailability
 const {companyAuth}=require("../middlewares/jwtCompany.js")
 const {companyUpload}=require("../middlewares/services/companyUploadSpydy.js");
 const {updateCompanyProfile,getRecentDrafts,getDraftById,
-    getCompanyProfile,getSingleCompanyProfile
+    getCompanyProfile,getSingleCompanyProfile,companyLocation
 }=require("../controllers/JobController/CompanyControllers/companyProfileController.js");
-const { getCompanyApplicants, updateApplicationStatus, getRecentCompanyActivities, getCompanyJobStats, getTopPerformingJobs } = require("../controllers/JobController/CompanyControllers/companyJobCotroller.js");
+const { getCompanyApplicants, updateApplicationStatus, 
+  updateCompanyProfileVisibility,
+  getCompanyProfileVisibilityStatus,getRecentCompanyActivities, getCompanyJobStats, getTopPerformingJobs } = require("../controllers/JobController/CompanyControllers/companyJobCotroller.js");
 
 
 //CompanyLogin API
@@ -47,9 +49,13 @@ router.put(
 router.post(
   "/company/create/job",
   companyAuth,
-  companyJobUpload.single("jobImage"),
+  companyJobUpload.fields([
+    { name: "jobImage", maxCount: 1 },
+    { name: "postImage", maxCount: 1 }
+  ]),
   createOrUpdateJob
 );
+
 
 
 // router.put("/company/update/job",companyAuth,updateJob);
@@ -66,6 +72,9 @@ router.put("/update/application/status",companyAuth,updateApplicationStatus);
 router.get("/company/activity/status",companyAuth,getRecentCompanyActivities);
 router.get("/get/company/stats",companyAuth,getCompanyJobStats);
 router.get("/get/top/performing/job",companyAuth,getTopPerformingJobs);
+router.post("/company/privacy/update",companyAuth,updateCompanyProfileVisibility);
+router.get("/get/company/privacy/status",companyAuth,getCompanyProfileVisibilityStatus);
+router.post("/update/company/location",companyAuth,companyLocation);
 
 
 // User routes
@@ -81,9 +90,13 @@ router.get("/user/:userId", auth, getUserEngagements);
 
 //Admin Roots
 router.get("/admin/get/all", getAllJobPostsAdmin);
-router.get("/admin/get/job/:id", getJobById);
+
 router.post("/childadmin/job/approval",auth,approveJob);
 router.post("/chiladmin/job/delete",auth,deleteJob);
+
+
+
+
 
 // Engagement
 module.exports = router;

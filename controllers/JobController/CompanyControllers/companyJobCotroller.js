@@ -5,7 +5,11 @@ const JobPost = require("../../../models/Job/JobPost/jobSchema");
 const User =require("../../../models/userModels/userModel")
 const {logCompanyActivity} =require("../../../middlewares/services/JobsService/jobActivityLoogerFunction");
 const CompanyActivityLog = require("../../../models/Job/CompanyModel/companyActivityLog");
-const mongoose =require("mongoose")
+const CompanyProfileVisibility = require("../../../models/Job/CompanyModel/companyProfileVisibilitySchema");
+const { sendTemplateEmail } = require("../../../utils/templateMailer");
+const mongoose =require("mongoose");
+const { prithuDB, jobDB } = require("../../../database");
+const CompanyLogin=require("../../../models/Job/CompanyModel/companyLoginSchema");
 
 
 exports.getCompanyApplicants = async (req, res) => {
@@ -84,15 +88,9 @@ exports.getCompanyApplicants = async (req, res) => {
 
 exports.updateApplicationStatus = async (req, res) => {
   try {
-    const companyId = req.companyId; // from companyAuth middleware
+    const companyId = req.companyId;
     const { applicationId, status, note } = req.body;
 
-    console.log("com", companyId);
-    console.log("app", applicationId);
-    console.log("sat", status);
-    console.log("note", note);
-
-    // Allowed statuses
     const allowedStatuses = [
       "applied",
       "reviewed",
@@ -109,27 +107,26 @@ exports.updateApplicationStatus = async (req, res) => {
     }
 
     /* -----------------------------------------------------
-     * 1️⃣ Validate application belongs to this company
+     * 1️⃣ Fetch application (JOB DB)
      * --------------------------------------------------- */
     const application = await JobApplication.findOne({
       _id: applicationId,
-      companyId: companyId,
+      companyId,
     });
 
     if (!application) {
       return res.status(404).json({
         success: false,
-        message: "Application not found or unauthorized access",
+        message: "Application not found or unauthorized",
       });
     }
 
-    /* -----------------------------------------------------
-     * 2️⃣ Update status & push history
-     * --------------------------------------------------- */
     const oldStatus = application.status;
 
+    /* -----------------------------------------------------
+     * 2️⃣ Update status & history
+     * --------------------------------------------------- */
     application.status = status;
-
     application.history.push({
       status,
       note: note || `${status} updated by company`,
@@ -139,24 +136,90 @@ exports.updateApplicationStatus = async (req, res) => {
     await application.save();
 
     /* -----------------------------------------------------
-     * 3️⃣ COMPANY ACTIVITY LOG
+     * 3️⃣ Fetch User (PRITHU DB) & Job (JOB DB)
+     * --------------------------------------------------- */
+    const User = prithuDB.model("User");
+    const JobPost = jobDB.model("JobPost");
+
+    const user = await User.findById(application.userId).lean();
+    const job = await JobPost.findById(application.jobId).lean();
+
+    /* -----------------------------------------------------
+ * 4️⃣ Send Email to Candidate (Status based)
+ * --------------------------------------------------- */
+
+let templateName = "";
+let subject = "";
+
+// Fetch HR / Company login details
+const company = await CompanyLogin.findById(companyId).lean();
+
+if (status === "reviewed") {
+  templateName = "applicationReviewed.html";
+  subject = `Your application has been reviewed – ${job?.jobTitle}`;
+}
+
+if (status === "shortlisted") {
+  templateName = "applicationShortlisted.html";
+  subject = `Interview Shortlisted – ${job?.jobTitle}`;
+}
+
+if (status === "accepted" || status === "rejected") {
+  templateName = "applicationFinal.html";
+  subject =
+    status === "accepted"
+      ? `Congratulations! You are selected – ${job?.jobTitle}`
+      : `Application Update – ${job?.jobTitle}`;
+}
+
+if (user?.email && templateName) {
+  await sendTemplateEmail({
+    templateName,
+    to: user.email,
+    subject,
+    embedLogo: true,
+    placeholders: {
+      // Candidate
+      firstName: user?.firstName || user?.name || "Candidate",
+      lastName: user?.lastName || "",
+      jobTitle: job?.jobTitle || "Job Position",
+      companyName: company?.companyName || "Company",
+
+      // Status
+      status,
+      note: note || "",
+
+      // HR Info (used only in shortlisted mail)
+      hrName: company?.name || "",
+      hrPosition: company?.position || "",
+      hrEmail: company?.companyEmail || company?.email || "",
+      hrPhone: company?.phone || "",
+      hrWhatsApp: company?.whatsAppNumber || "",
+
+      dashboardUrl: "https://www.prithu.app/jobs",
+    },
+  });
+}
+
+    /* -----------------------------------------------------
+     * 5️⃣ Company Activity Log
      * --------------------------------------------------- */
     await logCompanyActivity({
-      companyId: companyId,
+      companyId,
       action: "application_status_update",
-      description: `Updated application ${applicationId} status from '${oldStatus}' to '${status}'`,
+      description: `Application ${applicationId} status changed from '${oldStatus}' to '${status}'`,
       jobId: application.jobId,
       changes: {
         old: oldStatus,
         new: status,
         note: note || "",
       },
-      req, // pass req for IP + UserAgent
+      req,
     });
 
     return res.status(200).json({
       success: true,
-      message: "Application status updated successfully",
+      message: "Application status updated and email sent",
       application,
     });
 
@@ -398,6 +461,151 @@ exports.getTopPerformingJobs = async (req, res) => {
       success: false,
       message: "Error fetching top performing jobs",
       error: error.message,
+    });
+  }
+};
+
+
+
+
+
+/* ---------------------------------------------------
+ * 🔐 UPDATE / CREATE COMPANY VISIBILITY SETTINGS
+ * --------------------------------------------------- */
+exports.updateCompanyProfileVisibility = async (req, res) => {
+  try {
+    const companyId = req.companyId; // 🔥 from auth middleware
+    const payload = req.body;
+
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        message: "companyId is required",
+      });
+    }
+
+    /* ---------------------------------------------------
+     * ✅ ALLOWED FIELDS (SECURITY)
+     * --------------------------------------------------- */
+    const allowedFields = [
+      "logo",
+      "coverImage",
+      "description",
+
+      "companyPhone",
+      "companyWhatsAppNumber",
+      "companyEmail",
+      "address",
+      "city",
+      "state",
+      "country",
+      "pincode",
+      "googleLocation",
+
+      "yearEstablished",
+      "employeeCount",
+      "workingHours",
+      "workingDays",
+
+      "registrationCertificate",
+      "gstNumber",
+      "panNumber",
+      "cinNumber",
+
+      "socialLinks",
+
+      "hiringEmail",
+      "hrName",
+      "hrPhone",
+      "hiringProcess",
+    ];
+
+    /* ---------------------------------------------------
+     * 🧹 SANITIZE PAYLOAD
+     * --------------------------------------------------- */
+    const updateData = {};
+
+    for (const key of allowedFields) {
+      if (payload[key] !== undefined) {
+        updateData[key] = payload[key];
+      }
+    }
+
+    /* ---------------------------------------------------
+     * ♻️ UPSERT SETTINGS
+     * --------------------------------------------------- */
+    const visibility = await CompanyProfileVisibility.findOneAndUpdate(
+      { companyId },
+      {
+        $set: updateData,
+      },
+      {
+        new: true,
+        upsert: true, // 🔥 creates if not exists
+        setDefaultsOnInsert: true,
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Company visibility settings updated successfully",
+      visibility,
+    });
+  } catch (error) {
+    console.error("❌ UPDATE COMPANY VISIBILITY ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+
+
+
+exports.getCompanyProfileVisibilityStatus = async (req, res) => {
+  try {
+    const companyId = req.companyId; // 🔐 from auth middleware
+
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        message: "companyId is required",
+      });
+    }
+
+    const visibility = await CompanyProfileVisibility.findOne({
+      companyId,
+    }).lean();
+
+    /* ---------------------------------------------------
+     * 🆕 NOT CREATED YET (FIRST TIME)
+     * --------------------------------------------------- */
+    if (!visibility) {
+      return res.status(200).json({
+        success: true,
+        exists: false,
+        message: "Visibility settings not configured yet",
+        visibility: null,
+      });
+    }
+
+    /* ---------------------------------------------------
+     * ✅ SETTINGS FOUND
+     * --------------------------------------------------- */
+    return res.status(200).json({
+      success: true,
+      exists: true,
+      visibility,
+    });
+  } catch (error) {
+    console.error("❌ GET VISIBILITY STATUS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
     });
   }
 };

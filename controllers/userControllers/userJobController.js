@@ -3,6 +3,8 @@ const JobPost =require('../../models/Job/JobPost/jobSchema');
 const JobApplication=require("../../models/userModels/job/userJobApplication");
 const User=require ("../../models/userModels/userModel");
 const JobEngagement=require("../../models/Job/JobPost/jobEngagementSchema");
+const {sendTemplateEmail}=require("../../utils/templateMailer");
+
 
 
 exports.applyForJob = async (req, res) => {
@@ -123,6 +125,31 @@ exports.applyForJob = async (req, res) => {
       },
       { upsert: true, new: true }
     );
+
+
+    /* --------------------------------------------------
+ * 6️⃣ Send Application Confirmation Mail
+ * -------------------------------------------------- */
+try {
+  if (user?.email) {
+    await sendTemplateEmail({
+      templateName: "applicationApplied.html",
+      to: user.email,
+      subject: `Application Submitted – ${job.jobTitle}`,
+      embedLogo: true,
+      placeholders: {
+        firstName: user.fullName || user.name || "Candidate",
+        jobTitle: job.jobTitle,
+        companyName: job.companyName || "Company",
+        appliedDate: new Date().toLocaleDateString(),
+        dashboardUrl: "https://www.prithu.app/jobs/applied",
+      },
+    });
+  }
+} catch (mailErr) {
+  // ❗ Do NOT fail application if mail fails
+  console.error("⚠️ Application mail failed:", mailErr.message);
+}
 
     return res.status(201).json({
       success: true,
