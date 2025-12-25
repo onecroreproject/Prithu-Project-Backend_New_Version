@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { createJob,updateJob,saveJobDraft,createOrUpdateJob, getAllJobs, getJobById ,getJobsByCompany,deleteJobs,getRankedJobs,getAllJobsForAdmin, getTopRankedJobs} = require("../controllers/JobController/jobpostController");
+const { createJob,updateJob,saveJobDraft,createOrUpdateJob, getAllJobs, getJobById ,getJobsByCompany,deleteJobs,getRankedJobs,getAllJobsForAdmin, getTopRankedJobs, getSimilarJobs} = require("../controllers/JobController/jobpostController");
 const { updateEngagement, getJobEngagementStats,getUserEngagements} = require("../controllers/JobController/engagementController");
 const {companyJobUpload}=require("../middlewares/services/jobImageUploadSpydy.js");
 const {auth}=require("../middlewares/jwtAuthentication.js");
@@ -81,6 +81,7 @@ router.post("/update/company/location",companyAuth,companyLocation);
  router.get("/user/get/all",auth,getAllJobs);
  router.get("/get/jobs/by/id/:id",auth,getJobById);
  router.get("/top/ranked/jobs", auth,getTopRankedJobs);
+ router.get("/get/similar/jobs/:jobId",getSimilarJobs);
 
 //User Action API
 router.post("/update", auth, updateEngagement);
