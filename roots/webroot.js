@@ -363,6 +363,8 @@ const { getManiBoardStats } = require('../controllers/mainHomeControlle');
 const { getPostInterestStatus ,
   requestPostInterest
 } = require('../controllers/postIntrestedController');
+const { getAllCompanies } = require('../controllers/adminCompany/adminCompanyController');
+const { getJobWithResolvedLocation, getAllActiveJobLocations, getPlatformStats } = require('../controllers/JobController/jobpostController');
 
 
 
@@ -497,7 +499,9 @@ router.get("/top/aptitude/performers",getTopAptitudePerformers);
 
 
  /*_______________________User JOB API_____________________________*/
- router.post("/apply/job",auth,applyForJob)
+ router.post("/apply/job",auth,applyForJob);
+ router.get("/get/job/locations",getAllActiveJobLocations);
+ router.get("/company/platform/status",getPlatformStats);
 
  /* --------------------- User Notifiction API --------------------- */
  router.post("/admin/send/notification", sendAdminNotification )
@@ -753,7 +757,9 @@ router.get("/get/user/birthday", getUpcomingBirthdays);
 
 
 
-router.get("/main/board/status",getManiBoardStats)
+router.get("/main/board/status",getManiBoardStats);
+
+router.get("/get/all/companies",getAllCompanies);
 
 
 

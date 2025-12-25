@@ -644,63 +644,117 @@ exports.getTopAptitudePerformers = async (req, res) => {
 
 exports.getAllUserTestSchedules = async (req, res) => {
   try {
-    const userId = req.Id; 
+    const userId = req.Id;
     const now = new Date();
 
-    // 1️⃣ Get all schedules
+    /* -------------------------------------------------
+     * 1️⃣ FETCH ALL SCHEDULES
+     * ------------------------------------------------- */
     let schedules = await TestSchedule.find().sort({ startTime: 1 }).lean();
 
-    // 2️⃣ Get user interest
-    const userInterests = await InterestedUser.find({ userId, isValid: true });
-    const interestedScheduleIds = userInterests.map(x => x.scheduleId.toString());
+    /* -------------------------------------------------
+     * 2️⃣ CLEANUP COMPLETED SCHEDULES
+     * ------------------------------------------------- */
+    const completedScheduleIds = [];
 
-    // 3️⃣ Get all interested users (for admin display)
+    schedules.forEach(schedule => {
+      if (
+        schedule.status !== "cancelled" &&
+        schedule.endTime &&
+        now > schedule.endTime
+      ) {
+        completedScheduleIds.push(schedule._id);
+      }
+    });
+
+    if (completedScheduleIds.length) {
+      console.log("🧹 Deleting completed schedules:", completedScheduleIds.length);
+
+      // ❌ Delete schedules
+      await TestSchedule.deleteMany({
+        _id: { $in: completedScheduleIds }
+      });
+
+      // ❌ Delete test sessions
+      await TestSession.deleteMany({
+        testId: { $in: schedules
+          .filter(s => completedScheduleIds.includes(s._id))
+          .map(s => s.testId)
+        }
+      });
+
+      // ❌ Delete interested users
+      await InterestedUser.deleteMany({
+        scheduleId: { $in: completedScheduleIds }
+      });
+
+      // Remove deleted schedules from local array
+      schedules = schedules.filter(
+        s => !completedScheduleIds.includes(s._id)
+      );
+    }
+
+    /* -------------------------------------------------
+     * 3️⃣ USER INTEREST DATA
+     * ------------------------------------------------- */
+    const userInterests = await InterestedUser.find({
+      userId,
+      isValid: true
+    });
+
+    const interestedScheduleIds = userInterests.map(x =>
+      x.scheduleId.toString()
+    );
+
+    /* -------------------------------------------------
+     * 4️⃣ ALL INTERESTED USERS (ADMIN INFO)
+     * ------------------------------------------------- */
     const interestMap = await InterestedUser.find({ isValid: true })
       .populate("userId", "userName profileAvatar")
       .lean();
 
-    // 4️⃣ Build mapping of schedule → interested users
     const scheduleInterest = {};
-    interestMap.forEach((i) => {
+    interestMap.forEach(i => {
       const sid = i.scheduleId.toString();
       if (!scheduleInterest[sid]) scheduleInterest[sid] = [];
       scheduleInterest[sid].push({
         userId: i.userId?._id,
         name: i.userId?.userName || "",
-        avatar: i.userId?.profileAvatar || "",
+        avatar: i.userId?.profileAvatar || ""
       });
     });
 
-    // 5️⃣ Categorized lists
-    const upcomingInterestedTests = [];
-    const completedInterestedTests = [];
-    const upcomingNotInterestedTests = [];
+    /* -------------------------------------------------
+     * 5️⃣ RESULT BUCKETS
+     * ------------------------------------------------- */
     const runningInterestedTests = [];
+    const upcomingInterestedTests = [];
+    const upcomingNotInterestedTests = [];
 
-    // 6️⃣ Process each schedule
+    /* -------------------------------------------------
+     * 6️⃣ PROCESS REMAINING SCHEDULES
+     * ------------------------------------------------- */
     schedules.forEach(schedule => {
 
-      // Set dynamic status
       if (schedule.status !== "cancelled") {
         if (now < schedule.startTime) schedule.status = "upcoming";
-        else if (now >= schedule.startTime && now <= schedule.endTime) schedule.status = "running";
-        else if (now > schedule.endTime) schedule.status = "completed";
+        else if (now >= schedule.startTime && now <= schedule.endTime)
+          schedule.status = "running";
       }
 
       const sid = schedule._id.toString();
       const isUserInterested = interestedScheduleIds.includes(sid);
 
       const interestedUsers = scheduleInterest[sid] || [];
-      const interestedCount = interestedUsers.length;
 
       const enrichedSchedule = {
         ...schedule,
         interestedUsers,
-        interestedCount,
-        isInterested: isUserInterested // ⭐ NEW field
+        interestedCount: interestedUsers.length,
+        isInterested: isUserInterested
       };
 
-      // ⭐ UPCOMING TESTS
+      // 🔹 UPCOMING
       if (schedule.status === "upcoming") {
         if (isUserInterested) {
           upcomingInterestedTests.push(enrichedSchedule);
@@ -709,42 +763,38 @@ exports.getAllUserTestSchedules = async (req, res) => {
         }
       }
 
-      // ⭐ COMPLETED (only if user interested)
-      if (schedule.status === "completed" && isUserInterested) {
-        completedInterestedTests.push(enrichedSchedule);
-      }
-
-      // ⭐ RUNNING (only if user interested)
+      // 🔹 RUNNING
       if (schedule.status === "running" && isUserInterested) {
         runningInterestedTests.push(enrichedSchedule);
       }
     });
 
-    // 7️⃣ SEND RESPONSE
-    res.json({
+    /* -------------------------------------------------
+     * 7️⃣ RESPONSE
+     * ------------------------------------------------- */
+    return res.json({
       success: true,
       userId,
 
       runningInterestedCount: runningInterestedTests.length,
       upcomingInterestedCount: upcomingInterestedTests.length,
-      completedInterestedCount: completedInterestedTests.length,
       upcomingNotInterestedCount: upcomingNotInterestedTests.length,
 
       runningInterestedTests,
       upcomingInterestedTests,
-      completedInterestedTests,
       upcomingNotInterestedTests
     });
 
   } catch (err) {
-    console.error("Get test schedules error:", err);
-    res.status(500).json({
+    console.error("❌ Get test schedules error:", err);
+    return res.status(500).json({
       success: false,
       message: "Unable to fetch test schedules",
       details: err.message
     });
   }
 };
+
 
 
 

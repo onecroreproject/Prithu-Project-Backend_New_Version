@@ -10,26 +10,37 @@ exports.getJobDashboardStats = async (req, res) => {
     const [
       activeJobs,
       pendingJobApproval,
+      updatedJobs,
       totalApplications,
       totalCompanies,
-      totalHires
+      totalHires,
+      jobStatusSummary
     ] = await Promise.all([
+
       /* -------------------------------------------------
-       * ✅ Active Jobs
-       * status = active AND approved
+       * ✅ Active Jobs (Approved & Live)
        * ------------------------------------------------- */
       JobPost.countDocuments({
         status: "active",
-        isApproved: true
+        $or: [
+          { isApproved: true },
+          { isApproved: { $exists: false } }
+        ]
       }),
 
       /* -------------------------------------------------
        * ⏳ Pending Job Approval
-       * submitted but not approved
        * ------------------------------------------------- */
       JobPost.countDocuments({
         status: "submit",
         isApproved: false
+      }),
+
+      /* -------------------------------------------------
+       * 🔄 Updated Jobs
+       * ------------------------------------------------- */
+      JobPost.countDocuments({
+        status: "update"
       }),
 
       /* -------------------------------------------------
@@ -49,17 +60,47 @@ exports.getJobDashboardStats = async (req, res) => {
        * ------------------------------------------------- */
       JobApplication.countDocuments({
         status: "shortlisted"
-      })
+      }),
+
+      /* -------------------------------------------------
+       * 📊 Job Status Breakdown (Auto updates)
+       * ------------------------------------------------- */
+      JobPost.aggregate([
+        {
+          $group: {
+            _id: "$status",
+            count: { $sum: 1 }
+          }
+        }
+      ])
     ]);
+
+    /* -------------------------------------------------
+     * Convert status array → object
+     * ------------------------------------------------- */
+    const statusMap = {};
+    jobStatusSummary.forEach(item => {
+      statusMap[item._id] = item.count;
+    });
 
     return res.status(200).json({
       success: true,
       data: {
         activeJobs,
         pendingJobApproval,
+        updatedJobs,
         totalApplications,
         totalCompanies,
-        totalHires
+        totalHires,
+        jobStatusSummary: {
+          draft: statusMap.draft || 0,
+          submit: statusMap.submit || 0,
+          update: statusMap.update || 0,
+          active: statusMap.active || 0,
+          paused: statusMap.paused || 0,
+          expired: statusMap.expired || 0,
+          closed: statusMap.closed || 0
+        }
       }
     });
 
@@ -71,3 +112,4 @@ exports.getJobDashboardStats = async (req, res) => {
     });
   }
 };
+

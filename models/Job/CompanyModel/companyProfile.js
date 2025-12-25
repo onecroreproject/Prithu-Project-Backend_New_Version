@@ -35,7 +35,7 @@ const CompanyProfileSchema = new mongoose.Schema(
     pincode: { type: String, trim: true, index: true },
 
     // GeoJSON location (BEST for maps)
-    googleLocation: {
+      googleLocation: {
       type: {
         type: String,
         enum: ["Point"],
@@ -44,7 +44,6 @@ const CompanyProfileSchema = new mongoose.Schema(
       coordinates: {
         type: [Number], // [longitude, latitude]
         default: [0, 0],
-        index: "2dsphere",
       },
     },
 
@@ -98,10 +97,6 @@ const CompanyProfileSchema = new mongoose.Schema(
      * BUSINESS DETAILS
      * -------------------------------------- */
     businessCategory: { type: String, trim: true, index: true },
-
-    servicesOffered: { type: [String], default: [] }, // array of strings  
-    clients: { type: [String], default: [] },
-    awards: { type: [String], default: [] },
   },
   {
     timestamps: true,

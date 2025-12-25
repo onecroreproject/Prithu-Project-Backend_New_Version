@@ -2,8 +2,10 @@ const CompanyProfile = require("../../../models/Job/CompanyModel/companyProfile"
 const CompanyLogin = require("../../../models/Job/CompanyModel/companyLoginSchema");
 const JobPost=require("../../../models/Job/JobPost/jobSchema");
 const { deleteLocalCompanyFile } = require("../../../middlewares/services/companyUploadSpydy");
+const CompanyProfileVisibility = require("../../../models/Job/CompanyModel/companyProfileVisibilitySchema");
 const path = require("path");
 const mongoose=require("mongoose")
+const JobApplication =require("../../../models/userModels/job/userJobApplication")
 
 exports.updateCompanyProfile = async (req, res) => {
   try {
@@ -410,10 +412,9 @@ exports.getCompanyProfile = async (req, res) => {
 
 
 
-
 exports.getSingleCompanyProfile = async (req, res) => {
   try {
-    const companyId = req.params.companyId; // FIXED — always string
+    const { companyId } = req.params;
 
     if (!companyId) {
       return res.status(400).json({
@@ -422,8 +423,10 @@ exports.getSingleCompanyProfile = async (req, res) => {
       });
     }
 
+    const companyObjectId = new mongoose.Types.ObjectId(companyId);
+
     /* --------------------------------------------------
-     * 1️⃣ FETCH COMPANY LOGIN INFORMATION
+     * 1️⃣ FETCH COMPANY LOGIN
      * -------------------------------------------------- */
     const companyLogin = await CompanyLogin.findById(companyId)
       .select("-password -otp -otpExpiry")
@@ -437,46 +440,183 @@ exports.getSingleCompanyProfile = async (req, res) => {
     }
 
     /* --------------------------------------------------
-     * 2️⃣ FETCH COMPANY PROFILE
+     * 2️⃣ FETCH VISIBILITY SETTINGS
      * -------------------------------------------------- */
-    const companyProfile = await CompanyProfile.findOne({ companyId }).lean();
+    const visibility = await CompanyProfileVisibility.findOne({
+      companyId,
+    }).lean();
 
     /* --------------------------------------------------
-     * 3️⃣ FETCH ALL JOBS POSTED BY THIS COMPANY
+     * 3️⃣ FETCH COMPANY PROFILE
      * -------------------------------------------------- */
-    const companyJobs = await JobPost.find({ companyId })
-      .sort({ createdAt: -1 }) // latest first
+    const companyProfile = await CompanyProfile.findOne({
+      companyId,
+    }).lean();
+
+    /* --------------------------------------------------
+     * 4️⃣ FETCH ACTIVE JOBS
+     * -------------------------------------------------- */
+    const companyJobs = await JobPost.find({
+      companyId,
+      status: "active",
+    })
+      .sort({ createdAt: -1 })
       .lean();
 
     /* --------------------------------------------------
-     * Profile not created yet
+     * 5️⃣ JOB COUNTS (ACTIVE + EXPIRED)
+     * -------------------------------------------------- */
+    const jobCountAgg = await JobPost.aggregate([
+      {
+        $match: {
+          companyId: companyObjectId,
+          status: { $in: ["active", "expired"] },
+        },
+      },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    let activeJobs = 0;
+    let expiredJobs = 0;
+
+    jobCountAgg.forEach((j) => {
+      if (j._id === "active") activeJobs = j.count;
+      if (j._id === "expired") expiredJobs = j.count;
+    });
+
+    const totalJobsPosted = activeJobs + expiredJobs;
+
+    /* --------------------------------------------------
+     * 6️⃣ SHORTLISTED APPLICATION COUNT
+     * -------------------------------------------------- */
+    const shortlistedApplicationsCount =
+      await JobApplication.countDocuments({
+        companyId,
+        status: "shortlisted",
+      });
+
+    /* --------------------------------------------------
+     * 🔐 APPLY VISIBILITY (COMPANY LOGIN)
+     * -------------------------------------------------- */
+    const companySafe = { ...companyLogin };
+
+    if (visibility) {
+      if (visibility.hrName === "private") {
+        delete companySafe.name;
+      }
+
+      if (visibility.hiringEmail === "private") {
+        delete companySafe.email;
+        delete companySafe.companyEmail;
+      }
+
+      if (visibility.hrPhone === "private") {
+        delete companySafe.phone;
+        delete companySafe.whatsAppNumber;
+      }
+    }
+
+    /* --------------------------------------------------
+     * 🔐 APPLY VISIBILITY (COMPANY PROFILE)
+     * -------------------------------------------------- */
+    let profileSafe = companyProfile;
+
+    if (companyProfile && visibility) {
+      profileSafe = { ...companyProfile };
+
+      if (visibility.address === "private") {
+        delete profileSafe.address;
+        delete profileSafe.pincode;
+      }
+
+      if (visibility.hiringEmail === "private") {
+        delete profileSafe.companyEmail;
+      }
+
+      if (visibility.hrPhone === "private") {
+        delete profileSafe.companyPhone;
+        delete profileSafe.phone;
+        delete profileSafe.whatsAppNumber;
+      }
+
+      if (visibility.city === "private") delete profileSafe.city;
+      if (visibility.state === "private") delete profileSafe.state;
+      if (visibility.country === "private") delete profileSafe.country;
+
+      if (visibility.googleLocation === "private") {
+        delete profileSafe.googleLocation;
+        delete profileSafe.latitude;
+        delete profileSafe.longitude;
+      }
+
+      if (visibility.yearEstablished === "private")
+        delete profileSafe.yearEstablished;
+
+      if (visibility.employeeCount === "private")
+        delete profileSafe.employeeCount;
+
+      if (visibility.workingDays === "private")
+        delete profileSafe.workingDays;
+
+      if (visibility.workingHours === "private")
+        delete profileSafe.workingHours;
+
+      if (visibility.socialLinks && profileSafe.socialLinks) {
+        profileSafe.socialLinks = { ...profileSafe.socialLinks };
+
+        Object.keys(visibility.socialLinks).forEach((key) => {
+          if (visibility.socialLinks[key] === "private") {
+            delete profileSafe.socialLinks[key];
+          }
+        });
+      }
+    }
+
+    /* --------------------------------------------------
+     * PROFILE NOT CREATED YET
      * -------------------------------------------------- */
     if (!companyProfile) {
       return res.status(200).json({
         success: true,
         profileCompleted: false,
-        company: companyLogin,
+        company: companySafe,
         profile: null,
-        jobs: companyJobs, // 👉 still return jobs even if profile missing
+        jobs: companyJobs,
+        jobCounts: {
+          totalPosted: totalJobsPosted,
+          active: activeJobs,
+          expired: expiredJobs,
+        },
+        shortlistedApplicationsCount,
       });
     }
 
     /* --------------------------------------------------
-     * 4️⃣ SEND COMPLETE COMPANY INFO
+     * FINAL RESPONSE
      * -------------------------------------------------- */
     return res.status(200).json({
       success: true,
       profileCompleted: true,
-      company: companyLogin,
-      profile: companyProfile,
-      jobs: companyJobs, // 👉 INCLUDED in response
+      company: companySafe,
+      profile: profileSafe,
+      jobs: companyJobs,
+      jobCounts: {
+        totalPosted: totalJobsPosted,
+        active: activeJobs,
+        expired: expiredJobs,
+      },
+      shortlistedApplicationsCount,
     });
-
   } catch (error) {
-    console.error("GET COMPANY PROFILE ERROR:", error);
+    console.error("❌ GET COMPANY PROFILE ERROR:", error);
     return res.status(500).json({
       success: false,
-      error: error.message,
+      message: error.message,
     });
   }
 };
@@ -485,6 +625,100 @@ exports.getSingleCompanyProfile = async (req, res) => {
 
 
 
+exports.companyLocation = async (req, res) => {
+  try {
+    const companyId = req.companyId; // from auth middleware
+    const { latitude, longitude } = req.body || {};
+
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        message: "companyId is required",
+      });
+    }
+
+    /* -------------------------------------------------
+     * 1️⃣ UPDATE LOCATION (if lat & lng provided)
+     * ------------------------------------------------- */
+    if (latitude !== undefined && longitude !== undefined) {
+      if (isNaN(latitude) || isNaN(longitude)) {
+        return res.status(400).json({
+          success: false,
+          message: "latitude and longitude must be numbers",
+        });
+      }
+
+      const profile = await CompanyProfile.findOneAndUpdate(
+        { companyId },
+        {
+          $set: {
+            googleLocation: {
+              type: "Point",
+              coordinates: [Number(longitude), Number(latitude)], // [lng, lat]
+            },
+          },
+        },
+        { new: true }
+      );
+
+      if (!profile) {
+        return res.status(404).json({
+          success: false,
+          message: "Company profile not found",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        action: "UPDATED",
+        message: "Location updated successfully",
+        coordinates: {
+          latitude: Number(latitude),
+          longitude: Number(longitude),
+        },
+      });
+    }
+
+    /* -------------------------------------------------
+     * 2️⃣ CHECK LOCATION STATUS (no lat & lng)
+     * ------------------------------------------------- */
+    const profile = await CompanyProfile.findOne({ companyId })
+      .select("googleLocation")
+      .lean();
+
+    if (!profile || !profile.googleLocation) {
+      return res.status(200).json({
+        success: true,
+        action: "STATUS",
+        isLocationUpdated: false,
+        coordinates: null,
+      });
+    }
+
+    const [lng, lat] = profile.googleLocation.coordinates || [];
+
+    const isLocationUpdated =
+      lat !== undefined &&
+      lng !== undefined &&
+      lat !== 0 &&
+      lng !== 0;
+
+    return res.status(200).json({
+      success: true,
+      action: "STATUS",
+      isLocationUpdated,
+      coordinates: isLocationUpdated
+        ? { latitude: lat, longitude: lng }
+        : null,
+    });
+  } catch (error) {
+    console.error("COMPANY LOCATION ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to process company location",
+    });
+  }
+};
 
 
 
