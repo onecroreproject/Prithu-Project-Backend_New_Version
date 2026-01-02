@@ -17,7 +17,8 @@ checkAvailability
 const {companyAuth}=require("../middlewares/jwtCompany.js")
 const {companyUpload}=require("../middlewares/services/companyUploadSpydy.js");
 const {updateCompanyProfile,getRecentDrafts,getDraftById,
-    getCompanyProfile,getSingleCompanyProfile,companyLocation
+    getCompanyProfile,getSingleCompanyProfile,companyLocation,
+    getCompanyProfileStrength
 }=require("../controllers/JobController/CompanyControllers/companyProfileController.js");
 const { getCompanyApplicants, updateApplicationStatus, 
   updateCompanyProfileVisibility,
@@ -75,6 +76,7 @@ router.get("/get/top/performing/job",companyAuth,getTopPerformingJobs);
 router.post("/company/privacy/update",companyAuth,updateCompanyProfileVisibility);
 router.get("/get/company/privacy/status",companyAuth,getCompanyProfileVisibilityStatus);
 router.post("/update/company/location",companyAuth,companyLocation);
+router.get("/company/profile/strength",companyAuth,getCompanyProfileStrength);
 
 
 // User routes

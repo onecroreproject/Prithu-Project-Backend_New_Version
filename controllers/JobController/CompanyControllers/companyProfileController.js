@@ -723,3 +723,128 @@ exports.companyLocation = async (req, res) => {
 
 
 
+
+
+exports.getCompanyProfileStrength = async (req, res) => {
+  try {
+    const companyId = req.companyId || req.params.companyId;
+
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        message: "companyId is required",
+      });
+    }
+
+    const profile = await CompanyProfile.findOne({ companyId }).lean();
+
+    if (!profile) {
+      return res.status(200).json({
+        success: true,
+        strength: 0,
+        message: "Company profile not created yet",
+      });
+    }
+
+    /* ----------------------------------------
+     * 🧮 SCORING SYSTEM (100 POINTS)
+     * -------------------------------------- */
+    const scoring = {
+      // Brand Identity (15)
+      logo: 5,
+      coverImage: 5,
+      description: 5,
+
+      // Contact & Location (20)
+      companyPhone: 5,
+      companyEmail: 5,
+      address: 5,
+      googleLocation: 5,
+
+      // Business Info (15)
+      yearEstablished: 5,
+      employeeCount: 5,
+      businessCategory: 5,
+
+      // HR & Hiring (15)
+      hiringEmail: 5,
+      hrName: 5,
+      hiringProcess: 5,
+
+      // Documents (15)
+      gstNumber: 5,
+      panNumber: 5,
+      registrationCertificate: 5,
+
+      // Social & Media (10)
+      socialLinks: 5,
+      galleryImages: 5,
+
+      // Work Details (10)
+      workingHours: 5,
+      workingDays: 5,
+    };
+
+    let earnedPoints = 0;
+    const totalPoints = Object.values(scoring).reduce((a, b) => a + b, 0);
+
+    /* ----------------------------------------
+     * 🔍 FIELD CHECKER
+     * -------------------------------------- */
+    const isFilled = (val) => {
+      if (Array.isArray(val)) return val.length > 0;
+      if (typeof val === "object") return val && Object.keys(val).length > 0;
+      return val !== undefined && val !== null && String(val).trim() !== "";
+    };
+
+    /* ----------------------------------------
+     * 🧠 CALCULATE SCORE
+     * -------------------------------------- */
+    Object.entries(scoring).forEach(([field, score]) => {
+      if (field === "googleLocation") {
+        if (
+          profile.googleLocation?.coordinates &&
+          profile.googleLocation.coordinates.length === 2 &&
+          !(profile.googleLocation.coordinates[0] === 0 &&
+            profile.googleLocation.coordinates[1] === 0)
+        ) {
+          earnedPoints += score;
+        }
+      } else if (field === "socialLinks") {
+        if (
+          profile.socialLinks &&
+          Object.values(profile.socialLinks).some(v => isFilled(v))
+        ) {
+          earnedPoints += score;
+        }
+      } else if (isFilled(profile[field])) {
+        earnedPoints += score;
+      }
+    });
+
+    const strengthPercentage = Math.round(
+      (earnedPoints / totalPoints) * 100
+    );
+
+    /* ----------------------------------------
+     * ✅ RESPONSE
+     * -------------------------------------- */
+    return res.json({
+      success: true,
+      strength: strengthPercentage,
+      earnedPoints,
+      totalPoints,
+    });
+
+  } catch (error) {
+    console.error("Profile strength error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to calculate company profile strength",
+    });
+  }
+};
+
+
+
+

@@ -129,6 +129,19 @@ const feedSchema = new mongoose.Schema(
       ref: "User"
     }],
 
+
+    storageType: {
+  type: String,
+  enum: ["local", "gdrive"],
+  default: "local"
+},
+
+driveFileId: {
+  type: String,
+  default: null
+},
+
+
     // Location
     location: {
       name: { type: String },
