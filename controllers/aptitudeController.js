@@ -1419,14 +1419,7 @@ exports.createTestSchedule = async (req, res) => {
     } = req.body;
 
     // Validation
-    if (
-      !testName ||
-      !testId ||
-      !startTime ||
-      !testDuration ||
-      !totalQuestions ||
-      !passScore
-    ) {
+    if (!testName || !testId || !startTime || !testDuration || !totalQuestions || !passScore) {
       return res.status(400).json({
         success: false,
         message:
@@ -1443,35 +1436,9 @@ exports.createTestSchedule = async (req, res) => {
     }
 
     /* --------------------------------------------------
-     * 🕒 TIMEZONE HANDLING (UTC → IST only if needed)
+     * ✅ CORRECT: Let JS handle timezone (IST → UTC)
      * -------------------------------------------------- */
 
-    const isUTC = (time) =>
-      typeof time === "string" &&
-      (time.endsWith("Z") || /[+-]00:00$/.test(time));
-
-    const toIST = (date) =>
-      new Date(date.getTime() + 5.5 * 60 * 60 * 1000);
-
-    let startDate = new Date(startTime);
-
-    if (isUTC(startTime)) {
-      startDate = toIST(startDate);
-    }
-
-    let finalEndTime;
-
-    if (endTime) {
-      let endDate = new Date(endTime);
-      if (isUTC(endTime)) {
-        endDate = toIST(endDate);
-      }
-      finalEndTime = endDate;
-    } else {
-      finalEndTime = new Date(
-        startDate.getTime() + testDuration * 60000
-      );
-    }
 
     const totalScore = passScore;
 
@@ -1479,8 +1446,8 @@ exports.createTestSchedule = async (req, res) => {
       testName,
       testId,
       description,
-      startTime: startDate,
-      endTime: finalEndTime,
+      startTime,
+      endTime,
       testDuration,
       totalQuestions,
       totalScore,
@@ -1502,7 +1469,6 @@ exports.createTestSchedule = async (req, res) => {
     });
   }
 };
-
 
 
 
