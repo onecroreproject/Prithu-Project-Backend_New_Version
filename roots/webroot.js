@@ -3,7 +3,7 @@ const router = express.Router();
 const { auth } = require('../middlewares/jwtAuthentication');
 const {feedUpload,
   userProcessFeedFile,
-  attachFeedFile,}=require("../middlewares/services/googleDriveMedia/feedgoogleConfig");
+  attachFeedFile,}=require("../middlewares/services/feedUploadSpydy");
 const {userUpload,attachUserFile}=require("../middlewares/services/userprofileUploadSpydy");
 
 
