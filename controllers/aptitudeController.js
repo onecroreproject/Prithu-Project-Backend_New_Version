@@ -97,7 +97,7 @@ exports.startAptitudeTest = async (req, res) => {
     const user = await User.findById(userId).lean();
     const profile = await ProfileSettings.findOne({ userId }).lean();
 
-    const email ="suriya.dlktech@gmail.com";
+    const email =user.email;
     const firstName = profile?.name || user?.userName || "";
     const lastName = profile?.lastName || "";
 
@@ -1574,7 +1574,7 @@ exports.updateTestSchedule = async (req, res) => {
       for (const user of interestedCandidates) {
         await sendTemplateEmail({
           templateName: "aptitudeScheduleUpdate.html",
-          to: "suriya.dlktech@gmail.com", // ensure email stored in InterestedUser or User model
+          to: user.email, // ensure email stored in InterestedUser or User model
           subject: `Update: "${schedule.testName}" Test Schedule Changed`,
           placeholders: {
             firstName: user.firstName,
@@ -1648,7 +1648,7 @@ exports.deleteTestSchedule = async (req, res) => {
     for (const user of interestedUsers) {
       await sendTemplateEmail({
         templateName: "aptitudeScheduleDelete.html",
-        to: "suriya.dlktech@gmail.com", // ensure you have user email stored
+        to: user.email, // ensure you have user email stored
         subject: `Test Cancelled: ${deletedTestName}`,
         placeholders: {
           firstName: user.firstName,

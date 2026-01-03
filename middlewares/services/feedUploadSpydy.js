@@ -133,6 +133,7 @@ const attachFeedFile = (req, res, next) => {
     uploadedAt: new Date(),
     fileHash: req.fileHash,
     videoDuration: req.videoDuration || null,
+    
   };
 
   next();
