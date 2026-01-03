@@ -564,7 +564,7 @@ exports.getTopAptitudePerformers = async (req, res) => {
         }
       },
 
-      // 3️⃣ Limit top 10
+      // 3️⃣ Limit top 10 (do this BEFORE lookup to improve performance)
       { $limit: 10 },
 
       // 4️⃣ Join ProfileSettings
@@ -585,13 +585,22 @@ exports.getTopAptitudePerformers = async (req, res) => {
         }
       },
 
-      // 6️⃣ (Optional) Only published profiles
+      // 6️⃣ Filter: Include all results, but only show profile data if published
+      // OR if no profile exists
       {
-        $match: {
-          $or: [
-            { "profile.isPublished": true },
-            { profile: { $exists: false } }
-          ]
+        $addFields: {
+          profile: {
+            $cond: {
+              if: {
+                $and: [
+                  { $ne: ["$profile", null] },
+                  { $ne: ["$profile.isPublished", true] }
+                ]
+              },
+              then: null, // Hide profile data if not published
+              else: "$profile"
+            }
+          }
         }
       },
 
@@ -608,14 +617,62 @@ exports.getTopAptitudePerformers = async (req, res) => {
 
           user: {
             userId: "$userId",
-            userName: "$profile.userName",
-            name: "$profile.name",
-            lastName: "$profile.lastName",
-            bio: "$profile.bio",
-            city: "$profile.city",
-            country: "$profile.country",
-            profileAvatar: "$profile.profileAvatar",
-            shareableLink: "$profile.shareableLink"
+            userName: {
+              $cond: {
+                if: { $ne: ["$profile", null] },
+                then: "$profile.userName",
+                else: null
+              }
+            },
+            name: {
+              $cond: {
+                if: { $ne: ["$profile", null] },
+                then: "$profile.name",
+                else: null
+              }
+            },
+            lastName: {
+              $cond: {
+                if: { $ne: ["$profile", null] },
+                then: "$profile.lastName",
+                else: null
+              }
+            },
+            bio: {
+              $cond: {
+                if: { $ne: ["$profile", null] },
+                then: "$profile.bio",
+                else: null
+              }
+            },
+            city: {
+              $cond: {
+                if: { $ne: ["$profile", null] },
+                then: "$profile.city",
+                else: null
+              }
+            },
+            country: {
+              $cond: {
+                if: { $ne: ["$profile", null] },
+                then: "$profile.country",
+                else: null
+              }
+            },
+            profileAvatar: {
+              $cond: {
+                if: { $ne: ["$profile", null] },
+                then: "$profile.profileAvatar",
+                else: null
+              }
+            },
+            shareableLink: {
+              $cond: {
+                if: { $ne: ["$profile", null] },
+                then: "$profile.shareableLink",
+                else: null
+              }
+            }
           }
         }
       }
