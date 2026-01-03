@@ -132,6 +132,8 @@ const {
   userHideFeed,
   getUserCategory,
   toggleDislikeFeed,
+  generateShareLink,
+  getVideoThumbnail,
 } = require('../controllers/feedControllers/userActionsFeedController');
 
 
@@ -399,6 +401,8 @@ router.post("/user/feed/dislike",auth,toggleDislikeFeed);
 router.post('/user/feed/save',auth, toggleSaveFeed);
 router.post('/user/feed/download',auth, downloadFeed);
 router.post('/user/feed/share',auth, shareFeed);
+router.get('/feed/share/:feedId', generateShareLink);
+router.get('/feed/video-thumbnail/:feedId', getVideoThumbnail);
 router.post('/user/select/category',auth,userSelectCategory);
 router.post('/user/not/intrested',auth,userNotInterestedCategory);
 router.post('/user/interested/feed',auth,userInterestedCategory);

@@ -348,6 +348,199 @@ exports.shareFeed = async (req, res) => {
 
 
 
+exports.generateShareLink = async (req, res) => {
+  const { feedId } = req.params;
+
+  try {
+    // Find the feed
+    const feed = await Feeds.findById(feedId).lean();
+    if (!feed) {
+      return res.status(404).json({ message: "Feed not found" });
+    }
+
+    // Get user info from ProfileSettings using createdByAccount
+    const profileSettings = await ProfileSettings.findOne({
+      accountId: feed.createdByAccount
+    }).select('userName name profileAvatar').lean();
+
+    // Get username - prioritize userName, then name
+    let userName = 'User';
+    let profileAvatar = null;
+    
+    if (profileSettings) {
+      userName = profileSettings.userName || profileSettings.name || 'User';
+      profileAvatar = profileSettings.profileAvatar;
+    }
+
+    // Construct share URL
+    const shareUrl = `${process.env.FRONTEND_URL || 'https://www.prithu.app/home'}/share/post/${feedId}`;
+    
+    // Generate OG image URL based on media type
+    let ogImageUrl = '';
+    let directMediaUrl = feed.contentUrl;
+    let mediaType = feed.type || 'image';
+
+    // IMPORTANT: Make sure image URLs are publicly accessible and optimized for OG tags
+    
+    // Handle Cloudinary images
+    if (feed.contentUrl && feed.contentUrl.includes('cloudinary.com')) {
+      // Cloudinary - optimize for OG tags (1200x630 is ideal for Facebook/WhatsApp)
+      ogImageUrl = feed.contentUrl.replace('/upload/', '/upload/c_fill,w_1200,h_630,f_auto,q_auto:best/');
+      directMediaUrl = feed.contentUrl;
+      mediaType = 'image';
+    }
+    // Handle local server images/videos
+    else if (feed.contentUrl && feed.contentUrl.includes('1croreprojects.com')) {
+      // For local server, make sure the URL is publicly accessible
+      ogImageUrl = feed.contentUrl;
+      directMediaUrl = feed.contentUrl;
+      mediaType = feed.type || 'image';
+      
+      // If it's a video and we have thumbnail
+      if (feed.type === 'video') {
+        // Try to get thumbnail from files array
+        if (feed.files && feed.files.length > 0 && feed.files[0].thumbnail) {
+          ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${feed.files[0].thumbnail}`;
+        }
+      }
+    }
+
+    // Fallback: Check files array
+    if (!ogImageUrl && feed.files && feed.files.length > 0) {
+      const firstFile = feed.files[0];
+      if (firstFile.url) {
+        ogImageUrl = firstFile.url;
+        directMediaUrl = firstFile.url;
+      }
+      // For video thumbnails
+      if (feed.type === 'video' && firstFile.thumbnail) {
+        ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${firstFile.thumbnail}`;
+      }
+    }
+
+    // Fallback: Check localPath
+    if (!ogImageUrl && feed.localPath) {
+      const pathPart = feed.localPath.split('/media/').pop();
+      if (pathPart) {
+        ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${pathPart}`;
+        directMediaUrl = ogImageUrl;
+      }
+    }
+
+    // ULTIMATE FALLBACK: Use default OG image
+    if (!ogImageUrl || !ogImageUrl.startsWith('http')) {
+      ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/default-og-image.jpg`;
+    }
+
+    // IMPORTANT: Validate the OG image URL is accessible
+    // You might want to check if the image exists and is publicly accessible
+    
+    // Get description - use actual caption if available
+    const actualCaption = feed.dec || feed.caption || '';
+    const description = actualCaption || `Check out this ${mediaType} post by ${userName}`;
+    
+    // Prepare video-specific OG tags
+    const videoTags = {};
+    if (mediaType === 'video') {
+      videoTags['og:video'] = directMediaUrl;
+      videoTags['og:video:type'] = 'video/mp4';
+      videoTags['og:video:width'] = '1280';
+      videoTags['og:video:height'] = '720';
+      if (feed.duration) {
+        videoTags['og:video:duration'] = feed.duration;
+      }
+    }
+
+    res.status(200).json({
+      shareUrl,
+      ogData: {
+        title: `${userName}'s Post | ${process.env.APP_NAME || 'Prithu Project'}`,
+        description: description,
+        image: ogImageUrl,
+        url: shareUrl,
+        type: mediaType === 'video' ? 'video.other' : 'website',
+        siteName: process.env.APP_NAME || 'Prithu Project',
+        // Additional OG tags for better compatibility
+        'og:image:width': '1200',
+        'og:image:height': '630',
+        'og:image:type': 'image/jpeg',
+        ...videoTags
+      },
+      directMediaUrl,
+      caption: actualCaption, // Use actual caption here
+      userName: userName,
+      mediaType,
+      isPublic: feed.audience === 'public',
+      profileAvatar: profileAvatar,
+      userAvatar: profileAvatar
+    });
+
+  } catch (err) {
+    console.error("Error generating share link:", err);
+    res.status(500).json({ 
+      message: "Internal server error",
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+
+
+exports.getVideoThumbnail = async (req, res) => {
+  const { feedId } = req.params;
+
+  try {
+    const feed = await Feeds.findById(feedId).lean();
+    
+    if (!feed || feed.type !== 'video') {
+      // Return a default thumbnail image
+      const defaultThumbnail = path.join(__dirname, '../../public/default-video-thumbnail.jpg');
+      if (fs.existsSync(defaultThumbnail)) {
+        return res.sendFile(defaultThumbnail);
+      }
+      return res.status(404).send('Video not found');
+    }
+
+    // Check if we have a thumbnail in files array
+    if (feed.files && feed.files.length > 0 && feed.files[0].thumbnail) {
+      const thumbnailPath = path.join(__dirname, '../../uploads', feed.files[0].thumbnail);
+      if (fs.existsSync(thumbnailPath)) {
+        return res.sendFile(thumbnailPath);
+      }
+    }
+
+    // Check if we have a localPath that might be a thumbnail
+    if (feed.localPath) {
+      // Try to find a thumbnail version (assuming naming convention)
+      const basePath = path.dirname(feed.localPath);
+      const baseName = path.basename(feed.localPath, path.extname(feed.localPath));
+      const possibleThumbnail = path.join(basePath, `${baseName}_thumb.jpg`);
+      
+      if (fs.existsSync(possibleThumbnail)) {
+        return res.sendFile(possibleThumbnail);
+      }
+    }
+
+    // Return default thumbnail
+    const defaultThumbnail = path.join(__dirname, '../../public/default-video-thumbnail.jpg');
+    if (fs.existsSync(defaultThumbnail)) {
+      return res.sendFile(defaultThumbnail);
+    }
+
+    // Last resort: return a placeholder image
+    return res.redirect('https://via.placeholder.com/1200x630/3B82F6/FFFFFF?text=Video+Thumbnail');
+
+  } catch (err) {
+    console.error("Error getting video thumbnail:", err);
+    res.redirect('https://via.placeholder.com/1200x630/EF4444/FFFFFF?text=Error+Loading+Thumbnail');
+  }
+};
+
+
+
+
+
+
 
 
 
