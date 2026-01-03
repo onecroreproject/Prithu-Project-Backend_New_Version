@@ -549,7 +549,11 @@ exports.getTopAptitudePerformers = async (req, res) => {
 
     const topPerformers = await AptitudeResult.aggregate([
       // 1️⃣ Filter last 7 days
-    
+      {
+        $match: {
+          receivedAt: { $gte: sevenDaysAgo }
+        }
+      },
 
       // 2️⃣ Sort (best performance first)
       {
