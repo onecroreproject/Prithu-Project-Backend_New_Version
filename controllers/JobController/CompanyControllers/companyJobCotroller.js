@@ -10,6 +10,7 @@ const { sendTemplateEmail } = require("../../../utils/templateMailer");
 const mongoose =require("mongoose");
 const { prithuDB, jobDB } = require("../../../database");
 const CompanyLogin=require("../../../models/Job/CompanyModel/companyLoginSchema");
+const {createAndSendNotification}=require("../../../middlewares/helper/socketNotification");
 
 
 exports.getCompanyApplicants = async (req, res) => {
@@ -121,7 +122,13 @@ exports.updateApplicationStatus = async (req, res) => {
       });
     }
 
+     const user = await User.findById(application.userId).lean();
+    const job = await JobPost.findById(application.jobId).lean();
+
     const oldStatus = application.status;
+
+    
+   
 
     /* -----------------------------------------------------
      * 2️⃣ Update status & history
@@ -136,23 +143,67 @@ exports.updateApplicationStatus = async (req, res) => {
     await application.save();
 
     /* -----------------------------------------------------
-     * 3️⃣ Fetch User (PRITHU DB) & Job (JOB DB)
-     * --------------------------------------------------- */
-    const User = prithuDB.model("User");
-    const JobPost = jobDB.model("JobPost");
-
-    const user = await User.findById(application.userId).lean();
-    const job = await JobPost.findById(application.jobId).lean();
+ * 🔔 3️⃣ Fetch HR / Company login details
+ * --------------------------------------------------- */
+const company = await CompanyLogin.findById(companyId).lean();
 
     /* -----------------------------------------------------
- * 4️⃣ Send Email to Candidate (Status based)
+ * 4️⃣ Send Notification to Applied User
+ * --------------------------------------------------- */
+
+/* -----------------------------------------------------
+ * 🔔 3️⃣ Send Notification to Applied User
+ * --------------------------------------------------- */
+
+const statusTitles = {
+  reviewed: "Application Reviewed",
+  shortlisted: "You are Shortlisted",
+  accepted: "Congratulations! Selected",
+  rejected: "Application Update",
+};
+
+const statusMessages = {
+  reviewed: `Your application for ${job?.jobTitle} has been reviewed.`,
+  shortlisted: `You have been shortlisted for ${job?.jobTitle}.`,
+  accepted: `You have been selected for ${job?.jobTitle}.`,
+  rejected: `Your application for ${job?.jobTitle} was not selected.`,
+};
+
+await createAndSendNotification({
+  senderId: companyId,                     // Admin / Company
+  receiverId: application.userId,          // Candidate
+
+  // ✅ MUST MATCH SCHEMA ENUM
+  type: "JOB_STATUS_UPDATE",
+
+  title: statusTitles[status] || "Application Status Updated",
+  message:
+    statusMessages[status] ||
+    `Your application status changed to ${status}`,
+
+  // ✅ ENTITY SUPPORT
+  entityId: application._id,
+  entityType: "JobApplication",
+
+  image: company?.companyLogo || "",
+
+  // ✅ EXTRA DATA (SUPPORTED BY SCHEMA)
+  jobId: application.jobId,
+  companyId,
+  status,
+});
+
+
+
+
+
+
+    /* -----------------------------------------------------
+ * 5️⃣ Send Email to Candidate (Status based)
  * --------------------------------------------------- */
 
 let templateName = "";
 let subject = "";
-
-// Fetch HR / Company login details
-const company = await CompanyLogin.findById(companyId).lean();
 
 if (status === "reviewed") {
   templateName = "applicationReviewed.html";

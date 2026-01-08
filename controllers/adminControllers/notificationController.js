@@ -1,6 +1,17 @@
 const Notification = require("../../models/notificationModel");
+const { jobDB } = require("../../database"); // ✅ FIXED
 const User = require("../../models/userModels/userModel");
-const { broadcastNotification, pushFCMToUser } = require("../../middlewares/helper/socketNotification");
+const {
+  broadcastNotification,
+  pushFCMToUser,
+} = require("../../middlewares/helper/socketNotification");
+
+// 🔹 JOB DB MODELS (cross-db safe)
+const JobPost = jobDB.model("JobPost");
+const CompanyLogin = jobDB.model("CompanyLogin");
+const CompanyProfile = jobDB.model("CompanyProfile");
+
+
 
 // 🔹 1️⃣ ADMIN → ALL USERS
 exports.sendAdminNotification = async (req, res) => {
@@ -83,60 +94,133 @@ exports.sendUserNotification = async (req, res) => {
 exports.getNotifications = async (req, res) => {
   try {
     const receiverId = req.Id;
-    const receiverRole = req.role; 
-    console.log(receiverId)
+    const receiverRole = req.role;
 
     if (!receiverId || !receiverRole) {
-      return res.status(400).json({ error: "Invalid token or missing role." });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid token or missing role",
+      });
     }
 
-    // 🔹 Fetch notifications matching the logged-in user and role
+    /* -----------------------------------------------------
+     * 1️⃣ Fetch notifications (PRITHU DB)
+     * --------------------------------------------------- */
     const notifications = await Notification.find({
       receiverId,
       receiverRoleRef: receiverRole,
     })
       .sort({ createdAt: -1 })
-      .populate({
-        path: "senderUserProfile senderAdminProfile senderChildAdminProfile feedInfo",
-      });
+      .populate(
+        "senderUserProfile senderAdminProfile senderChildAdminProfile feedInfo"
+      )
+      .lean();
 
-    // Format and unify sender info
-    const formatted = notifications.map((n) => {
+    /* -----------------------------------------------------
+     * 2️⃣ Collect Job & Company IDs
+     * --------------------------------------------------- */
+    const jobIds = [];
+    const companyIds = [];
+
+    notifications.forEach(n => {
+      if (n.jobId) jobIds.push(n.jobId.toString());
+      if (n.companyId) companyIds.push(n.companyId.toString());
+    });
+
+    /* -----------------------------------------------------
+     * 3️⃣ Fetch Job & Company data (JOB DB)
+     * --------------------------------------------------- */
+    const [jobs, companies, companyProfiles] = await Promise.all([
+      JobPost.find({ _id: { $in: jobIds } })
+        .select("jobTitle")
+        .lean(),
+
+      CompanyLogin.find({ _id: { $in: companyIds } })
+        .select("companyName")
+        .lean(),
+
+      CompanyProfile.find({ companyId: { $in: companyIds } })
+        .select("companyId logo")
+        .lean(),
+    ]);
+
+    /* -----------------------------------------------------
+     * 4️⃣ Create lookup maps
+     * --------------------------------------------------- */
+    const jobMap = {};
+    jobs.forEach(j => (jobMap[j._id.toString()] = j));
+
+    const companyMap = {};
+    companies.forEach(c => (companyMap[c._id.toString()] = c));
+
+    const companyLogoMap = {};
+    companyProfiles.forEach(cp => {
+      companyLogoMap[cp.companyId.toString()] = cp.logo;
+    });
+
+    /* -----------------------------------------------------
+     * 5️⃣ Format response
+     * --------------------------------------------------- */
+    const formattedNotifications = notifications.map(n => {
       const senderProfile =
         n.senderUserProfile ||
         n.senderAdminProfile ||
-        n.senderChildAdminProfile;
+        n.senderChildAdminProfile ||
+        null;
+
+      const isJobNotification = n.type === "JOB_STATUS_UPDATE";
+
+      const job = isJobNotification
+        ? {
+            jobId: n.jobId || null,
+            jobTitle: jobMap[n.jobId?.toString()]?.jobTitle || "",
+            status: n.status || "",
+            companyId: n.companyId || null,
+            companyName:
+              companyMap[n.companyId?.toString()]?.companyName || "",
+            companyLogo:
+              companyLogoMap[n.companyId?.toString()] || "",
+          }
+        : null;
 
       return {
         _id: n._id,
+        type: n.type,
         title: n.title,
         message: n.message,
-        image: n.image,
         isRead: n.isRead,
-        type: n.type,
         createdAt: n.createdAt,
+
         sender: senderProfile
           ? {
               userName: senderProfile.userName,
               displayName: senderProfile.displayName,
               profileAvatar: senderProfile.profileAvatar,
-              id: senderProfile.userId,
             }
           : null,
+
         feedInfo: n.feedInfo || null,
+        job,
       };
     });
 
-    res.json({
+  
+
+    return res.status(200).json({
       success: true,
       role: receiverRole,
-      notifications: formatted,
+      notifications: formattedNotifications,
     });
-  } catch (err) {
-    console.error("❌ getNotifications error:", err);
-    res.status(500).json({ error: "Failed to get notifications" });
+
+  } catch (error) {
+    console.error("❌ getNotifications error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch notifications",
+    });
   }
 };
+
 
 
 // 🔹 4️⃣ MARK SINGLE NOTIFICATION AS READ

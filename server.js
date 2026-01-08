@@ -36,8 +36,21 @@ app.use(express.json());
 app.use(cookieParser());
 
 // 🟢 Static files (IMPORTANT for OG images)
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-app.use("/media", express.static(path.join(__dirname, "media")));
+app.use("/media", express.static(path.join(__dirname, "media"), {
+  setHeaders: (res, path) => {
+    // Set proper cache headers for media files
+    if (path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.png')) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 year
+    }
+  }
+}));
+
+app.use("/uploads", express.static(path.join(__dirname, "uploads"), {
+  setHeaders: (res, path) => {
+    // Allow CORS for images since they're used in OG tags
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+}));
 
 app.use(monitorMiddleware);
 

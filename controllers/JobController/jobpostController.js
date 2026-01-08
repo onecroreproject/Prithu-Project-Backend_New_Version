@@ -411,6 +411,9 @@ exports.createOrUpdateJob = async (req, res) => {
 
       await JobPost.updateOne({ _id: jobId }, { $set: jobData });
 
+      // Log company activity for job update
+      await logCompanyActivity(companyId, "job_updated", { jobId, jobTitle, status: incomingStatus });
+
       return res.status(200).json({
         success: true,
         message: `Job ${incomingStatus} updated successfully`,
@@ -480,8 +483,6 @@ if (req.files?.postImage?.[0]) {
     });
   }
 };
-
-
 
 
 
@@ -1167,6 +1168,9 @@ exports.deleteJobs = async (req, res) => {
 
     await JobPost.deleteOne({ _id: jobId });
 
+    // Log company activity for job deletion
+    await logCompanyActivity(companyId, "job_deleted", { jobId, jobTitle: job.jobTitle });
+
     res.json({
       success: true,
       message: "Job deleted successfully",
@@ -1721,8 +1725,7 @@ exports.getPlatformStats = async (req, res) => {
 
 
 
-// GET /api/jobs
-// GET /api/jobs/:jobId/similar
+
 exports.getSimilarJobs = async (req, res) => {
   try {
     const { jobId } = req.params;
@@ -1875,6 +1878,7 @@ exports.getSimilarJobs = async (req, res) => {
     });
   }
 };
+
 
 
 
