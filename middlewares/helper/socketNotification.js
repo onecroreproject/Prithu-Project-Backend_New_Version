@@ -38,6 +38,9 @@ exports.createAndSendNotification = async ({
   entityId,
   entityType,
   image = "",
+  jobId,
+  companyId,
+  status,
 }) => {
   try {
     if (!receiverId || senderId?.toString() === receiverId?.toString()) return; // Skip self notifications
@@ -48,15 +51,26 @@ exports.createAndSendNotification = async ({
       .lean();
 
     const notification = await Notification.create({
-      senderId,
-      receiverId,
-      type,
-      title,
-      message,
-      entityId,
-      entityType,
-      image,
-      isRead: false,
+     senderId,
+  receiverId,
+
+  // ✅ ROLE REFERENCES (VERY IMPORTANT)
+  senderRoleRef: "Admin",
+  receiverRoleRef: "User",
+
+  type,
+  title,
+  message,
+
+  entityId,
+  entityType,
+  image,
+
+  jobId,
+  companyId,
+  status,
+
+  isRead: false,
     });
 
     // Get receiver (for FCM)
@@ -67,18 +81,21 @@ exports.createAndSendNotification = async ({
 
     // Real-time socket emit
     exports.broadcastNotification(receiverId.toString(), {
-      _id: notification._id,
-      senderId,
-      receiverId,
-      type,
-      title,
-      message,
-      image,
-      createdAt: notification.createdAt,
-      senderProfile: {
-        userName: senderProfile?.userName || "Unknown User",
-        avatar: senderProfile?.profileAvatar || "",
-      },
+    _id: notification._id,
+  senderId,
+  receiverId,
+  type,
+  title,
+  message,
+  image,
+  status,
+  jobId,
+  entityId,
+  createdAt: notification.createdAt,
+  senderProfile: {
+    userName: senderProfile?.userName || "Company",
+    avatar: senderProfile?.profileAvatar || "",
+  },
     });
 
   } catch (err) {
