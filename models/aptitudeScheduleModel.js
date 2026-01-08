@@ -38,6 +38,8 @@ const TestScheduleSchema = new mongoose.Schema(
 
     totalScore: { type: Number, required: true },
 
+    passingScore:{ type: Number, required: true },
+
     status: {
       type: String,
       enum: ["upcoming", "running", "completed", "cancelled"],

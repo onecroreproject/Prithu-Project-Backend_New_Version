@@ -34,7 +34,7 @@ function makeGoogleCalendarUrl({ title, description, start, end }) {
 
 exports.startAptitudeTest = async (req, res) => {
   try {
-    const userId = req.Id;
+    const userId = req.Id ;
     const { scheduleId, testId } = req.body;
 
     if (!scheduleId) {
@@ -446,17 +446,25 @@ exports.addInterestedUser = async (req, res) => {
       });
     }
 
-    // --------------------------------------------
-    // 6️⃣ Update Profile Name
-    // --------------------------------------------
-    await ProfileSettings.findOneAndUpdate(
-      { userId },
-      {
-        name: cleanFirstName,
-        lastName: cleanLastName
-      },
-      { new: true, upsert: false }
-    );
+  // --------------------------------------------
+// 6️⃣ Create or Update Profile Settings
+// --------------------------------------------
+const existingProfile = await ProfileSettings.findOne({ userId });
+
+if (existingProfile) {
+  // ✅ Update existing profile
+  existingProfile.name = cleanFirstName;
+  existingProfile.lastName = cleanLastName;
+  await existingProfile.save();
+} else {
+  // ✅ Create new profile if not exists
+  await ProfileSettings.create({
+    userId,
+    name: cleanFirstName,
+    lastName: cleanLastName
+  });
+}
+
 
     // --------------------------------------------
     // 7️⃣ Save new interest
@@ -548,14 +556,18 @@ exports.getTopAptitudePerformers = async (req, res) => {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const topPerformers = await AptitudeResult.aggregate([
-      // 1️⃣ Filter last 7 days
+      /* -------------------------------------------------
+       * 1️⃣ FILTER LAST 7 DAYS
+       * ------------------------------------------------- */
       {
         $match: {
           receivedAt: { $gte: sevenDaysAgo }
         }
       },
 
-      // 2️⃣ Sort (best performance first)
+      /* -------------------------------------------------
+       * 2️⃣ SORT BEST PERFORMANCE
+       * ------------------------------------------------- */
       {
         $sort: {
           score: -1,
@@ -564,10 +576,14 @@ exports.getTopAptitudePerformers = async (req, res) => {
         }
       },
 
-      // 3️⃣ Limit top 10 (do this BEFORE lookup to improve performance)
+      /* -------------------------------------------------
+       * 3️⃣ LIMIT TOP 10
+       * ------------------------------------------------- */
       { $limit: 10 },
 
-      // 4️⃣ Join ProfileSettings
+      /* -------------------------------------------------
+       * 4️⃣ JOIN PROFILE SETTINGS
+       * ------------------------------------------------- */
       {
         $lookup: {
           from: "ProfileSettings",
@@ -577,7 +593,6 @@ exports.getTopAptitudePerformers = async (req, res) => {
         }
       },
 
-      // 5️⃣ Unwind profile (optional user may not have profile)
       {
         $unwind: {
           path: "$profile",
@@ -585,26 +600,9 @@ exports.getTopAptitudePerformers = async (req, res) => {
         }
       },
 
-      // 6️⃣ Filter: Include all results, but only show profile data if published
-      // OR if no profile exists
-      {
-        $addFields: {
-          profile: {
-            $cond: {
-              if: {
-                $and: [
-                  { $ne: ["$profile", null] },
-                  { $ne: ["$profile.isPublished", true] }
-                ]
-              },
-              then: null, // Hide profile data if not published
-              else: "$profile"
-            }
-          }
-        }
-      },
-
-      // 7️⃣ Shape response
+      /* -------------------------------------------------
+       * 5️⃣ FINAL RESPONSE SHAPE
+       * ------------------------------------------------- */
       {
         $project: {
           _id: 1,
@@ -617,62 +615,14 @@ exports.getTopAptitudePerformers = async (req, res) => {
 
           user: {
             userId: "$userId",
-            userName: {
-              $cond: {
-                if: { $ne: ["$profile", null] },
-                then: "$profile.userName",
-                else: null
-              }
-            },
-            name: {
-              $cond: {
-                if: { $ne: ["$profile", null] },
-                then: "$profile.name",
-                else: null
-              }
-            },
-            lastName: {
-              $cond: {
-                if: { $ne: ["$profile", null] },
-                then: "$profile.lastName",
-                else: null
-              }
-            },
-            bio: {
-              $cond: {
-                if: { $ne: ["$profile", null] },
-                then: "$profile.bio",
-                else: null
-              }
-            },
-            city: {
-              $cond: {
-                if: { $ne: ["$profile", null] },
-                then: "$profile.city",
-                else: null
-              }
-            },
-            country: {
-              $cond: {
-                if: { $ne: ["$profile", null] },
-                then: "$profile.country",
-                else: null
-              }
-            },
-            profileAvatar: {
-              $cond: {
-                if: { $ne: ["$profile", null] },
-                then: "$profile.profileAvatar",
-                else: null
-              }
-            },
-            shareableLink: {
-              $cond: {
-                if: { $ne: ["$profile", null] },
-                then: "$profile.shareableLink",
-                else: null
-              }
-            }
+            userName: "$profile.userName",
+            name: "$profile.name",
+            lastName: "$profile.lastName",
+            bio: "$profile.bio",
+            city: "$profile.city",
+            country: "$profile.country",
+            profileAvatar: "$profile.profileAvatar",
+            shareableLink: "$profile.shareableLink"
           }
         }
       }
@@ -692,6 +642,7 @@ exports.getTopAptitudePerformers = async (req, res) => {
     });
   }
 };
+
 
 
 
@@ -1508,6 +1459,7 @@ exports.createTestSchedule = async (req, res) => {
       testDuration,
       totalQuestions,
       totalScore,
+      passingScore:passScore,
       createdBy: req.adminId || null,
     });
 

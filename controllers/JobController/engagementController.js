@@ -22,19 +22,22 @@ exports.updateEngagement = async (req, res) => {
       });
     }
 
-    const jobExists = await JobPost.findById(jobId).lean();
-    if (!jobExists) {
-      return res.status(404).json({
-        success: false,
-        message: "Job not found",
-      });
-    }
-
-    const validActions = ["like", "share", "save", "apply", "view"];
+    const validActions = ["liked", "shared", "saved", "applied", "view"];
     if (!validActions.includes(actionType)) {
       return res.status(400).json({
         success: false,
         message: "Invalid actionType",
+      });
+    }
+
+    const jobExists = await JobPost.findById(jobId)
+      .select("_id companyId status")
+      .lean();
+
+    if (!jobExists) {
+      return res.status(404).json({
+        success: false,
+        message: "Job not found",
       });
     }
 
@@ -48,19 +51,9 @@ exports.updateEngagement = async (req, res) => {
       });
     }
 
-    const fieldMap = {
-      like: "liked",
-      share: "shared",
-      save: "saved",
-      apply: "applied",
-      view: "view",
-    };
-
-    const fieldName = fieldMap[actionType];
-
-    // ----------------------------------------------------------------
-    // 👁 VIEW → only record first time
-    // ----------------------------------------------------------------
+    /* -------------------------------------------------
+     * 👁 VIEW → record only once
+     * ------------------------------------------------- */
     if (actionType === "view") {
       if (!engagement.view) {
         engagement.view = true;
@@ -75,25 +68,39 @@ exports.updateEngagement = async (req, res) => {
       });
     }
 
-    // ----------------------------------------------------------------
-    // 💾 SAVE → toggle
-    // ----------------------------------------------------------------
-    if (actionType === "save") {
+    /* -------------------------------------------------
+     * 💾 SAVED → toggle
+     * ------------------------------------------------- */
+    if (actionType === "saved") {
       engagement.saved = !engagement.saved;
     }
 
-    // ----------------------------------------------------------------
-    // 👍 LIKE & APPLY → toggle
-    // ----------------------------------------------------------------
-    else if (["like", "apply"].includes(actionType)) {
-      engagement[fieldName] = !engagement[fieldName];
+    /* -------------------------------------------------
+     * 👍 LIKED → toggle
+     * ------------------------------------------------- */
+    else if (actionType === "liked") {
+      engagement.liked = !engagement.liked;
     }
 
-    // ----------------------------------------------------------------
-    // 🔁 SHARE → always true (but no view count increment)
-    // ----------------------------------------------------------------
-    else if (actionType === "share") {
+    /* -------------------------------------------------
+     * 🔁 SHARED → always true
+     * ------------------------------------------------- */
+    else if (actionType === "shared") {
       engagement.shared = true;
+    }
+
+    /* -------------------------------------------------
+     * 📩 APPLIED → one-time only
+     * ------------------------------------------------- */
+    else if (actionType === "applied") {
+      if (engagement.applied) {
+        return res.status(200).json({
+          success: true,
+          message: "Already applied",
+          engagement,
+        });
+      }
+      engagement.applied = true;
     }
 
     engagement.lastActionAt = new Date();
@@ -104,16 +111,15 @@ exports.updateEngagement = async (req, res) => {
       message: `Action '${actionType}' updated`,
       engagement,
     });
-
   } catch (error) {
     console.error("❌ Error updating job engagement:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message,
     });
   }
 };
+
 
 
 
