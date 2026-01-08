@@ -134,6 +134,7 @@ const {
   toggleDislikeFeed,
   generateShareLink,
   getVideoThumbnail,
+  sharePostOG,
 } = require('../controllers/feedControllers/userActionsFeedController');
 
 
@@ -352,7 +353,7 @@ const{
   getHiddenPosts,
   removeHiddenPost,
 }=require("../controllers/userControllers/hiddenPostController");
-const { applyForJob } = require('../controllers/userControllers/userJobController');
+const { applyForJob, getAppliedJobsByUser, getSavedJobsByUser } = require('../controllers/userControllers/userJobController');
 const { startAptitudeTest ,
   aptitudeCallback,
   getLatestAptitudeResult,
@@ -493,7 +494,7 @@ router.get('/user/get/all/category', getUserPostCategories);
 
 
  /*----------------------UserAptitude---------------------------*/
-router.post("/aptitude/start-test", auth, startAptitudeTest);
+router.post("/aptitude/start-test",auth,startAptitudeTest);
 router.post("/aptitude/callback", aptitudeCallback);
 router.get("/aptitude/latest/results", auth, getLatestAptitudeResult);
 router.get("/aptitude/schedule",auth,getAllUserTestSchedules);
@@ -506,6 +507,8 @@ router.get("/top/aptitude/performers",getTopAptitudePerformers);
  router.post("/apply/job",auth,applyForJob);
  router.get("/get/job/locations",getAllActiveJobLocations);
  router.get("/company/platform/status",getPlatformStats);
+ router.get("/job-applications/applied-jobs",auth,getAppliedJobsByUser);
+ router.get("/get/user/saved/jobs",auth,getSavedJobsByUser);
 
  /* --------------------- User Notifiction API --------------------- */
  router.post("/admin/send/notification", sendAdminNotification )

@@ -38,6 +38,7 @@ const notificationSchema = new mongoose.Schema(
         "ADMIN_ANNOUNCEMENT",
         "SYSTEM_ALERT",
         "REMOVED_FROM_FOLLOWERS",
+        "JOB_STATUS_UPDATE",
       ],
       required: true,
     },
@@ -49,7 +50,7 @@ const notificationSchema = new mongoose.Schema(
     },
     entityType: {
       type: String,
-      enum: ["Post", "Comment","Follow","Unfollow", null,"Feed","RemoveFollower"],
+      enum: ["Post", "Comment","Follow","Unfollow", null,"Feed","RemoveFollower","JobApplication",],
       default: null,
     },
 
@@ -62,6 +63,10 @@ const notificationSchema = new mongoose.Schema(
       postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" },
       commentId: { type: mongoose.Schema.Types.ObjectId, ref: "Comment" },
     },
+
+  jobId: { type: mongoose.Schema.Types.ObjectId, ref: "JobPost" },
+  companyId: { type: mongoose.Schema.Types.ObjectId, ref: "CompanyLogin" },
+  status: { type: String },
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );

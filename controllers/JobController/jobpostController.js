@@ -497,6 +497,8 @@ if (req.files?.postImage?.[0]) {
 
 
 
+
+
 exports.getAllJobs = async (req, res) => {
   try {
     console.log("🔍 Incoming Query Params:", req.query);
@@ -538,8 +540,6 @@ exports.getAllJobs = async (req, res) => {
      * 1️⃣ SINGLE JOB FETCH (UNCHANGED)
      * --------------------------------------------------- */
     if (jobId) {
-      console.log("🧩 Single job fetch:", jobId);
-
       const job = await JobPost.findOne({
         _id: jobId,
         status: "active",
@@ -562,16 +562,38 @@ exports.getAllJobs = async (req, res) => {
         companyId: job.companyId,
       }).lean();
 
+      /* 🔹 ENGAGEMENT (SINGLE JOB) */
+      const userId = req.Id || req.userId;
+      let engagement = null;
+
+      if (userId) {
+        engagement = await JobEngagement.findOne({
+          userId,
+          jobId: job._id,
+        }).lean();
+      }
+
       const mappedJob = mapCompany(
         job,
         new Map([[String(job.companyId), companyProfile]]),
         new Map([[String(job.companyId), companyLogin]])
       );
 
+      const finalJob = applyCompanyVisibility(mappedJob, visibility);
+
       return res.json({
         success: true,
         total: 1,
-        jobs: [applyCompanyVisibility(mappedJob, visibility)],
+        jobs: [
+          {
+            ...finalJob,
+            isApplied: engagement?.applied ?? false,
+            isLiked: engagement?.liked ?? false,
+            isSaved: engagement?.saved ?? false,
+            isShared: engagement?.shared ?? false,
+            isViewed: engagement?.view ?? false,
+          },
+        ],
       });
     }
 
@@ -614,17 +636,12 @@ exports.getAllJobs = async (req, res) => {
     if (minSalary) baseFilter.salaryMin = { $gte: Number(minSalary) };
     if (maxSalary) baseFilter.salaryMax = { $lte: Number(maxSalary) };
 
-    console.log("🧱 Base Filter:", JSON.stringify(baseFilter));
-
     /* ---------------------------------------------------
-     * 3️⃣ FETCH JOBS (PRIORITY LOGIC)
+     * 3️⃣ FETCH JOBS (UNCHANGED PRIORITY LOGIC)
      * --------------------------------------------------- */
     let jobs = [];
 
-    /* 🔥 PRIORITY 1: RADIUS SEARCH */
     if (geoEnabled) {
-      console.log("📍 Radius search enabled");
-
       try {
         const nearbyCompanies = await CompanyProfile.aggregate([
           {
@@ -638,14 +655,12 @@ exports.getAllJobs = async (req, res) => {
               maxDistance: Number(radius) * 1000,
               spherical: true,
               query: {
-                "googleLocation.coordinates": { $ne: [0, 0] }, // IMPORTANT
+                "googleLocation.coordinates": { $ne: [0, 0] },
               },
             },
           },
           { $project: { companyId: 1 } },
         ]);
-
-        console.log("🏢 Nearby companies:", nearbyCompanies.length);
 
         const companyIds = nearbyCompanies.map(c => c.companyId);
 
@@ -662,15 +677,12 @@ exports.getAllJobs = async (req, res) => {
             })
             .lean();
         }
-      } catch (geoErr) {
-        console.error("⚠️ Geo search failed, fallback enabled:", geoErr.message);
+      } catch (err) {
+        console.error("⚠️ Geo fallback:", err.message);
       }
     }
 
-    /* 🏙 PRIORITY 2: CITY SEARCH */
     if (!jobs.length && city) {
-      console.log("🏙 City fallback:", city);
-
       const cityCompanies = await CompanyProfile.find({
         city: new RegExp(`^${city}$`, "i"),
       }).select("companyId");
@@ -685,10 +697,7 @@ exports.getAllJobs = async (req, res) => {
       }
     }
 
-    /* 🏞 PRIORITY 3: STATE SEARCH */
     if (!jobs.length && state) {
-      console.log("🏞 State fallback:", state);
-
       const stateCompanies = await CompanyProfile.find({
         state: new RegExp(`^${state}$`, "i"),
       }).select("companyId");
@@ -703,20 +712,14 @@ exports.getAllJobs = async (req, res) => {
       }
     }
 
-    /* 🔎 KEYWORD SEARCH */
     if (!jobs.length && q) {
-      console.log("🔎 Keyword search:", q);
-
       jobs = await JobPost.find({
         ...baseFilter,
         $text: { $search: q },
       }).lean();
     }
 
-    /* 🌍 FINAL FALLBACK */
     if (!jobs.length) {
-      console.log("🌍 Global fallback (all jobs)");
-
       jobs = await JobPost.find(baseFilter)
         .sort({
           isFeatured: -1,
@@ -727,10 +730,8 @@ exports.getAllJobs = async (req, res) => {
         .lean();
     }
 
-    console.log("📄 Jobs fetched:", jobs.length);
-
     /* ---------------------------------------------------
-     * 4️⃣ BULK LOAD COMPANY DATA (UNCHANGED)
+     * 4️⃣ BULK COMPANY DATA (UNCHANGED)
      * --------------------------------------------------- */
     const companyIds = [...new Set(jobs.map(j => String(j.companyId)))];
 
@@ -752,22 +753,49 @@ exports.getAllJobs = async (req, res) => {
     const companyProfileMap = new Map(
       companyProfiles.map(c => [String(c.companyId), c])
     );
-
     const companyLoginMap = new Map(
       companyLogins.map(c => [String(c._id), c])
     );
-
     const visibilityMap = new Map(
       visibilitySettings.map(v => [String(v.companyId), v])
     );
 
     /* ---------------------------------------------------
-     * 5️⃣ FINAL RESPONSE
+     * 4.5️⃣ USER ENGAGEMENT (NEW — SAFE ADDITION)
+     * --------------------------------------------------- */
+    const userId = req.Id || req.userId;
+    let engagementMap = new Map();
+
+    if (userId && jobs.length) {
+      const jobIds = jobs.map(j => j._id);
+
+      const engagements = await JobEngagement.find({
+        userId,
+        jobId: { $in: jobIds },
+      }).lean();
+
+      engagementMap = new Map(
+        engagements.map(e => [String(e.jobId), e])
+      );
+    }
+
+    /* ---------------------------------------------------
+     * 5️⃣ FINAL RESPONSE (ENGAGEMENT FIXED)
      * --------------------------------------------------- */
     const finalJobs = jobs.map(job => {
       const mappedJob = mapCompany(job, companyProfileMap, companyLoginMap);
       const visibility = visibilityMap.get(String(job.companyId)) || null;
-      return applyCompanyVisibility(mappedJob, visibility);
+      const jobWithVisibility = applyCompanyVisibility(mappedJob, visibility);
+      const engagement = engagementMap.get(String(job._id));
+
+      return {
+        ...jobWithVisibility,
+        isApplied: engagement?.applied ?? false,
+        isLiked: engagement?.liked ?? false,
+        isSaved: engagement?.saved ?? false,
+        isShared: engagement?.shared ?? false,
+        isViewed: engagement?.view ?? false,
+      };
     });
 
     return res.json({
@@ -799,6 +827,7 @@ exports.getAllJobs = async (req, res) => {
 
 
 
+
 /* =============================================================================================
    3️⃣ GET JOB BY ID + Company Snapshot
    ============================================================================================= */
@@ -806,7 +835,6 @@ exports.getJobById = async (req, res) => {
   try {
     const jobId = req.params.id;
     const userId = req.Id;
-    console.log("woking")
 
     if (!jobId) {
       return res.status(400).json({
@@ -830,7 +858,9 @@ exports.getJobById = async (req, res) => {
         },
       },
 
-      /* ---------------- JOB ENGAGEMENT ---------------- */
+      /* --------------------------------------------------
+       * 🔁 JOB ENGAGEMENT (ALL USERS → COUNTS)
+       * -------------------------------------------------- */
       {
         $lookup: {
           from: "JobEngagement",
@@ -890,20 +920,34 @@ exports.getJobById = async (req, res) => {
         },
       },
 
-      /* ---------------- USER FLAGS ---------------- */
+      /* --------------------------------------------------
+       * 👤 USER ENGAGEMENT FLAGS (LOGGED-IN ONLY)
+       * -------------------------------------------------- */
       ...(userObjectId
         ? [
             {
-              $addFields: {
-                userEngagement: {
-                  $first: {
-                    $filter: {
-                      input: "$engagementData",
-                      as: "e",
-                      cond: { $eq: ["$$e.userId", userObjectId] },
+              $lookup: {
+                from: "JobEngagement",
+                let: { jobId: "$_id", userId: userObjectId },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $and: [
+                          { $eq: ["$jobId", "$$jobId"] },
+                          { $eq: ["$userId", "$$userId"] },
+                        ],
+                      },
                     },
                   },
-                },
+                  { $limit: 1 },
+                ],
+                as: "userEngagement",
+              },
+            },
+            {
+              $addFields: {
+                userEngagement: { $arrayElemAt: ["$userEngagement", 0] },
               },
             },
           ]
@@ -919,7 +963,9 @@ exports.getJobById = async (req, res) => {
         },
       },
 
-      /* ---------------- COMPANY LOGIN ---------------- */
+      /* --------------------------------------------------
+       * 🏢 COMPANY LOGIN
+       * -------------------------------------------------- */
       {
         $lookup: {
           from: "CompanyLogin",
@@ -930,7 +976,9 @@ exports.getJobById = async (req, res) => {
       },
       { $unwind: "$companyLogin" },
 
-      /* ---------------- COMPANY PROFILE ---------------- */
+      /* --------------------------------------------------
+       * 🏢 COMPANY PROFILE
+       * -------------------------------------------------- */
       {
         $lookup: {
           from: "CompanyProfile",
@@ -946,7 +994,9 @@ exports.getJobById = async (req, res) => {
         },
       },
 
-      /* ---------------- FINAL PROJECTION ---------------- */
+      /* --------------------------------------------------
+       * 📦 FINAL PROJECTION
+       * -------------------------------------------------- */
       {
         $project: {
           jobId: "$_id",
@@ -975,10 +1025,10 @@ exports.getJobById = async (req, res) => {
 
           jobDescription: 1,
           requiredSkills: 1,
-
           qualifications: 1,
           degreeRequired: 1,
           certificationRequired: 1,
+
           minimumExperience: 1,
           maximumExperience: 1,
           freshersAllowed: 1,
@@ -997,12 +1047,14 @@ exports.getJobById = async (req, res) => {
           createdAt: 1,
           updatedAt: 1,
 
+          /* COUNTS */
           likeCount: 1,
           saveCount: 1,
           applyCount: 1,
           shareCount: 1,
           viewCount: 1,
 
+          /* USER FLAGS */
           isLiked: 1,
           isSaved: 1,
           isApplied: 1,
@@ -1036,14 +1088,13 @@ exports.getJobById = async (req, res) => {
     let job = jobData[0];
 
     /* --------------------------------------------------
-     * 🔐 APPLY VISIBILITY RULES
+     * 🔐 APPLY VISIBILITY RULES (UNCHANGED)
      * -------------------------------------------------- */
     const visibility = await CompanyProfileVisibility.findOne({
       companyId: job.companyId,
     }).lean();
 
     if (visibility) {
-      /* -------- LOCATION -------- */
       if (visibility.address === "private") {
         delete job.area;
         delete job.pincode;
@@ -1055,7 +1106,6 @@ exports.getJobById = async (req, res) => {
         delete job.googleLocation;
       }
 
-      /* -------- HIRING INFO -------- */
       if (job.hiringInfo) {
         if (visibility.hiringEmail === "private")
           delete job.hiringInfo.email;
@@ -1073,7 +1123,7 @@ exports.getJobById = async (req, res) => {
     return res.status(200).json({
       success: true,
       job,
-      companyProfile:job.companyProfile
+      companyProfile: job.companyProfile,
     });
   } catch (error) {
     console.error("❌ GET JOB BY ID ERROR:", error);
@@ -1083,6 +1133,7 @@ exports.getJobById = async (req, res) => {
     });
   }
 };
+
 
 
 

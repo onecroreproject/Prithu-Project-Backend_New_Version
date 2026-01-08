@@ -373,7 +373,7 @@ exports.generateShareLink = async (req, res) => {
     }
 
     // Construct share URL
-    const shareUrl = `${process.env.FRONTEND_URL || 'https://www.prithu.app/home'}/share/post/${feedId}`;
+    const shareUrl = `${process.env.FRONTEND_URL || 'https://www.prithu.app'}/share/post/${feedId}`;
     
     // Generate OG image URL based on media type
     let ogImageUrl = '';
@@ -533,6 +533,126 @@ exports.getVideoThumbnail = async (req, res) => {
   } catch (err) {
     console.error("Error getting video thumbnail:", err);
     res.redirect('https://via.placeholder.com/1200x630/EF4444/FFFFFF?text=Error+Loading+Thumbnail');
+  }
+};
+
+
+
+
+exports.sharePostOG = async (req, res) => {
+  const { feedId } = req.params;
+
+  try {
+    // 1️⃣ Fetch feed
+    const feed = await Feeds.findById(feedId).lean();
+
+    if (!feed || feed.audience !== "public" || feed.isDeleted) {
+      return res.status(404).send("Post not found");
+    }
+
+    // 2️⃣ Fetch user
+    const profile = await ProfileSettings.findOne({
+      accountId: feed.createdByAccount,
+    })
+      .select("userName name")
+      .lean();
+
+    const userName =
+      profile?.userName || profile?.name || "User";
+
+    const caption =
+      feed.dec ||
+      feed.caption ||
+      `Post by ${userName}`;
+
+    const shareUrl = `${process.env.FRONTEND_URL}/share/post/${feedId}`;
+    const redirectUrl = `${process.env.FRONTEND_URL}/post/${feedId}`;
+
+    // 3️⃣ Resolve OG image & video
+    let ogImageUrl = `${process.env.BACKEND_URL}/default-og-image.jpg`;
+    let ogVideoUrl = null;
+
+    // 🖼 IMAGE POST
+    if (feed.type === "image" && feed.contentUrl) {
+      ogImageUrl = feed.contentUrl;
+    }
+
+    // 🎥 VIDEO POST
+    if (feed.type === "video") {
+      ogVideoUrl = feed.contentUrl;
+
+      // Try local thumbnail (video_thumb.jpg)
+      if (feed.files?.length && feed.files[0].localPath) {
+        const videoPath = feed.files[0].localPath;
+        const baseName = path.basename(videoPath, path.extname(videoPath));
+        const thumbPath = path.join(
+          path.dirname(videoPath),
+          `${baseName}_thumb.jpg`
+        );
+
+        if (fs.existsSync(thumbPath)) {
+          ogImageUrl = `${process.env.BACKEND_URL}/media/feed/user/${feed.createdByAccount}/videos/${baseName}_thumb.jpg`;
+        }
+      }
+    }
+
+    // 4️⃣ FINAL SAFETY CHECK
+    if (!ogImageUrl || !ogImageUrl.startsWith("http")) {
+      ogImageUrl = `${process.env.BACKEND_URL}/default-og-image.jpg`;
+    }
+
+    // 5️⃣ SERVER-RENDERED HTML (THIS IS THE KEY)
+    res.set("Content-Type", "text/html");
+
+    res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>${userName}'s Post</title>
+
+<!-- Open Graph -->
+<meta property="og:title" content="${userName}'s Post" />
+<meta property="og:description" content="${caption}" />
+<meta property="og:image" content="${ogImageUrl}" />
+<meta property="og:url" content="${shareUrl}" />
+<meta property="og:type" content="${feed.type === "video" ? "video.other" : "website"}" />
+<meta property="og:site_name" content="Prithu Project" />
+
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+
+${
+  feed.type === "video" && ogVideoUrl
+    ? `
+<meta property="og:video" content="${ogVideoUrl}" />
+<meta property="og:video:type" content="video/mp4" />
+`
+    : ""
+}
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${userName}'s Post" />
+<meta name="twitter:description" content="${caption}" />
+<meta name="twitter:image" content="${ogImageUrl}" />
+
+<!-- Redirect real users -->
+<script>
+  setTimeout(() => {
+    window.location.href = "${redirectUrl}";
+  }, 1200);
+</script>
+</head>
+
+<body>
+Redirecting…
+</body>
+</html>
+    `);
+  } catch (err) {
+    console.error("OG Share Error:", err);
+    res.status(500).send("Internal server error");
   }
 };
 
