@@ -1,56 +1,62 @@
 const { google } = require("googleapis");
-const path = require("path");
-const fs = require("fs");
 
-// 📄 Load OAuth credentials
-const credentialsPath = path.join(
-  __dirname,
-  "../../../client_secret.json"
+// 🔐 Decode client secret
+if (!process.env.GDRIVE_CLIENT_SECRET_BASE64) {
+  throw new Error("Missing GDRIVE_CLIENT_SECRET_BASE64");
+}
+
+if (!process.env.GDRIVE_TOKEN_BASE64) {
+  throw new Error("Missing GDRIVE_TOKEN_BASE64");
+}
+
+const credentials = JSON.parse(
+  Buffer.from(
+    process.env.GDRIVE_CLIENT_SECRET_BASE64,
+    "base64"
+  ).toString("utf8")
 );
 
-const tokenPath = path.join(
-  __dirname,
-  "../../../token.json"
+const token = JSON.parse(
+  Buffer.from(
+    process.env.GDRIVE_TOKEN_BASE64,
+    "base64"
+  ).toString("utf8")
 );
-
-const credentials = require(credentialsPath);
-const token = require(tokenPath);
 
 const { client_id, client_secret, redirect_uris } = credentials.web;
 
-// 🌍 Choose redirect URI based on environment
+// 🌍 Redirect URI (dev / prod)
 const redirectUri =
   process.env.NODE_ENV === "production"
-    ? process.env.BACKEND_URL // https://prithubackend.1croreprojects.com
-    : redirect_uris[0];        // http://localhost
+    ? process.env.BACKEND_LIVE
+    : redirect_uris[0];
 
-// 🔑 Create OAuth client
+// 🔑 OAuth client
 const oAuth2Client = new google.auth.OAuth2(
   client_id,
   client_secret,
   redirectUri
 );
 
-// 🔁 Attach existing token
+// 🔁 Attach token
 oAuth2Client.setCredentials(token);
 
-// 🔄 Auto-persist refreshed tokens (VERY IMPORTANT)
+// 🔄 Persist refreshed token back to ENV (OPTIONAL)
 oAuth2Client.on("tokens", (tokens) => {
-  if (!tokens) return;
+  if (tokens.refresh_token) {
+    const updated = {
+      ...token,
+      ...tokens,
+    };
 
-  const updatedToken = {
-    ...token,
-    ...tokens
-  };
+    console.log(
+      "🔄 NEW GDRIVE_TOKEN_BASE64:",
+      Buffer.from(JSON.stringify(updated)).toString("base64")
+    );
 
-  fs.writeFileSync(
-    tokenPath,
-    JSON.stringify(updatedToken, null, 2)
-  );
-
-  console.log("🔄 Google Drive token refreshed");
+    // ⛔ you cannot auto-write env in prod
+    // copy this value manually to secret manager
+  }
 });
 
-module.exports = {
-  oAuth2Client
-};
+module.exports = { oAuth2Client };
