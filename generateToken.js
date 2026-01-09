@@ -1,13 +1,13 @@
-const { google } = require("googleapis");
+// const { google } = require("googleapis");
 const credentials = require("./client_secret.json");
 
 const { client_id, client_secret, redirect_uris } = credentials.web;
 
-const oAuth2Client = new google.auth.OAuth2(
-  client_id,
-  client_secret,
-  redirect_uris[0]
-);
+// const oAuth2Client = new google.auth.OAuth2(
+//   client_id,
+//   client_secret,
+//   redirect_uris[0]
+// );
 
 const authUrl = oAuth2Client.generateAuthUrl({
   access_type: "offline",

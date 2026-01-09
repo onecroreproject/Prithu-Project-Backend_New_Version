@@ -1,11 +1,11 @@
-const { google } = require("googleapis");
+// const { google } = require("googleapis");
 const { Readable } = require("stream");
 const { oAuth2Client } = require("./googleDriverAuth");
 
-const drive = google.drive({
-  version: "v3",
-  auth: oAuth2Client
-});
+// const drive = google.drive({
+//   version: "v3",
+//   auth: oAuth2Client
+// });
 
 exports.uploadToDrive = async (
   buffer,
