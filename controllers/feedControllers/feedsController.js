@@ -17,6 +17,11 @@ const cloudinary = require("cloudinary").v2;
 const HiddenPost = require("../../models/userModels/hiddenPostSchema.js")
 const {deleteFeedFile}=require("../../middlewares/services/feedUploadSpydy.js");
 const Categories=require("../../models/categorySchema.js");
+const path = require("path");
+const { google } = require("googleapis");
+const { oAuth2Client } = require("../../middlewares/services/googleDriveMedia/googleDriverAuth");
+
+
 
 
 
@@ -1739,6 +1744,11 @@ exports.getFeedById = async (req, res) => {
 exports.deleteFeed = async (req, res) => {
   try {
     const { feedId } = req.body;
+    const drive = google.drive({
+  version: "v3",
+  auth: oAuth2Client
+});
+
 
     if (!feedId) {
       return res.status(400).json({
@@ -1747,7 +1757,7 @@ exports.deleteFeed = async (req, res) => {
       });
     }
 
-    // 1️⃣ Fetch feed data
+    // 1️⃣ Fetch feed
     const feed = await Feed.findById(feedId).lean();
     if (!feed) {
       return res.status(404).json({
@@ -1756,14 +1766,33 @@ exports.deleteFeed = async (req, res) => {
       });
     }
 
-    // 2️⃣ Prepare delete tasks
     const deleteTasks = [];
 
-    // 2a️⃣ Delete local feed file
+    /* --------------------------------------------------
+       2️⃣ DELETE GOOGLE DRIVE FILE (NEW)
+    -------------------------------------------------- */
+    if (
+      feed.storageType === "gdrive" &&
+      feed.driveFileId
+    ) {
+      deleteTasks.push(
+        drive.files.delete({
+          fileId: feed.driveFileId,
+        }).catch(err => {
+          console.error(
+            `⚠️ Failed to delete Drive file ${feed.driveFileId}:`,
+            err.message
+          );
+        })
+      );
+    }
+
+    /* --------------------------------------------------
+       3️⃣ DELETE LOCAL FILE (BACKWARD COMPAT)
+    -------------------------------------------------- */
     if (feed.localPath) {
       deleteFeedFile(feed.localPath);
     } else if (feed.localFilename) {
-      // fallback: rebuild path
       const typeFolder = feed.type === "video" ? "videos" : "images";
       const filePath = path.join(
         __dirname,
@@ -1775,13 +1804,15 @@ exports.deleteFeed = async (req, res) => {
       deleteFeedFile(filePath);
     }
 
-    // 2b️⃣ Delete feed document
+    /* --------------------------------------------------
+       4️⃣ DB CLEANUP TASKS
+    -------------------------------------------------- */
     deleteTasks.push(Feed.findByIdAndDelete(feedId));
 
-    // 2c️⃣ Delete comments
-    deleteTasks.push(UserComment.deleteMany({ feedId }));
+    deleteTasks.push(
+      UserComment.deleteMany({ feedId })
+    );
 
-    // 2d️⃣ Remove from user actions
     deleteTasks.push(
       UserFeedActions.updateMany(
         {},
@@ -1797,10 +1828,10 @@ exports.deleteFeed = async (req, res) => {
       )
     );
 
-    // 2e️⃣ Remove Views
-    deleteTasks.push(UserView.deleteMany({ feedId }));
+    deleteTasks.push(
+      UserView.deleteMany({ feedId })
+    );
 
-    // 2f️⃣ Remove feed from category
     if (feed.category) {
       deleteTasks.push(
         Categories.findByIdAndUpdate(feed.category, {
@@ -1809,10 +1840,11 @@ exports.deleteFeed = async (req, res) => {
       );
     }
 
-    // 3️⃣ Execute all tasks
+    /* --------------------------------------------------
+       5️⃣ EXECUTE ALL
+    -------------------------------------------------- */
     await Promise.all(deleteTasks);
 
-    // 4️⃣ Response
     return res.status(200).json({
       success: true,
       message: "Feed and all related data deleted successfully",
@@ -1827,6 +1859,7 @@ exports.deleteFeed = async (req, res) => {
     });
   }
 };
+
 
 
 

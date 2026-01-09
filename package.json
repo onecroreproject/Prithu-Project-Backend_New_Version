@@ -41,6 +41,7 @@
     "node-vibrant": "^4.0.3",
     "nodemailer": "^7.0.5",
     "nodemon": "^3.1.10",
+    "open": "^11.0.0",
     "razorpay": "^2.9.6",
     "redis": "^5.8.2",
     "request-ip": "^3.3.0",

@@ -10,7 +10,7 @@ const {   adminUploadProfile,
   adminProcessFeedFile,
   attachAdminFeedFiles,
 
-  }=require('../middlewares/services/adminfeedUploadSpydy');
+  }=require('../middlewares/services/googleDriveMedia/adminGooleDriveUpload');
 
 
 
@@ -314,6 +314,7 @@ const { getAllJobs ,
   suspendJob,
   getJobByIdforAdmin,
 } = require('../controllers/adminCompany/adminJobController');
+const { getDriveDashboard, driveCommand } = require('../controllers/adminControllers/driverStatusController');
 
 
 
@@ -466,6 +467,20 @@ router.post(
   adminProcessFeedFile,   
   attachAdminFeedFiles,  
   adminFeedUpload        
+);
+
+
+router.post(
+  "/admin/schedule-feed",
+  auth,
+  adminUploadFeed.array("file"),
+  (req, res, next) => {
+    req.baseUrl = "/feed";
+    next();
+  },
+  adminProcessFeedFile,
+  attachAdminFeedFiles,
+  adminFeedUpload 
 );
 
 router.get("/admin/get/all/feed",getAllFeedAdmin);
@@ -629,6 +644,14 @@ router.get(
   "/profile/visibility",auth,
   getVisibilitySettings
 );
+
+
+/*---------------Admin Driver API----------------------*/ 
+router.get("/admin/drive/dashboard",auth,getDriveDashboard);
+router.post("/admin/drive/command",auth,driveCommand);
+
+
+
 
 
 
