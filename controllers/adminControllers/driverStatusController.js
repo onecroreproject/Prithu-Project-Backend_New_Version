@@ -1,12 +1,12 @@
-const { google } = require("googleapis");
+// const { google } = require("googleapis");
 const { oAuth2Client } = require("../../middlewares/services/googleDriveMedia/googleDriverAuth");
 const { getFeedUploadFolder } = require("../../middlewares/services/googleDriveMedia/googleDriveUploader");
 const Feed = require("../../models/feedModel");
 
-const drive = google.drive({
-  version: "v3",
-  auth: oAuth2Client,
-});
+// const drive = google.drive({
+//   version: "v3",
+//   auth: oAuth2Client,
+// });
 
 /* --------------------------------------------------
    HELPER: GET FOLDER SIZE + COUNT
