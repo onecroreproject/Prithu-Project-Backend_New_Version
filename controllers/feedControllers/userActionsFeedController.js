@@ -634,7 +634,6 @@ exports.sharePostOG = async (req, res) => {
     const feed = await Feeds.findById(feedId).lean();
 
     if (!feed || feed.audience !== "public" || feed.isDeleted) {
-      // Return a default OG page instead of 404
       return res.send(getDefaultOGPage());
     }
 
@@ -646,14 +645,15 @@ exports.sharePostOG = async (req, res) => {
       .lean();
 
     const userName = profile?.userName || profile?.name || "User";
-    const profileAvatar = profile?.profileAvatar || null;
 
     // 3️⃣ Prepare text content
     const caption = feed.dec?.trim() || feed.caption?.trim() || `Post by ${userName}`;
     const title = `${userName}'s ${feed.type === 'video' ? 'Video' : 'Post'} | ${process.env.APP_NAME || 'Prithu Project'}`;
     
-    const shareUrl = `${process.env.FRONTEND_URL}/share/post/${feedId}`;
-    const redirectUrl = `${process.env.FRONTEND_URL}/post/${feedId}`;
+    // ✅ CRITICAL FIX: Use current URL (which is backend URL)
+    const currentUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`; // This is https://prithubackend.1croreprojects.com/share/post/...
+    const frontendUrl = `${process.env.FRONTEND_URL}/share/post/${feedId}`;
+    const appRedirectUrl = `${process.env.FRONTEND_URL}/post/${feedId}`;
     
     // 4️⃣ Get optimized OG media URLs
     const { ogImageUrl, ogVideoUrl, mediaType } = await getOptimizedOGMedia(feed);
@@ -696,7 +696,7 @@ ${feed.duration ? `<meta property="og:video:duration" content="${Math.round(feed
 
 <!-- Open Graph / Facebook -->
 <meta property="og:type" content="${feed.type === 'video' ? 'video.other' : 'article'}" />
-<meta property="og:url" content="${shareUrl}" />
+<meta property="og:url" content="${currentUrl}" /> <!-- ✅ FIXED: Use backend URL -->
 <meta property="og:title" content="${title}" />
 <meta property="og:description" content="${caption}" />
 <meta property="og:image" content="${ogImageUrl}" />
@@ -712,7 +712,7 @@ ${videoMetaTags}
 
 <!-- Twitter -->
 <meta name="twitter:card" content="${twitterCardType}" />
-<meta name="twitter:url" content="${shareUrl}" />
+<meta name="twitter:url" content="${currentUrl}" /> <!-- ✅ FIXED: Use backend URL -->
 <meta name="twitter:title" content="${title}" />
 <meta name="twitter:description" content="${caption}" />
 <meta name="twitter:image" content="${ogImageUrl}" />
@@ -727,15 +727,20 @@ ${twitterPlayerTags}
 <meta property="article:author" content="${userName}" />
 ${feed.hashtags?.length > 0 ? feed.hashtags.map(tag => `<meta property="article:tag" content="${tag}" />`).join('\n') : ''}
 
+<!-- Canonical URL (point to frontend for SEO) -->
+<link rel="canonical" href="${frontendUrl}" />
+
 <!-- Redirect to actual app with delay -->
 <script>
-  // Store original URL for analytics if needed
-  sessionStorage.setItem('sharedFromOG', 'true');
+  // Check if we're a bot/crawler
+  const isBot = /bot|crawler|spider|facebookexternalhit|Twitterbot|WhatsApp|Telegram/i.test(navigator.userAgent);
   
-  // Redirect after 1.5 seconds (enough for crawlers to read meta tags)
-  setTimeout(() => {
-    window.location.href = "${redirectUrl}";
-  }, 1500);
+  if (!isBot) {
+    // Redirect real users after 1.5 seconds
+    setTimeout(() => {
+      window.location.href = "${appRedirectUrl}";
+    }, 1500);
+  }
 </script>
 
 <style>
@@ -780,98 +785,6 @@ ${feed.hashtags?.length > 0 ? feed.hashtags.map(tag => `<meta property="article:
     res.send(getErrorOGPage());
   }
 };
-
-// Helper function to get optimized media URLs
-async function getOptimizedOGMedia(feed) {
-  let ogImageUrl = `${process.env.BACKEND_URL}/default-og-image.jpg`;
-  let ogVideoUrl = null;
-  let mediaType = feed.type || 'image';
-
-  // CASE 1: Cloudinary URLs
-  if (feed.contentUrl && feed.contentUrl.includes('cloudinary.com')) {
-    if (feed.type === 'image') {
-      // Optimize image for OG (1200x630, auto-crop, good quality)
-      ogImageUrl = feed.contentUrl.replace('/upload/', '/upload/c_fill,w_1200,h_630,f_auto,q_auto:best/');
-    } else if (feed.type === 'video') {
-      ogVideoUrl = feed.contentUrl;
-      // For video thumbnails in Cloudinary
-      ogImageUrl = feed.contentUrl.replace('/upload/', '/upload/so_0.5/w_1200,h_630,c_fill,q_auto:best/') + '.jpg';
-    }
-  }
-  
-  // CASE 2: Local server media
-  else if (feed.contentUrl && feed.contentUrl.includes('1croreprojects.com')) {
-    if (feed.type === 'image') {
-      ogImageUrl = feed.contentUrl;
-    } else if (feed.type === 'video') {
-      ogVideoUrl = feed.contentUrl;
-      
-      // Try to get video thumbnail from files
-      if (feed.files?.[0]?.localPath) {
-        const videoPath = feed.files[0].localPath;
-        const baseName = path.basename(videoPath, path.extname(videoPath));
-        const thumbName = `${baseName}_thumb.jpg`;
-        
-        // Check if thumbnail exists in same directory
-        const thumbPath = path.join(path.dirname(videoPath), thumbName);
-        if (fs.existsSync(thumbPath)) {
-          // Convert to public URL
-          const relativePath = thumbPath.split('/uploads/').pop();
-          if (relativePath) {
-            ogImageUrl = `${process.env.BACKEND_URL}/uploads/${relativePath}`;
-          }
-        }
-      }
-      
-      // Fallback to video poster frame API if available
-      if (!ogImageUrl || ogImageUrl.includes('default')) {
-        ogImageUrl = `${process.env.BACKEND_URL}/api/feed/video-thumbnail/${feed._id}`;
-      }
-    }
-  }
-
-  // CASE 3: Use files array
-  if (!ogImageUrl || ogImageUrl.includes('default')) {
-    if (feed.files?.[0]?.url) {
-      ogImageUrl = feed.files[0].url;
-    } else if (feed.files?.[0]?.localPath) {
-      const relativePath = feed.files[0].localPath.split('/uploads/').pop();
-      if (relativePath) {
-        ogImageUrl = `${process.env.BACKEND_URL}/uploads/${relativePath}`;
-      }
-    }
-  }
-
-  return { ogImageUrl, ogVideoUrl, mediaType };
-}
-
-function getDefaultOGPage() {
-  const defaultImage = `${process.env.BACKEND_URL}/default-og-image.jpg`;
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-<meta property="og:title" content="${process.env.APP_NAME || 'Prithu Project'}" />
-<meta property="og:description" content="Share and discover amazing content" />
-<meta property="og:image" content="${defaultImage}" />
-<meta property="og:url" content="${process.env.FRONTEND_URL}" />
-<meta property="og:type" content="website" />
-</head>
-<body>
-Redirecting to ${process.env.APP_NAME || 'Prithu Project'}...
-<script>
-  setTimeout(() => {
-    window.location.href = "${process.env.FRONTEND_URL}";
-  }, 1000);
-</script>
-</body>
-</html>
-  `;
-}
-
-function getErrorOGPage() {
-  return getDefaultOGPage();
-}
 
 
 

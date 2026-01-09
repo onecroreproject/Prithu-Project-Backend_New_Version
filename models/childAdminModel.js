@@ -93,4 +93,4 @@ const childAdminSchema = new mongoose.Schema(
 childAdminSchema.set("toJSON", { virtuals: true });
 childAdminSchema.set("toObject", { virtuals: true });
 
-module.exports = prithuDB.model("ChildAdmin", childAdminSchema, "ChildAdmins");
+module.exports = prithuDB.model("Child_Admin", childAdminSchema, "ChildAdmins");

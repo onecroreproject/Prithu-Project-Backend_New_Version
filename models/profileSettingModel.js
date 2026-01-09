@@ -6,7 +6,7 @@ const ProfileSettingsSchema = new mongoose.Schema(
     accountId: { type: mongoose.Schema.Types.ObjectId, ref: "Account" },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     adminId: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
-    childAdminId: { type: mongoose.Schema.Types.ObjectId, ref: "ChildAdmin" },
+    childAdminId: { type: mongoose.Schema.Types.ObjectId, ref: "Child_Admin" },
 
     // Basic Details
     gender: { type: String },

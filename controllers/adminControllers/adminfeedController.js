@@ -5,6 +5,9 @@ const Feed=require("../../models/feedModel");
 const ProfileSettings=require("../../models/profileSettingModel");
 const Account=require("../../models/accountSchemaModel");
 const User=require("../../models/userModels/userModel");
+const { uploadToDrive } = require("../../middlewares/services/googleDriveMedia/googleDriveUploader");
+const { getFeedUploadFolder } = require("../../middlewares/services/googleDriveMedia/googleDriveFolderStructure");
+const { oAuth2Client } = require("../../middlewares/services/googleDriveMedia/googleDriverAuth");
 
 
 
@@ -12,40 +15,158 @@ exports.adminFeedUpload = async (req, res) => {
   try {
     const adminId = req.Id;
     const roleRef = req.role; // "Admin" | "Child_Admin"
-    const { language, categoryId, type, dec } = req.body;
 
-    if (!adminId) return res.status(400).json({ message: "User ID missing" });
-    if (!language || !categoryId || !type)
+    const { 
+      language, 
+      categoryId, 
+      type, 
+      dec, 
+      audience = "public",
+      location,
+      taggedFriends = [],
+      ratio = "original",
+      zoomLevel = 1,
+      position = { x: 0, y: 0 },
+      filter = "original",
+      adjustments = {},
+      scheduleDate
+    } = req.body;
+
+    if (!adminId) {
+      return res.status(400).json({ message: "User ID missing" });
+    }
+
+    if (!language || !categoryId || !type) {
       return res.status(400).json({ message: "Missing required fields" });
+    }
 
     const files = req.localFiles || [];
-    if (files.length === 0)
+    if (files.length === 0) {
       return res.status(400).json({ message: "No files uploaded" });
+    }
+
+    // 📁 Resolve Drive folder once per request
+    const folderId = await getFeedUploadFolder(
+      oAuth2Client,
+      roleRef,
+      type
+    );
 
     const results = [];
+    const errors = [];
 
     for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const description = Array.isArray(dec) ? dec[i] : dec;
+      try {
+        const file = files[i];
+        const description = Array.isArray(dec) ? dec[i] : dec;
 
-      const feed = await FeedService.uploadFeed(
-        { language, categoryId, type, dec: description },
-        file,
-        adminId,
-        roleRef
-      );
+        if (!file.buffer) {
+          throw new Error("File buffer missing");
+        }
 
-      results.push(feed);
+        // 🚀 Upload to Google Drive (NO fallback)
+        const uploadResult = await uploadToDrive(
+          file.buffer,
+          file.originalname || file.filename,
+          file.mimetype,
+          folderId
+        );
+
+        const driveUrl = uploadResult.url;
+        const driveFileId = uploadResult.fileId;
+
+        if (!driveUrl || !driveFileId) {
+          throw new Error("Drive upload failed");
+        }
+
+        // ✅ Feed data (ROOT LEVEL DRIVE INFO)
+        const feedData = {
+          language,
+          categoryId,        // ✅ correct schema field
+          type,
+          dec: description,
+          audience,
+          location,
+
+          contentUrl: driveUrl,
+          storageType: "gdrive",
+          driveFileId,
+
+          taggedFriends: Array.isArray(taggedFriends)
+            ? taggedFriends
+            : [],
+
+          editMetadata: {
+            crop: {
+              ratio,
+              zoomLevel: parseFloat(zoomLevel) || 1,
+              position:
+                typeof position === "string"
+                  ? JSON.parse(position)
+                  : position
+            },
+            filters: {
+              preset: filter,
+              adjustments:
+                typeof adjustments === "string"
+                  ? JSON.parse(adjustments)
+                  : adjustments
+            }
+          },
+
+          isScheduled: !!scheduleDate,
+          scheduleDate: scheduleDate
+            ? new Date(scheduleDate)
+            : null,
+          status: scheduleDate ? "Scheduled" : "Published"
+        };
+
+        const feed = await FeedService.uploadFeed(
+          feedData,
+          {
+            ...file,
+            url: driveUrl,
+            storageType: "gdrive",
+            driveFileId
+          },
+          adminId,
+          roleRef
+        );
+
+        results.push(feed);
+
+      } catch (err) {
+        console.error(`Error processing file ${i}:`, err);
+        errors.push({
+          fileIndex: i,
+          filename: files[i]?.filename,
+          error: err.message
+        });
+      }
+    }
+
+    if (results.length === 0) {
+      return res.status(500).json({
+        message: "All file uploads failed",
+        errors
+      });
     }
 
     return res.status(201).json({
-      message: results.length > 1 ? "All feeds uploaded" : "Feed uploaded",
-      feeds: results.map((r) => r.feed),
+      message:
+        results.length > 1
+          ? `${results.length} feeds uploaded successfully`
+          : "Feed uploaded successfully",
+      feeds: results.map(r => r.feed || r),
+      errors: errors.length > 0 ? errors : undefined
     });
 
   } catch (err) {
     console.error("Admin feed upload error:", err);
-    return res.status(500).json({ message: err.message });
+    return res.status(500).json({
+      message: "Server error",
+      error: err.message
+    });
   }
 };
 
@@ -60,78 +181,6 @@ exports.adminFeedUpload = async (req, res) => {
 
 
 
-exports.childAdminFeedUpload = async (req, res) => {
-  try {
-    const userId = req.Id || req.body.userId;
-    if (!userId) {
-      return res.status(400).json({ message: "User ID is required" });
-    }
-
-    // ✅ Check if user is a Child Admin
-    const childAdmin = await ChildAdmin.findOne({ userId });
-    if (!childAdmin) {
-      return res.status(403).json({ message: "Only Child Admins can upload feeds" });
-    }
-
-    const { language, categoryId } = req.body;
-
-    // ✅ Validate language
-    if (!language) {
-      return res.status(400).json({ message: "Language is required" });
-    }
-
-    // ✅ Validate categoryId
-    if (!categoryId) {
-      return res.status(400).json({ message: "CategoryId is required" });
-    }
-
-    // ✅ Ensure category exists
-    const categoryDoc = await Category.findById(categoryId);
-    if (!categoryDoc) {
-      return res.status(404).json({ message: "Category not found" });
-    }
-
-    // ✅ Single file upload
-    if (req.file) {
-      const result = await FeedService.uploadFeed(
-        { ...req.body, language, categoryId },
-        req.file,
-        userId
-      );
-
-      return res.status(201).json({
-        message: "Feed uploaded successfully",
-        feeds: [result.feed],
-        categories: [result.categoryId],
-        language: result.language,
-        roleType: result.roleType
-      });
-    }
-
-    // ✅ Multiple files upload
-    if (req.files && req.files.length > 0) {
-      const results = await FeedService.uploadFeedsMultiple(
-        { ...req.body, language, categoryId },
-        req.files,
-        userId
-      );
-
-      return res.status(201).json({
-        message: "All feeds uploaded successfully",
-        feeds: results.map(r => r.feed),
-        categories: results.map(r => r.categoryId),
-        languages: results.map(r => r.language),
-        roleTypes: results.map(r => r.roleType)
-      });
-    }
-
-    return res.status(400).json({ message: "No files uploaded" });
-
-  } catch (error) {
-    console.error("Error uploading feed by Child Admin:", error);
-    return res.status(500).json({ message: error.message || "Server error" });
-  }
-};
 
 
 

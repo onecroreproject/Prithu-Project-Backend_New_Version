@@ -6,6 +6,13 @@ const redisClient=require("../../Config/redisConfig.js");
 const User=require("../../models/userModels/userModel")
 const { uploadToDrive } = require("../../middlewares/services/googleDriveMedia/googleDriveUploader.js");
 const fs = require("fs");
+const { getFeedUploadFolder } = require(
+  "../../middlewares/services/googleDriveMedia/googleDriveFolderStructure.js"
+);
+const { oAuth2Client } = require(
+  "../../middlewares/services/googleDriveMedia/googleDriverAuth.js" // wherever you export OAuth client
+);
+
 
 
 
@@ -20,108 +27,7 @@ const extractHashtags = (text) => {
 
 
 
-// exports.creatorFeedUpload = async (req, res) => {
-//   try {
-//     const userId = req.Id;
-//     const userRole = req.role;
-//     const FolderId="160wuSDqCu8eJEKss6w1FSMDISJ-itTXu";
-//     if (!userId) {
-//       return res.status(400).json({ message: "User ID is required" });
-//     }
 
-//     if (!req.localFile) {
-//       return res.status(400).json({ message: "No feed file uploaded" });
-//     }
-
-//     const {
-//       language = "en",
-//       categoryId,
-//       type,
-//       dec = "",
-//       scheduleDate,
-//       audience = "public"
-//     } = req.body;
-
-//     if (!categoryId || !type) {
-//       return res
-//         .status(400)
-//         .json({ message: "categoryId and type are required" });
-//     }
-
-//     const category = await Categories.findById(categoryId).lean();
-//     if (!category) {
-//       return res.status(400).json({ message: "Invalid categoryId" });
-//     }
-
-//     const {
-//       buffer,
-//       originalName,
-//       mimeType,
-//       size,
-//       fileHash,
-//       videoDuration
-//     } = req.localFile;
-
-//     // 🚀 Upload to Google Drive
-//     const uploadResult = await uploadToDrive(
-//       buffer,
-//       originalName,
-//       mimeType,
-//       FolderId
-//     );
-
-//     const feedData = {
-//       type,
-//       language,
-//       category: categoryId,
-//       createdByAccount: userId,
-//       roleRef: userRole,
-
-//       contentUrl: uploadResult.url,
-//       fileHash,
-//       duration: videoDuration,
-
-//       storageType: "gdrive",
-//       driveFileId: uploadResult.fileId,
-
-//       files: [
-//         {
-//           url: uploadResult.url,
-//           mimeType,
-//           size,
-//           duration: videoDuration || null,
-//           storageType: "gdrive",
-//           driveFileId: uploadResult.fileId,
-//           order: 0
-//         }
-//       ],
-
-//       audience,
-//       isScheduled: !!scheduleDate,
-//       scheduleDate: scheduleDate ? new Date(scheduleDate) : null,
-//       status: scheduleDate ? "Scheduled" : "Published",
-//       dec
-//     };
-
-//     const newFeed = await Feed.create(feedData);
-
-//     await Categories.findByIdAndUpdate(categoryId, {
-//       $addToSet: { feedIds: newFeed._id }
-//     });
-
-//     return res.status(201).json({
-//       message: "Feed uploaded successfully",
-//       feed: newFeed
-//     });
-
-//   } catch (err) {
-//     console.error("Error creating feed:", err);
-//     return res.status(500).json({
-//       message: "Server error",
-//       error: err.message
-//     });
-//   }
-// };
 
 
 exports.creatorFeedUpload = async (req, res) => {
@@ -129,19 +35,19 @@ exports.creatorFeedUpload = async (req, res) => {
     const userId = req.Id || req.body.userId;
     const userRole = req.role;
 
-    if (!userId) return res.status(400).json({ message: "User ID is required" });
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
 
-    // Must contain uploaded file
     if (!req.localFile) {
       return res.status(400).json({ message: "No feed file uploaded" });
     }
 
-    // New fields from the create post modal
-    const { 
-      language = "en", 
-      categoryId, 
-      type, 
-      scheduleDate, 
+    const {
+      language = "en",
+      categoryId,
+      type,
+      scheduleDate,
       dec = "",
       audience = "public",
       taggedFriends = [],
@@ -153,114 +59,113 @@ exports.creatorFeedUpload = async (req, res) => {
       location
     } = req.body;
 
-    // Validation
     if (!categoryId || !type) {
       return res.status(400).json({ message: "categoryId and type are required" });
     }
 
-    // Extract hashtags
     const hashtags = extractHashtags(dec || "");
 
-    // Validate category
     const categoryDoc = await Categories.findById(categoryId).lean();
     if (!categoryDoc) {
       return res.status(400).json({ message: "Invalid categoryId" });
     }
 
-    // FILE INFO from local upload
- let {
-  url,
-  filename,
-  path: localPath,
-  fileHash,
-  videoDuration,
-} = req.localFile;
-console.log({
-  url,
-  filename,
-  path: localPath,
-  fileHash,
-  videoDuration,
-})
-let storageType = "local";
-let driveFileId = null;
+    // 🔁 FILE INFO FROM MEMORY (changed)
+    const {
+      buffer,
+      originalName,
+      mimeType,
+      size,
+      fileHash,
+      videoDuration
+    } = req.localFile;
 
-// 🚀 NEW FILES → GOOGLE DRIVE
-if (process.env.USE_GDRIVE === "true") {
-  try {
-    const uploadResult = await uploadToDrive(
-      localPath,
-      filename,
-      req.file.mimetype,
-      process.env.GDRIVE_FOLDER_ID
-    );
+    let url = null;
+    let storageType = "gdrive";
+    let driveFileId = null;
 
-    url = uploadResult.url;
-    driveFileId = uploadResult.fileId;
-    storageType = "gdrive";
+    // 🔁 GOOGLE DRIVE UPLOAD (OAuth + buffer)
+  
+      try {
+      // 📁 Resolve Drive folder based on role + media type
+const folderId = await getFeedUploadFolder(
+  oAuth2Client,
+  userRole, // Admin | Child_Admin | User
+  type      // image | video
+);
 
-    fs.unlinkSync(localPath); // delete ONLY after success
-  } catch (err) {
-    console.error("Drive upload failed:", err.message);
-    // fallback to local storage
-    storageType = "local";
-  }
+// 🚀 Upload to Google Drive (inside folder)
+const uploadResult = await uploadToDrive(
+  buffer,
+  originalName,
+  mimeType,
+  folderId
+);
+
+        url = uploadResult.url;
+        driveFileId = uploadResult.fileId;
+        storageType = "gdrive";
+      } catch (err) {
+        console.error("Drive upload failed:", err.message);
+        return res.status(500).json({
+          message: "File upload failed"
+        });
+      }
+    
+
+    if (!url) {
+  return res.status(500).json({
+    message: "File upload failed. No URL generated."
+  });
 }
 
-
-
-    // Duplicate check by hash
+    // 🔁 Duplicate check by hash
     if (fileHash) {
       const duplicateHash = await Feed.findOne({ fileHash }).lean();
       if (duplicateHash) {
         return res.status(409).json({
           message: "This file already exists",
-          feedId: duplicateHash._id,
+          feedId: duplicateHash._id
         });
       }
     }
 
-    // Duplicate check by URL
+    // 🔁 Duplicate check by URL
     const duplicateUrl = await Feed.findOne({ contentUrl: url }).lean();
     if (duplicateUrl) {
       return res.status(409).json({
         message: "This file already exists",
-        feedId: duplicateUrl._id,
+        feedId: duplicateUrl._id
       });
     }
 
-    // Parse new fields
+    // 🔁 Parse position
     let parsedPosition = { x: 0, y: 0 };
-    if (position) {
-      if (typeof position === 'string') {
-        try {
-          parsedPosition = JSON.parse(position);
-        } catch (e) {
-          parsedPosition = { x: 0, y: 0 };
-        }
-      } else {
-        parsedPosition = position;
-      }
+    if (typeof position === "string") {
+      try {
+        parsedPosition = JSON.parse(position);
+      } catch {}
+    } else {
+      parsedPosition = position;
     }
 
+    // 🔁 Parse adjustments
     let parsedAdjustments = {};
-    if (adjustments) {
-      if (typeof adjustments === 'string') {
-        try {
-          parsedAdjustments = JSON.parse(adjustments);
-        } catch (e) {
-          parsedAdjustments = {};
-        }
-      } else {
-        parsedAdjustments = adjustments;
-      }
+    if (typeof adjustments === "string") {
+      try {
+        parsedAdjustments = JSON.parse(adjustments);
+      } catch {}
+    } else {
+      parsedAdjustments = adjustments;
     }
 
-    // Handle tagged users
+    // 🔁 Tagged users
     const taggedUsers = [];
-    if (taggedFriends && taggedFriends.length > 0) {
+    if (Array.isArray(taggedFriends)) {
       for (const friendId of taggedFriends) {
-        const friend = await User.findById(friendId).select('userName name');
+        const friend = await User.findById(friendId)
+          .select("userName name")
+          .lean();
         if (friend) {
           taggedUsers.push({
             userId: friend._id,
@@ -271,42 +176,43 @@ if (process.env.USE_GDRIVE === "true") {
       }
     }
 
-    // Build feed document with new schema fields
-    const feedData = {
-      type,                        // image | video
-      language,
-      category: categoryId,
-      createdByAccount: userId,
-      roleRef: userRole,
+    // 🔁 BUILD FEED DATA (structure unchanged)
+const feedData = {
+  type,
+  language,
+  category: categoryId,
+  createdByAccount: userId,
+  roleRef: userRole,
 
-      contentUrl: url,             // full public URL (keeping for backward compatibility)
-      localFilename: filename,     // stored filename (for deletion)
-      localPath: localPath,        // absolute path on disk
-      fileHash,
-      duration: videoDuration,
+  // ✅ ROOT LEVEL (FIX)
+  contentUrl: url,
+  storageType: "gdrive",
+  driveFileId: driveFileId,
 
-      // New: Files array for multiple files support
-      files: [{
-        url: url,
-        type: type,
-        mimeType: req.localFile.mimeType || (type === 'video' ? 'video/mp4' : 'image/jpeg'),
-        size: req.localFile.size || 0,
-        thumbnail: type === 'video' ? (req.localFile.thumbnailUrl || null) : null,
-        duration: videoDuration || null,
-          storageType,
-  driveFileId,
-        order: 0
-      }],
+  fileHash,
+  duration: videoDuration,
 
-      // New: Edit metadata
+  files: [
+    {
+      url,
+      type,
+      mimeType,
+      size,
+      duration: videoDuration || null,
+      storageType: "gdrive",
+      driveFileId: driveFileId,
+      order: 0
+    }
+  ],
+
       editMetadata: {
         crop: {
-          ratio: ratio || "original",
+          ratio,
           zoomLevel: parseFloat(zoomLevel) || 1,
           position: parsedPosition
         },
         filters: {
-          preset: filter || "original",
+          preset: filter,
           adjustments: {
             brightness: parsedAdjustments.brightness || 0,
             contrast: parsedAdjustments.contrast || 0,
@@ -318,101 +224,44 @@ if (process.env.USE_GDRIVE === "true") {
         }
       },
 
-      // New: Tagged users
-      taggedUsers: taggedUsers,
+      taggedUsers,
+      audience,
+      location: location
+        ? typeof location === "string"
+          ? { name: location }
+          : location
+        : undefined,
 
-      // New: Audience settings
-      audience: audience || "public",
-
-      // New: Location
-      location: location ? (typeof location === 'string' ? { name: location } : location) : undefined,
-
-      // Scheduling (MUST MATCH SCHEMA)
       isScheduled: !!scheduleDate,
       scheduleDate: scheduleDate ? new Date(scheduleDate) : null,
       status: scheduleDate ? "Scheduled" : "Published",
 
-      dec: dec || "",
-      hashtags,
+      dec,
+      hashtags
     };
 
-    // Remove undefined fields
     Object.keys(feedData).forEach(key => {
-      if (feedData[key] === undefined) {
-        delete feedData[key];
-      }
+      if (feedData[key] === undefined) delete feedData[key];
     });
 
-    const newFeed = new Feed(feedData);
-    await newFeed.save();
+    const newFeed = await Feed.create(feedData);
 
-    // Add feed to category
     await Categories.findByIdAndUpdate(categoryId, {
-      $addToSet: { feedIds: newFeed._id },
+      $addToSet: { feedIds: newFeed._id }
     });
-
-    // Create stats record (if using FeedStats model)
-    try {
-      const FeedStats = require("../models/feedStatsSchema");
-      const stats = new FeedStats({
-        feedId: newFeed._id,
-        views: 0,
-        likes: 0,
-        comments: 0,
-        shares: 0,
-        saves: 0
-      });
-      await stats.save();
-
-      // Link stats to feed
-      newFeed.statsId = stats._id;
-      await newFeed.save();
-    } catch (statsError) {
-      console.log("Feed stats not created:", statsError.message);
-      // Continue without stats if model doesn't exist
-    }
-
-    // Redis increment hashtags
-    if (hashtags.length > 0) {
-      hashtags.forEach(tag => {
-        redisClient.hincrby("hashtag_counts", tag, 1);
-      });
-    }
-
-    // Log user activity
-    await logUserActivity({
-      userId,
-      actionType: "CREATE_POST",
-      targetId: newFeed._id,
-      targetModel: "Feed",
-      metadata: { 
-        platform: "web",
-        hasFilter: filter !== "original",
-        hasCrop: ratio !== "original",
-        hasTags: taggedUsers.length > 0
-      },
-    });
-
-    // Populate response with user and category info
-    const populatedFeed = await Feed.findById(newFeed._id)
-      .populate('category', 'categoryName')
-      .populate('createdByAccount', 'userName name profileAvatar')
-      .populate('taggedUsers.userId', 'userName name profileAvatar')
-      .lean();
 
     return res.status(201).json({
       message: scheduleDate
         ? "Feed scheduled successfully"
         : "Feed uploaded successfully",
-      feed: populatedFeed,
-      filterStyle: newFeed.getFilterStyle ? newFeed.getFilterStyle() : '', // Only if method exists
+      feed: newFeed
     });
 
   } catch (err) {
     console.error("Error creating feed:", err);
     return res.status(500).json({
       message: "Server error",
-      error: err.message,
+      error: err.message
     });
   }
 };
@@ -459,19 +308,39 @@ if (process.env.USE_GDRIVE === "true") {
 
 exports.creatorFeedScheduleUpload = async (req, res) => {
   try {
-    const userId = req.Id;
+    const userId = req.Id || req.body.userId;
     const userRole = req.role;
 
-    const { language, categoryId, type, scheduleDate, dec } = req.body;
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
 
-    // 1️⃣ MUST have uploaded file
+    // 1️⃣ File validation
     if (!req.localFile) {
       return res.status(400).json({ message: "Feed file is required" });
     }
 
-    // 2️⃣ Validate required inputs
+    const {
+      language = "en",
+      categoryId,
+      type,
+      scheduleDate,
+      dec = "",
+      audience = "public",
+      taggedFriends = [],
+      ratio = "original",
+      zoomLevel = 1,
+      position = { x: 0, y: 0 },
+      filter = "original",
+      adjustments = {},
+      location
+    } = req.body;
+
+    // 2️⃣ Required fields
     if (!categoryId || !type) {
-      return res.status(400).json({ message: "categoryId and type are required" });
+      return res.status(400).json({
+        message: "categoryId and type are required"
+      });
     }
 
     const categoryDoc = await Categories.findById(categoryId).lean();
@@ -479,116 +348,234 @@ exports.creatorFeedScheduleUpload = async (req, res) => {
       return res.status(400).json({ message: "Invalid categoryId" });
     }
 
-    // Extract hashtags
-    const hashtags = extractHashtags(dec || "");
+    // 3️⃣ Extract hashtags
+    const hashtags = extractHashtags(dec);
 
-    // 3️⃣ FILE INFO from local upload
+    // 4️⃣ File info from memory (for GDrive)
     const {
-      url,
-      filename,
-      path: localPath,
+      buffer,
+      originalName,
+      mimeType,
+      size,
       fileHash,
-      videoDuration,
+      videoDuration
     } = req.localFile;
 
-    // Duplicate check using hash
+    let url = null;
+    let driveFileId = null;
+    let storageType = "gdrive";
+
+        try {
+      // 📁 Resolve Drive folder based on role + media type
+const folderId = await getFeedUploadFolder(
+  oAuth2Client,
+  userRole, // Admin | Child_Admin | User
+  type      // image | video
+);
+
+// 🚀 Upload to Google Drive (inside folder)
+const uploadResult = await uploadToDrive(
+  buffer,
+  originalName,
+  mimeType,
+  folderId
+);
+
+      url = uploadResult.url;
+      driveFileId = uploadResult.fileId;
+      storageType = "gdrive";
+    } catch (err) {
+      console.error("❌ Drive upload failed:", err.message);
+      return res.status(500).json({
+        message: "File upload to Google Drive failed"
+      });
+    }
+
+    if (!url) {
+      return res.status(500).json({
+        message: "File upload failed. No URL generated."
+      });
+    }
+
+    // 6️⃣ Duplicate check by hash
     if (fileHash) {
       const duplicateHash = await Feed.findOne({ fileHash }).lean();
       if (duplicateHash) {
         return res.status(409).json({
           message: "This file already exists",
-          feedId: duplicateHash._id,
+          feedId: duplicateHash._id
         });
       }
     }
 
-    // Duplicate check using URL
+    // 7️⃣ Duplicate check by URL
     const duplicateUrl = await Feed.findOne({ contentUrl: url }).lean();
     if (duplicateUrl) {
       return res.status(409).json({
         message: "This file already exists",
-        feedId: duplicateUrl._id,
+        feedId: duplicateUrl._id
       });
     }
 
-    // 4️⃣ Construct Feed
-    const newFeed = new Feed({
+    // 8️⃣ Parse position
+    let parsedPosition = { x: 0, y: 0 };
+    if (typeof position === "string") {
+      try {
+        parsedPosition = JSON.parse(position);
+      } catch {}
+    } else {
+      parsedPosition = position;
+    }
+
+    // 9️⃣ Parse adjustments
+    let parsedAdjustments = {};
+    if (typeof adjustments === "string") {
+      try {
+        parsedAdjustments = JSON.parse(adjustments);
+      } catch {}
+    } else {
+      parsedAdjustments = adjustments;
+    }
+
+    // 🔟 Tagged users
+    const taggedUsers = [];
+    if (Array.isArray(taggedFriends)) {
+      for (const friendId of taggedFriends) {
+        const friend = await User.findById(friendId)
+          .select("userName name")
+          .lean();
+        if (friend) {
+          taggedUsers.push({
+            userId: friend._id,
+            userName: friend.userName,
+            name: friend.name
+          });
+        }
+      }
+    }
+
+    // 🟢 Build feed data
+    const feedData = {
       type,
       language,
       category: categoryId,
       createdByAccount: userId,
       roleRef: userRole,
 
+      // ROOT FILE DATA
       contentUrl: url,
-      localFilename: filename,
-      localPath,
+      storageType,
+      driveFileId,
+
       fileHash,
       duration: videoDuration,
 
-      dec: dec || "",
+      files: [
+        {
+          url,
+          type,
+          mimeType,
+          size,
+          duration: videoDuration || null,
+          storageType,
+          driveFileId,
+          order: 0
+        }
+      ],
+
+      editMetadata: {
+        crop: {
+          ratio,
+          zoomLevel: parseFloat(zoomLevel) || 1,
+          position: parsedPosition
+        },
+        filters: {
+          preset: filter,
+          adjustments: {
+            brightness: parsedAdjustments.brightness || 0,
+            contrast: parsedAdjustments.contrast || 0,
+            saturation: parsedAdjustments.saturation || 0,
+            fade: parsedAdjustments.fade || 0,
+            temperature: parsedAdjustments.temperature || 0,
+            vignette: parsedAdjustments.vignette || 0
+          }
+        }
+      },
+
+      taggedUsers,
+      audience,
+      location: location
+        ? typeof location === "string"
+          ? { name: location }
+          : location
+        : undefined,
+
+      dec,
       hashtags,
+
+      isScheduled: !!scheduleDate,
+      scheduleDate: scheduleDate ? new Date(scheduleDate) : null,
+      status: scheduleDate ? "Scheduled" : "Published"
+    };
+
+    // Remove undefined values
+    Object.keys(feedData).forEach(key => {
+      if (feedData[key] === undefined) delete feedData[key];
     });
 
-    // 5️⃣ If scheduleDate exists, schedule the post
+    const newFeed = await Feed.create(feedData);
+
+    // 🔵 Attach feed to category
+    await Categories.findByIdAndUpdate(categoryId, {
+      $addToSet: { feedIds: newFeed._id }
+    });
+
+    // 🟡 Handle scheduling
     if (scheduleDate) {
       const scheduleTime = new Date(scheduleDate).getTime();
       const now = Date.now();
       const delay = scheduleTime - now;
 
-      console.log("📅 Schedule Date:", scheduleDate);
-      console.log("🕓 Current Time:", new Date());
-      console.log("⏱️ Delay (ms):", delay);
-
-      newFeed.isScheduled = true;
-      newFeed.scheduleDate = new Date(scheduleDate);
-      newFeed.status = "Pending";
-
-      await newFeed.save();
-
       if (delay > 0) {
-        // Add job to Bull queue
         await feedQueue.add(
           { feedId: newFeed._id },
           {
             delay,
             removeOnComplete: true,
-            removeOnFail: true,
+            removeOnFail: true
           }
         );
       }
 
-      // Log activity
       await logUserActivity({
         userId,
         actionType: "SCHEDULE_POST",
         targetId: newFeed._id,
         targetModel: "Feed",
-        metadata: { platform: "web" },
+        metadata: { platform: "web" }
       });
 
       return res.status(200).json({
         message: "📅 Feed scheduled successfully",
-        data: newFeed,
+        feed: newFeed
       });
     }
 
-    // 6️⃣ If no schedule → publish immediately
-    newFeed.isScheduled = false;
-    newFeed.scheduleDate = null;
-    newFeed.status = "Published";
-
-    await newFeed.save();
-
-    return res.status(200).json({
-      message: "🟢 Feed uploaded immediately",
-      data: newFeed,
+    // 🟢 Immediate publish
+    return res.status(201).json({
+      message: "🟢 Feed uploaded successfully",
+      feed: newFeed
     });
 
   } catch (err) {
-    console.error("❌ Error in feed upload:", err);
-    res.status(500).json({ message: "Upload failed", error: err.message });
+    console.error("❌ Error in creatorFeedScheduleUpload:", err);
+    return res.status(500).json({
+      message: "Upload failed",
+      error: err.message
+    });
   }
 };
+
 
 
 
