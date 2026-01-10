@@ -14,13 +14,13 @@ const { oAuth2Client } = require("../../middlewares/services/googleDriveMedia/go
 exports.adminFeedUpload = async (req, res) => {
   try {
     const adminId = req.Id;
-    const roleRef = req.role; // "Admin" | "Child_Admin"
+    const roleRef = req.role; // Admin | Child_Admin
 
-    const { 
-      language, 
-      categoryId, 
-      type, 
-      dec, 
+    const {
+      language,
+      categoryId,
+      type,
+      dec,
       audience = "public",
       location,
       taggedFriends = [],
@@ -32,20 +32,20 @@ exports.adminFeedUpload = async (req, res) => {
       scheduleDate
     } = req.body;
 
-    if (!adminId) {
+    if (!adminId)
       return res.status(400).json({ message: "User ID missing" });
-    }
 
-    if (!language || !categoryId || !type) {
+    if (!language || !categoryId || !type)
       return res.status(400).json({ message: "Missing required fields" });
-    }
 
     const files = req.localFiles || [];
-    if (files.length === 0) {
+    if (files.length === 0)
       return res.status(400).json({ message: "No files uploaded" });
-    }
 
-    // 📁 Resolve Drive folder once per request
+    const BACKEND_URL =
+      process.env.BACKEND_URL || "http://localhost:5000";
+
+    // 📁 Resolve Drive folder once
     const folderId = await getFeedUploadFolder(
       oAuth2Client,
       roleRef,
@@ -60,11 +60,10 @@ exports.adminFeedUpload = async (req, res) => {
         const file = files[i];
         const description = Array.isArray(dec) ? dec[i] : dec;
 
-        if (!file.buffer) {
+        if (!file.buffer)
           throw new Error("File buffer missing");
-        }
 
-        // 🚀 Upload to Google Drive (NO fallback)
+        // 🚀 Upload to Drive
         const uploadResult = await uploadToDrive(
           file.buffer,
           file.originalname || file.filename,
@@ -72,23 +71,26 @@ exports.adminFeedUpload = async (req, res) => {
           folderId
         );
 
-        const driveUrl = uploadResult.url;
         const driveFileId = uploadResult.fileId;
 
-        if (!driveUrl || !driveFileId) {
+        if (!driveFileId)
           throw new Error("Drive upload failed");
-        }
 
-        // ✅ Feed data (ROOT LEVEL DRIVE INFO)
+        // ✅ URL STRATEGY (CRITICAL FIX)
+        const contentUrl =
+          type === "image"
+            ? `https://lh3.googleusercontent.com/d/${driveFileId}`
+            : `${BACKEND_URL}/media/${driveFileId}`;
+
         const feedData = {
           language,
-          categoryId,        // ✅ correct schema field
+          categoryId,
           type,
           dec: description,
           audience,
           location,
 
-          contentUrl: driveUrl,
+          contentUrl,
           storageType: "gdrive",
           driveFileId,
 
@@ -125,7 +127,7 @@ exports.adminFeedUpload = async (req, res) => {
           feedData,
           {
             ...file,
-            url: driveUrl,
+            url: contentUrl,
             storageType: "gdrive",
             driveFileId
           },
@@ -136,7 +138,7 @@ exports.adminFeedUpload = async (req, res) => {
         results.push(feed);
 
       } catch (err) {
-        console.error(`Error processing file ${i}:`, err);
+        console.error(`Admin upload error [${i}]:`, err);
         errors.push({
           fileIndex: i,
           filename: files[i]?.filename,
@@ -158,7 +160,7 @@ exports.adminFeedUpload = async (req, res) => {
           ? `${results.length} feeds uploaded successfully`
           : "Feed uploaded successfully",
       feeds: results.map(r => r.feed || r),
-      errors: errors.length > 0 ? errors : undefined
+      errors: errors.length ? errors : undefined
     });
 
   } catch (err) {
@@ -169,6 +171,7 @@ exports.adminFeedUpload = async (req, res) => {
     });
   }
 };
+
 
 
 

@@ -95,6 +95,7 @@ const folderId = await getFeedUploadFolder(
 );
 
 // 🚀 Upload to Google Drive (inside folder)
+// 🚀 Upload to Google Drive (inside folder)
 const uploadResult = await uploadToDrive(
   buffer,
   originalName,
@@ -102,9 +103,22 @@ const uploadResult = await uploadToDrive(
   folderId
 );
 
-        url = uploadResult.url;
-        driveFileId = uploadResult.fileId;
-        storageType = "gdrive";
+driveFileId = uploadResult.fileId;
+storageType = "gdrive";
+
+// ✅ IMPORTANT FIX
+if (type === "image") {
+  // 🖼️ Image → direct Google URL
+  url = `https://lh3.googleusercontent.com/d/${driveFileId}`;
+} else {
+  // 🎥 Video → backend streaming endpoint
+  url = `${process.env.BACKEND_URL}/media/${driveFileId}`;
+}
+
+
+
+
+
       } catch (err) {
         console.error("Drive upload failed:", err.message);
         return res.status(500).json({
@@ -113,11 +127,7 @@ const uploadResult = await uploadToDrive(
       }
     
 
-    if (!url) {
-  return res.status(500).json({
-    message: "File upload failed. No URL generated."
-  });
-}
+
 
     // 🔁 Duplicate check by hash
     if (fileHash) {
@@ -131,13 +141,16 @@ const uploadResult = await uploadToDrive(
     }
 
     // 🔁 Duplicate check by URL
-    const duplicateUrl = await Feed.findOne({ contentUrl: url }).lean();
-    if (duplicateUrl) {
-      return res.status(409).json({
-        message: "This file already exists",
-        feedId: duplicateUrl._id
-      });
-    }
+if (url) {
+  const duplicateUrl = await Feed.findOne({ contentUrl: url }).lean();
+  if (duplicateUrl) {
+    return res.status(409).json({
+      message: "This file already exists",
+      feedId: duplicateUrl._id
+    });
+  }
+}
+
 
     // 🔁 Parse position
     let parsedPosition = { x: 0, y: 0 };

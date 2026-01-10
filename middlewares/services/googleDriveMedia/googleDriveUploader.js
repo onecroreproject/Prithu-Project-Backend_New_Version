@@ -30,6 +30,7 @@ exports.uploadToDrive = async (
 
   const fileId = fileRes.data.id;
 
+  // 🌍 Public permission (needed for images + download)
   await drive.permissions.create({
     fileId,
     requestBody: {
@@ -39,8 +40,7 @@ exports.uploadToDrive = async (
   });
 
   return {
-    fileId,
-    url: `https://lh3.googleusercontent.com/d/${fileId}`,
+    fileId
+    // ❌ DO NOT return googleusercontent URL here
   };
 };
-
