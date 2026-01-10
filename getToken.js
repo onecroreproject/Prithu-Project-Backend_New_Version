@@ -11,7 +11,7 @@ const oAuth2Client = new google.auth.OAuth2(
 );
 
 // 🔴 PASTE CODE HERE
-const code = "4/0ASc3gC0yPf28ltH2igUWtyhURSIbRZVrTMLmOQjzw3s-Gq8BwGk8AyMEDP2qEfTmob26bw";
+const code = "4/0ATX87lPVW72EbJLZD7uijvDP2zJ_LE3kL6y1sbA2D8wrs1nYD4_f8JDcq0p3nSq7Zgv3Ug";
 
 oAuth2Client.getToken(code, (err, token) => {
   if (err) {
