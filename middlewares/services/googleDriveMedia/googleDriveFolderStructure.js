@@ -1,6 +1,6 @@
-// const { google } = require("googleapis");
+const { google } = require("googleapis");
 
-// const drive = google.drive({ version: "v3" });
+const drive = google.drive({ version: "v3" });
 
 // Simple in-memory cache (fast & safe)
 const folderCache = new Map();

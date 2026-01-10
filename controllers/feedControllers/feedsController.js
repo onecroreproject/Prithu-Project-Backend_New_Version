@@ -18,15 +18,11 @@ const HiddenPost = require("../../models/userModels/hiddenPostSchema.js")
 const {deleteFeedFile}=require("../../middlewares/services/feedUploadSpydy.js");
 const Categories=require("../../models/categorySchema.js");
 const path = require("path");
-// const { google } = require("googleapis");
+const { google } = require("googleapis");
 const { oAuth2Client } = require("../../middlewares/services/googleDriveMedia/googleDriverAuth");
 
 
 
-// const drive = google.drive({
-//   version: "v3",
-//   auth: oAuth2Client,
-// });
 
 exports.getAllFeedsByUserId = async (req, res) => {
   try {
