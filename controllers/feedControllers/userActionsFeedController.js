@@ -5,6 +5,7 @@ const UserComment = require("../../models/userCommentModel.js");
 const UserReplyComment = require('../../models/userRepliesModel')
 const CommentLike = require("../../models/commentsLikeModel.js");
 const path = require('path')
+const fs = require('fs')
 const User = require('../../models/userModels/userModel');
 const mongoose = require("mongoose");
   const ffmpeg = require('fluent-ffmpeg');
@@ -18,6 +19,11 @@ const Notification = require("../../models/notificationModel.js");
 const { createAndSendNotification } = require("../../middlewares/helper/socketNotification.js");
 const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
 const idToString = (id) => (id ? id.toString() : null);
+
+
+
+
+
 
 
 exports.likeFeed = async (req, res) => {
@@ -374,12 +380,11 @@ exports.generateShareLink = async (req, res) => {
 
     // ============ CRITICAL FIX: DEFINE ALL URLS ============
     const backendShareUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/share/post/${feedId}`;
-    const frontendShareUrl = `${process.env.FRONTEND_URL || 'https://www.prithu.app'}/share/post/${feedId}`;
-    const appRedirectUrl = `${process.env.FRONTEND_URL || 'https://www.prithu.app'}/home/retrivefeed/${feedId}`;
+
     
     // ============ CRITICAL FIX: Use backend URL for sharing ============
     // WhatsApp/Facebook crawlers MUST hit the backend URL to get OG tags
-    const shareUrl = backendShareUrl;
+    
     
     // Generate OG image URL based on media type
     let ogImageUrl = '';
@@ -459,54 +464,19 @@ exports.generateShareLink = async (req, res) => {
     
     // Get description - use actual caption if available
     const actualCaption = feed.dec || feed.caption || '';
-    const description = actualCaption || `Check out this ${mediaType} post by ${userName}`;
+ 
     
-    // Prepare video-specific OG tags
-    const videoTags = {};
-    if (mediaType === 'video') {
-      videoTags['og:video'] = directMediaUrl;
-      videoTags['og:video:type'] = 'video/mp4';
-      videoTags['og:video:width'] = '1280';
-      videoTags['og:video:height'] = '720';
-      videoTags['og:video:secure_url'] = directMediaUrl;
-      if (feed.duration) {
-        videoTags['og:video:duration'] = feed.duration;
-      }
-    }
+ 
 
-    res.status(200).json({
-      // ============ CRITICAL: Use backend URL for sharing ============
-      shareUrl: backendShareUrl,
-      // Additional URLs for reference
-      frontendUrl: frontendShareUrl,
-      appRedirectUrl: appRedirectUrl,
-      
-      ogData: {
-        title: `${userName}'s Post | ${process.env.APP_NAME || 'Prithu Project'}`,
-        description: description,
-        image: ogImageUrl,
-        url: backendShareUrl, // CRITICAL: Use backend URL here too
-        type: mediaType === 'video' ? 'video.other' : 'website',
-        siteName: process.env.APP_NAME || 'Prithu Project',
-        // Additional OG tags for better compatibility
-        'og:image:width': '1200',
-        'og:image:height': '630',
-        'og:image:type': 'image/jpeg',
-        'og:image:secure_url': ogImageUrl,
-        'og:image:alt': description.substring(0, 100),
-        ...videoTags
-      },
-      directMediaUrl,
-      caption: actualCaption,
-      userName: userName,
-      mediaType,
-      isPublic: feed.audience === 'public',
-      profileAvatar: profileAvatar,
-      userAvatar: profileAvatar,
-      // Additional info for debugging
-      feedType: feed.type,
-      hasThumbnail: !!(feed.files && feed.files[0] && feed.files[0].thumbnail)
-    });
+   res.json({
+  shareUrl: `${process.env.BACKEND_URL}/share/post/${feedId}`,
+  caption: actualCaption,
+  userName,
+  mediaType,
+  directMediaUrl,
+  profileAvatar
+});
+
 
   } catch (err) {
     console.error("Error generating share link:", err);
@@ -606,7 +576,7 @@ function serveDefaultThumbnail(res) {
     res.setHeader('Cache-Control', 'public, max-age=86400'); // 1 day cache
     return res.sendFile(defaultPath);
   }
-  
+
   // SVG placeholder as last resort
   const svgPlaceholder = `
     <svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
@@ -618,9 +588,80 @@ function serveDefaultThumbnail(res) {
       <polygon points="580,180 580,220 620,200" fill="#3B82F6"/>
     </svg>
   `;
-  
+
   res.setHeader('Content-Type', 'image/svg+xml');
   res.send(svgPlaceholder);
+}
+
+async function getOptimizedOGMedia(feed) {
+  let ogImageUrl = '';
+  let ogVideoUrl = '';
+  let directMediaUrl = feed.contentUrl;
+
+  // Handle Cloudinary images
+  if (feed.contentUrl && feed.contentUrl.includes('cloudinary.com')) {
+    ogImageUrl = feed.contentUrl.replace('/upload/', '/upload/c_fill,w_1200,h_630,f_auto,q_auto:best/');
+    directMediaUrl = feed.contentUrl;
+  }
+  // Handle local server images/videos
+  else if (feed.contentUrl && feed.contentUrl.includes('1croreprojects.com')) {
+    ogImageUrl = feed.contentUrl;
+    directMediaUrl = feed.contentUrl;
+
+    // If it's a video and we have thumbnail
+    if (feed.type === 'video') {
+      if (feed.files && feed.files.length > 0 && feed.files[0].thumbnail) {
+        ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${feed.files[0].thumbnail}`;
+      }
+      else if (feed.files && feed.files.length > 0 && feed.files[0].localPath) {
+        const videoPath = feed.files[0].localPath;
+        const baseName = path.basename(videoPath, path.extname(videoPath));
+        const thumbPath = path.join(path.dirname(videoPath), `${baseName}_thumb.jpg`);
+
+        if (fs.existsSync(thumbPath)) {
+          const relativePath = thumbPath.split('/uploads/').pop();
+          if (relativePath) {
+            ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/uploads/${relativePath}`;
+          }
+        } else {
+          ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/api/feed/video-thumbnail/${feed._id}`;
+        }
+      }
+    }
+  }
+
+  // Fallback: Check files array
+  if (!ogImageUrl && feed.files && feed.files.length > 0) {
+    const firstFile = feed.files[0];
+    if (firstFile.url) {
+      ogImageUrl = firstFile.url;
+      directMediaUrl = firstFile.url;
+    }
+    if (feed.type === 'video' && firstFile.thumbnail) {
+      ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${firstFile.thumbnail}`;
+    }
+  }
+
+  // Fallback: Check localPath
+  if (!ogImageUrl && feed.localPath) {
+    const pathPart = feed.localPath.split('/media/').pop();
+    if (pathPart) {
+      ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${pathPart}`;
+      directMediaUrl = ogImageUrl;
+    }
+  }
+
+  // ULTIMATE FALLBACK: Use default OG image
+  if (!ogImageUrl || !ogImageUrl.startsWith('http')) {
+    ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/default-og-image.jpg`;
+  }
+
+  // Set ogVideoUrl for videos
+  if (feed.type === 'video') {
+    ogVideoUrl = directMediaUrl;
+  }
+
+  return { ogImageUrl, ogVideoUrl };
 }
 
 
@@ -630,161 +671,112 @@ exports.sharePostOG = async (req, res) => {
   const { feedId } = req.params;
 
   try {
-    // 1️⃣ Fetch feed
     const feed = await Feeds.findById(feedId).lean();
 
     if (!feed || feed.audience !== "public" || feed.isDeleted) {
       return res.send(getDefaultOGPage());
     }
 
-    // 2️⃣ Fetch user
-    const profile = await ProfileSettings.findOne({
-      accountId: feed.createdByAccount,
-    })
-      .select("userName name profileAvatar")
-      .lean();
+    // detect crawler
+    const ua = req.headers["user-agent"] || "";
+    const isCrawler =
+      /facebookexternalhit|Twitterbot|WhatsApp|Telegram|bot|crawler|preview/i.test(ua);
 
-    const userName = profile?.userName || profile?.name || "User";
-
-    // 3️⃣ Prepare text content
-    const caption = feed.dec?.trim() || feed.caption?.trim() || `Post by ${userName}`;
-    const title = `${userName}'s ${feed.type === 'video' ? 'Video' : 'Post'} | ${process.env.APP_NAME || 'Prithu Project'}`;
-    
-    // ✅ CRITICAL FIX: Use current URL (which is backend URL)
-    const currentUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`; // This is https://prithubackend.1croreprojects.com/share/post/...
-    const frontendUrl = `${process.env.FRONTEND_URL}/share/post/${feedId}`;
-    const appRedirectUrl = `${process.env.FRONTEND_URL}/post/${feedId}`;
-    
-    // 4️⃣ Get optimized OG media URLs
-    const { ogImageUrl, ogVideoUrl, mediaType } = await getOptimizedOGMedia(feed);
-
-    // 5️⃣ Prepare video-specific tags
-    let videoMetaTags = '';
-    if (feed.type === 'video' && ogVideoUrl) {
-      videoMetaTags = `
-<meta property="og:video" content="${ogVideoUrl}" />
-<meta property="og:video:type" content="video/mp4" />
-<meta property="og:video:width" content="1280" />
-<meta property="og:video:height" content="720" />
-<meta property="og:video:secure_url" content="${ogVideoUrl}" />
-${feed.duration ? `<meta property="og:video:duration" content="${Math.round(feed.duration)}" />` : ''}
-<meta property="og:video:tag" content="video" />
-      `;
+    // 👤 normal user → frontend
+    if (!isCrawler) {
+      return res.redirect(
+        302,
+        `${process.env.FRONTEND_URL}/home/retrivefeed/${feedId}`
+      );
     }
 
-    // 6️⃣ Twitter Card type
-    const twitterCardType = feed.type === 'video' ? 'player' : 'summary_large_image';
-    const twitterPlayerTags = feed.type === 'video' && ogVideoUrl ? `
-<meta name="twitter:player" content="${ogVideoUrl}" />
-<meta name="twitter:player:width" content="1280" />
-<meta name="twitter:player:height" content="720" />
-    ` : '';
+    // 🤖 crawler → OG HTML
+    const profile = await ProfileSettings.findOne({
+      accountId: feed.createdByAccount,
+    }).lean();
 
-    // 7️⃣ SERVER-RENDERED HTML
+    const userName = profile?.userName || "User";
+    const caption = feed.dec || `Post by ${userName}`;
+    const title = `${userName}'s ${feed.type === "video" ? "Video" : "Post"}`;
+
+    const currentUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+    const frontendUrl = `${process.env.FRONTEND_URL}/share/post/${feedId}`;
+
+    const { ogImageUrl, ogVideoUrl } = await getOptimizedOGMedia(feed);
+
     res.set("Content-Type", "text/html");
-
     res.send(`
 <!DOCTYPE html>
-<html lang="en" prefix="og: https://ogp.me/ns#">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <title>${title}</title>
 
-<!-- Primary Meta Tags -->
-<meta name="title" content="${title}" />
-<meta name="description" content="${caption}" />
-
-<!-- Open Graph / Facebook -->
-<meta property="og:type" content="${feed.type === 'video' ? 'video.other' : 'article'}" />
-<meta property="og:url" content="${currentUrl}" /> <!-- ✅ FIXED: Use backend URL -->
+<meta property="og:url" content="${currentUrl}" />
 <meta property="og:title" content="${title}" />
 <meta property="og:description" content="${caption}" />
 <meta property="og:image" content="${ogImageUrl}" />
-<meta property="og:site_name" content="${process.env.APP_NAME || 'Prithu Project'}" />
+${feed.type === "video" ? `<meta property="og:video" content="${ogVideoUrl}" />` : ""}
 
-<!-- Open Graph Image Dimensions -->
-<meta property="og:image:width" content="1200" />
-<meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="${caption.substring(0, 100)}" />
-
-<!-- Video Tags -->
-${videoMetaTags}
-
-<!-- Twitter -->
-<meta name="twitter:card" content="${twitterCardType}" />
-<meta name="twitter:url" content="${currentUrl}" /> <!-- ✅ FIXED: Use backend URL -->
+<meta name="twitter:card" content="${feed.type === "video" ? "player" : "summary_large_image"}" />
 <meta name="twitter:title" content="${title}" />
 <meta name="twitter:description" content="${caption}" />
 <meta name="twitter:image" content="${ogImageUrl}" />
-${twitterPlayerTags}
 
-<!-- WhatsApp Specific -->
-<meta property="og:image:type" content="image/jpeg" />
-<meta property="og:image:secure_url" content="${ogImageUrl}" />
-
-<!-- Additional Tags for Better Reach -->
-<meta property="og:locale" content="en_US" />
-<meta property="article:author" content="${userName}" />
-${feed.hashtags?.length > 0 ? feed.hashtags.map(tag => `<meta property="article:tag" content="${tag}" />`).join('\n') : ''}
-
-<!-- Canonical URL (point to frontend for SEO) -->
 <link rel="canonical" href="${frontendUrl}" />
-
-<!-- Redirect to actual app with delay -->
-<script>
-  // Check if we're a bot/crawler
-  const isBot = /bot|crawler|spider|facebookexternalhit|Twitterbot|WhatsApp|Telegram/i.test(navigator.userAgent);
-  
-  if (!isBot) {
-    // Redirect real users after 1.5 seconds
-    setTimeout(() => {
-      window.location.href = "${appRedirectUrl}";
-    }, 1500);
-  }
-</script>
-
-<style>
-  body {
-    margin: 0;
-    padding: 20px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-  }
-  .loader {
-    border: 5px solid rgba(255,255,255,0.3);
-    border-radius: 50%;
-    border-top: 5px solid white;
-    width: 50px;
-    height: 50px;
-    animation: spin 1s linear infinite;
-    margin-bottom: 20px;
-  }
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-</style>
 </head>
-
-<body>
-  <div class="loader"></div>
-  <h2>Loading ${feed.type === 'video' ? 'Video' : 'Post'}...</h2>
-  <p>Redirecting to ${process.env.APP_NAME || 'Prithu Project'}...</p>
-</body>
+<body></body>
 </html>
     `);
   } catch (err) {
     console.error("OG Share Error:", err);
-    res.send(getErrorOGPage());
+    return res.status(500).send(getErrorOGPage());
   }
 };
+
+
+
+
+
+
+function getDefaultOGPage() {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Post not available</title>
+  <meta property="og:title" content="Post not available" />
+  <meta property="og:description" content="This post is private or no longer exists." />
+  <meta property="og:image" content="${process.env.BACKEND_URL}/default-og-image.jpg" />
+  <meta property="og:type" content="website" />
+</head>
+<body>
+  <h3>Post not available</h3>
+</body>
+</html>
+  `;
+}
+
+function getErrorOGPage() {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Something went wrong</title>
+  <meta property="og:title" content="Something went wrong" />
+  <meta property="og:description" content="Unable to load this post." />
+  <meta property="og:image" content="${process.env.BACKEND_URL}/default-og-image.jpg" />
+  <meta property="og:type" content="website" />
+</head>
+<body>
+  <h3>Something went wrong</h3>
+</body>
+</html>
+  `;
+}
+
 
 
 

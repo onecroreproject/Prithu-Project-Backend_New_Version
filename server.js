@@ -47,7 +47,10 @@ app.use("/media", express.static(path.join(__dirname, "media"), {
 app.use("/uploads", express.static(path.join(__dirname, "uploads"), {
   setHeaders: (res, path) => {
     // Allow CORS for images since they're used in OG tags
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (path.match(/\.(jpg|jpeg|png|webp)$/)) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+}
+
   }
 }));
 

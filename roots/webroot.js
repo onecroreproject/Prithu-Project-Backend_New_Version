@@ -368,6 +368,9 @@ const { getPostInterestStatus ,
 } = require('../controllers/postIntrestedController');
 const { getAllCompanies } = require('../controllers/adminCompany/adminCompanyController');
 const { getJobWithResolvedLocation, getAllActiveJobLocations, getPlatformStats } = require('../controllers/JobController/jobpostController');
+const { getHelpFAQ } = require('../controllers/adminControllers/adminHelpController');
+const { submitUserFeedback, getMyFeedbackAndReports } = require('../controllers/feedBackController');
+const { getPrithuCompany } = require('../controllers/adminControllers/companyDetailController');
 
 
 
@@ -768,6 +771,14 @@ router.get("/main/board/status",getManiBoardStats);
 
 router.get("/get/all/companies",getAllCompanies);
 
+
+// Public
+router.get("/help", getHelpFAQ);
+
+router.post("/feedback",auth,submitUserFeedback);
+router.get("/feedback/my",auth,getMyFeedbackAndReports);
+
+router.get("/company", getPrithuCompany);
 
 
 module.exports = router;
