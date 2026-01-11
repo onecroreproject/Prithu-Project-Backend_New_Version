@@ -316,7 +316,21 @@ const { getAllJobs ,
 } = require('../controllers/adminCompany/adminJobController');
 const { getDriveDashboard, driveCommand } = require('../controllers/adminControllers/driverStatusController');
 
+const {
+  createHelpSection,
+  updateHelpSection,
+  deleteHelpSection,
+  getHelpFAQ,
+  bulkCreateHelpFAQ,
+} = require("../controllers/adminControllers/adminHelpController");
+const { getAllUserFeedback, updateFeedbackStatus } = require('../controllers/feedBackController');
 
+
+const {
+  upsertPrithuCompany,
+  getPrithuCompany,
+  togglePrithuCompanyStatus,
+} = require("../controllers/adminControllers/companyDetailController");
 
 
 
@@ -652,7 +666,23 @@ router.post("/admin/drive/command",auth,driveCommand);
 
 
 
+// Admin
+router.post("/admin/help", createHelpSection);
+router.put("/admin/help/:id", updateHelpSection);
+router.delete("/admin/help/:id", deleteHelpSection);
+router.post("/admin/help/bulk", bulkCreateHelpFAQ);
+router.get("/help", getHelpFAQ);
 
+
+// Admin
+router.get("/admin/feedback", getAllUserFeedback);
+router.put("/admin/feedback/:id", updateFeedbackStatus);
+
+
+
+router.post("/admin/company", upsertPrithuCompany);
+router.patch("/admin/company/status", togglePrithuCompanyStatus);
+router.get("/company", getPrithuCompany);
 
 
 
