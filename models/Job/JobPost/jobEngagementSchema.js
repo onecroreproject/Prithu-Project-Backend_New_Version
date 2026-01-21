@@ -14,7 +14,6 @@ const JobEngagementSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "JobPost",
       required: true,
-      index: true,
     },
 
     userId: {
@@ -28,7 +27,7 @@ const JobEngagementSchema = new mongoose.Schema(
     shared: { type: Boolean, default: false },
     saved: { type: Boolean, default: false },
     applied: { type: Boolean, default: false, index: true },
-    view:{ type: Boolean, default: false, index: true },
+    view: { type: Boolean, default: false, index: true },
 
     lastActionAt: { type: Date, default: Date.now, index: true },
   },
@@ -41,5 +40,5 @@ JobEngagementSchema.index({ jobId: 1, userId: 1 }, { unique: true });
 /* Aggregation optimization */
 JobEngagementSchema.index({ companyId: 1, applied: 1 });
 
-module.exports = jobDB.model("JobEngagement", JobEngagementSchema,"JobEngagement");
+module.exports = jobDB.model("JobEngagement", JobEngagementSchema, "JobEngagement");
 

@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const {prithuDB}=require("../database");
+const { prithuDB } = require("../database");
 
 const CommentLikeSchema = new mongoose.Schema(
   {
@@ -7,7 +7,6 @@ const CommentLikeSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      index: true,
       sparse: true,
     },
 
@@ -15,7 +14,6 @@ const CommentLikeSchema = new mongoose.Schema(
     commentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "UserComment",
-      index: true,
       sparse: true,
     },
 
@@ -23,7 +21,6 @@ const CommentLikeSchema = new mongoose.Schema(
     replyCommentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ReplyComment",
-      index: true,
       sparse: true,
     },
 

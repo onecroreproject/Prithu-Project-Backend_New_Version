@@ -3,14 +3,13 @@ const { prithuDB } = require("../database");
 
 const ProfileSettingsSchema = new mongoose.Schema(
   {
-    accountId: { type: mongoose.Schema.Types.ObjectId, ref: "Account" },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     adminId: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
     childAdminId: { type: mongoose.Schema.Types.ObjectId, ref: "Child_Admin" },
 
     // Basic Details
     gender: { type: String },
-    userName: { type: String, index: true },
+    userName: { type: String },
     name: { type: String, index: true },
     lastName: { type: String, index: true },
     bio: { type: String },
@@ -34,6 +33,8 @@ const ProfileSettingsSchema = new mongoose.Schema(
     profileAvatar: { type: String },            // local URL
     profileAvatarFilename: { type: String },    // saved filename
     avatarUpdatedAt: { type: Date },
+    modifyAvatar: { type: String },             // background-removed URL (LOCAL)
+    modifyAvatarFilename: { type: String },     // local filename
 
     coverPhoto: { type: String },               // local URL
     coverPhotoFilename: { type: String },

@@ -1,13 +1,12 @@
 // models/AnalyticsMetric.js
-const mongoose= require ("mongoose");
-const {prithuDB}=require("../../database");
+const mongoose = require("mongoose");
+const { prithuDB } = require("../../database");
 
 const analyticsMetricSchema = new mongoose.Schema(
   {
     date: {
       type: Date,
       required: true,
-      index: true, 
     },
     totalRevenue: {
       type: Number,
@@ -25,15 +24,15 @@ const analyticsMetricSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-     totalWithdrawalAmount: {
+    totalWithdrawalAmount: {
       type: Number,
       default: 0,
     },
-    byReferralUsers:{
+    byReferralUsers: {
       type: Number,
       default: 0,
     },
-  
+
     totalSubscribers: {
       type: Number,
       default: 0,
@@ -48,11 +47,11 @@ const analyticsMetricSchema = new mongoose.Schema(
     },
   },
   {
-    timestamps: true, 
+    timestamps: true,
   }
 );
 
 // Ensure unique date record (one per day)
 analyticsMetricSchema.index({ date: 1 }, { unique: true });
 
-module.exports = prithuDB.model("AnalyticsMetric", analyticsMetricSchema,"AnalyticsMetrics");
+module.exports = prithuDB.model("AnalyticsMetric", analyticsMetricSchema, "AnalyticsMetrics");

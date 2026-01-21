@@ -1,15 +1,15 @@
 const mongoose = require("mongoose");
-const {prithuDB}=require("../database");
+const { prithuDB } = require("../database");
 
 const ReplySchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
-  accountId: { type: mongoose.Schema.Types.ObjectId, ref: "Account", index: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  accountId: { type: mongoose.Schema.Types.ObjectId, ref: "Account" },
 
   // Link back to feed and comment
-  parentCommentId: { type: mongoose.Schema.Types.ObjectId, ref: "UserComment", required: true, index: true },
+  parentCommentId: { type: mongoose.Schema.Types.ObjectId, ref: "UserComment", required: true },
 
   // NEW: For nested replies - track which reply this is replying to
-  parentReplyId: { type: mongoose.Schema.Types.ObjectId, ref: "Reply", index: true },
+  parentReplyId: { type: mongoose.Schema.Types.ObjectId, ref: "Reply" },
 
   replyText: { type: String, required: true },
 

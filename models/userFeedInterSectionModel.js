@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const {prithuDB}=require("../database");
+const { prithuDB } = require("../database");
 
 const UserFeedActionsSchema = new mongoose.Schema(
   {
@@ -10,7 +10,7 @@ const UserFeedActionsSchema = new mongoose.Schema(
     // Track Likes
     likedFeeds: [
       {
-        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed", index: true },
+        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed" },
         likedAt: { type: Date, default: Date.now },
       }
     ],
@@ -18,7 +18,7 @@ const UserFeedActionsSchema = new mongoose.Schema(
     // Track Saved
     savedFeeds: [
       {
-        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed", index: true },
+        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed" },
         savedAt: { type: Date, default: Date.now },
       },
     ],
@@ -26,7 +26,7 @@ const UserFeedActionsSchema = new mongoose.Schema(
     // Track Downloads
     downloadedFeeds: [
       {
-        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed", index: true },
+        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed" },
         downloadedAt: { type: Date, default: Date.now },
       },
     ],
@@ -34,7 +34,7 @@ const UserFeedActionsSchema = new mongoose.Schema(
     // Track Dislikes
     disLikeFeeds: [
       {
-        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed", index: true },
+        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed" },
         dislikedAt: { type: Date, default: Date.now },
       },
     ],
@@ -42,7 +42,7 @@ const UserFeedActionsSchema = new mongoose.Schema(
     // Track Shares
     sharedFeeds: [
       {
-        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed", index: true },
+        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed" },
         shareChannel: {
           type: String,
           enum: [

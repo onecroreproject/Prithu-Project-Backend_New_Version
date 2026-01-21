@@ -9,7 +9,6 @@ const CompanyLoginSchema = new mongoose.Schema(
       required: true,
       unique: true,
       lowercase: true,
-      index: true,
       trim: true,
     },
 
@@ -56,7 +55,6 @@ const CompanyLoginSchema = new mongoose.Schema(
       enum: ["company", "consultant"],
       required: true,
       default: "company",
-      index: true,
     },
 
     /* ---------------------------------------------------
@@ -66,7 +64,6 @@ const CompanyLoginSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      index: true,
     },
 
     companyEmail: {
@@ -120,7 +117,7 @@ const CompanyLoginSchema = new mongoose.Schema(
 /* ---------------------------------------------------
  * ⚡ Indexes
  * --------------------------------------------------- */
-CompanyLoginSchema.index({ email: 1 });
+// Note: email already has unique: true in field definition, so no need for explicit index
 CompanyLoginSchema.index({ companyName: 1 });
 CompanyLoginSchema.index({ accountType: 1 });
 

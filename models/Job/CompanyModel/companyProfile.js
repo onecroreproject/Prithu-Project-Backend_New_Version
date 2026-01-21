@@ -20,7 +20,7 @@ const CompanyProfileSchema = new mongoose.Schema(
 
 
     description: { type: String, trim: true },
- 
+
 
     /* ----------------------------------------
      * CONTACT DETAILS
@@ -35,7 +35,7 @@ const CompanyProfileSchema = new mongoose.Schema(
     pincode: { type: String, trim: true, index: true },
 
     // GeoJSON location (BEST for maps)
-      googleLocation: {
+    googleLocation: {
       type: {
         type: String,
         enum: ["Point"],
@@ -86,17 +86,17 @@ const CompanyProfileSchema = new mongoose.Schema(
 
 
     galleryImages: {
-  type: [String],
-  default: [],
-  validate: {
-    validator: v => v.length <= 5,
-    message: "Maximum 5 gallery images allowed"
-  }
-},
+      type: [String],
+      default: [],
+      validate: {
+        validator: v => v.length <= 5,
+        message: "Maximum 5 gallery images allowed"
+      }
+    },
     /* ----------------------------------------
      * BUSINESS DETAILS
      * -------------------------------------- */
-    businessCategory: { type: String, trim: true, index: true },
+    businessCategory: { type: String, trim: true },
   },
   {
     timestamps: true,

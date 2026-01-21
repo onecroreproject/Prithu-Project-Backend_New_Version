@@ -1,23 +1,23 @@
 const { body, validationResult } = require("express-validator");
 const mongoose = require("mongoose");
-const path=require("path");
+const path = require("path");
 const Profile = require("../../models/profileSettingModel");
 const User = require("../../models/userModels/userModel");
 const Admin = require("../../models/adminModels/adminModel");
 const ChildAdmin = require("../../models/childAdminModel");
 const UserLanguage = require('../../models/userModels/userLanguageModel');
 const { calculateAge } = require("../../middlewares/helper/calculateAge");
-const { removeImageBackground } = require("../../middlewares/helper/backgroundRemover"); 
+const { removeImageBackground } = require("../../middlewares/helper/removeImageBackground");
 const DEFAULT_COVER_PHOTO = "https://res.cloudinary.com/demo/image/upload/v1730123456/default-cover.jpg";
-const Following =require("../../models/userFollowingModel");
-const CreatorFollower =require("../../models/creatorFollowerModel");
+const Following = require("../../models/userFollowingModel");
+const CreatorFollower = require("../../models/creatorFollowerModel");
 const ProfileVisibility = require("../../models/profileVisibilitySchema");
-const Feed =require("../../models/feedModel");
-const {calculateProfileCompletion} =require("../../middlewares/helper/profileCompletionCalulator");
-const ProfileSettings=require("../../models/profileSettingModel");
+const Feed = require("../../models/feedModel");
+const { calculateProfileCompletion } = require("../../middlewares/helper/profileCompletionCalulator");
+const ProfileSettings = require("../../models/profileSettingModel");
 const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
-const Follower=require("../../models/creatorFollowerModel.js");
-const {deleteLocalFile}=require("../../middlewares/services/userprofileUploadSpydy.js");
+const Follower = require("../../models/creatorFollowerModel.js");
+const { deleteLocalFile } = require("../../middlewares/services/userprofileUploadSpydy.js");
 
 
 
@@ -133,22 +133,34 @@ exports.userProfileDetailUpdate = async (req, res) => {
     // -----------------------------------------
     // ✅ NEW LOCAL STORAGE HANDLING
     // -----------------------------------------
-   if (req.localFile) {
-  if (profile?.profileAvatarFilename) {
-    const oldPath = path.join(
-      __dirname,
-      "../../media/user",
-      userId.toString(),
-      "profilepic",
-      profile.profileAvatarFilename
-    );
-    deleteLocalFile(oldPath);
-  }
+    if (req.localFile) {
+      if (profile?.profileAvatarFilename) {
+        const oldPath = path.join(
+          __dirname,
+          "../../media/user",
+          userId.toString(),
+          "profilepic",
+          profile.profileAvatarFilename
+        );
+        deleteLocalFile(oldPath);
+      }
 
-  updateData.profileAvatar = req.localFile.url;
-  updateData.profileAvatarFilename = req.localFile.filename;
-  updateData.avatarUpdatedAt = req.localFile.uploadedAt;
-}
+      updateData.profileAvatar = req.localFile.url;
+      updateData.profileAvatarFilename = req.localFile.filename;
+      updateData.avatarUpdatedAt = req.localFile.uploadedAt;
+
+      // ✅ Background Removal Integration
+      try {
+        const localFilePath = path.join(req.localFile.path, req.localFile.filename);
+        const removedBg = await removeImageBackground(localFilePath);
+        if (removedBg?.secure_url) {
+          updateData.modifyAvatar = removedBg.secure_url;
+          updateData.modifyAvatarFilename = removedBg.public_id;
+        }
+      } catch (err) {
+        console.error("⚠️ Background removal failed for user:", userId, err.message);
+      }
+    }
 
 
     // Handle username
@@ -530,7 +542,7 @@ exports.updateFieldVisibilityWeb = async (req, res) => {
 // ===========================================================
 exports.getVisibilitySettingsWeb = async (req, res) => {
   try {
-    const userId = req.Id ;  // Ensure your auth middleware sets req.Id
+    const userId = req.Id;  // Ensure your auth middleware sets req.Id
     const role = req.role;
 
     if (!userId || !role) {
@@ -589,7 +601,7 @@ exports.getVisibilitySettingsWeb = async (req, res) => {
 exports.getUserVisibilityByUserId = async (req, res) => {
   try {
     const { userId } = req.body;
-console.log(userId)
+    console.log(userId)
     // Validate input
     if (!userId) {
       return res.status(400).json({
@@ -646,7 +658,7 @@ console.log(userId)
 exports.getUserProfileDetail = async (req, res) => {
   try {
     const userId = req.Id || req.query.id;
-console.log("user",userId)
+    console.log("user", userId)
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
     }
@@ -865,10 +877,10 @@ exports.getAdminProfileDetail = async (req, res) => {
         socialLinks, // ✅ Added field
         parentAdmin: parentAdmin
           ? {
-              userName: parentAdmin.userName,
-              email: parentAdmin.email,
-              adminType: parentAdmin.adminType,
-            }
+            userName: parentAdmin.userName,
+            email: parentAdmin.email,
+            adminType: parentAdmin.adminType,
+          }
           : null,
         profileSettings:
           role === "Admin"
@@ -1211,5 +1223,5 @@ exports.getProfileByUsername = async (req, res) => {
 
 
 
- 
+
 

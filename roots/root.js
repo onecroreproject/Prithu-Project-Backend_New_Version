@@ -10,9 +10,9 @@ const {   adminUploadProfile,
   adminProcessFeedFile,
   attachAdminFeedFiles,
 
+  
+
   }=require('../middlewares/services/googleDriveMedia/adminGooleDriveUpload');
-
-
 
 
 const {
@@ -137,6 +137,8 @@ const {
   getAllFeedAdmin,
   getUsersWillingToPost,
   updateUserPostPermission,
+  bulkFeedUpload,
+  getUploadProgress,
 } = require('../controllers/adminControllers/adminfeedController');
 
 const {
@@ -459,43 +461,56 @@ router.get("/auth/check-availability", checkAvailability);
 
 
 /* --------------------- Admin Profile API --------------------- */
-router.put(
-  "/admin/profile/detail/update",
-  auth,
-  adminUploadProfile.single("file"),
-  attachAdminProfileFile,
-  adminProfileDetailUpdate
-);
+// router.put(
+//   "/admin/profile/detail/update",
+//   auth,
+//   adminUploadProfile.single("file"),
+//   attachAdminProfileFile,
+//   adminProfileDetailUpdate
+// );
 
-router.get('/get/admin/profile',auth,getAdminProfileDetail);
+// router.get('/get/admin/profile',auth,getAdminProfileDetail);
 
 /* --------------------- Admin Feed API --------------------- */
+// Admin feed upload with design metadata
 router.post(
   "/admin/feed-upload",
-  auth,
-  adminUploadFeed.array("file"),
-  (req, res, next) => {
-    req.baseUrl = "/feed";
-    next();
-  },
-  adminProcessFeedFile,   
-  attachAdminFeedFiles,  
-  adminFeedUpload        
-);
-
-
-router.post(
-  "/admin/schedule-feed",
-  auth,
-  adminUploadFeed.array("file"),
-  (req, res, next) => {
-    req.baseUrl = "/feed";
-    next();
-  },
+ adminUploadFeed.fields([
+  { name: "files", maxCount: 20 },  // image/video
+  { name: "audio", maxCount: 1 }    // optional audio
+])
+, // Accept multiple files
   adminProcessFeedFile,
   attachAdminFeedFiles,
-  adminFeedUpload 
+  adminFeedUpload
 );
+
+// // Bulk feed upload endpoint
+// router.post(
+//   "/admin/feed/bulk-upload",
+//   auth,
+//   adminUploadFeed.array("files", 50),
+//   adminProcessFeedFile,
+//   attachAdminFeedFiles,
+//   bulkFeedUpload
+// );
+
+// Get upload progress
+// router.get("/admin/upload/progress/:uploadId", auth,getUploadProgress);
+
+
+// router.post(
+//   "/admin/schedule-feed",
+//   auth,
+//   adminUploadFeed.array("file"),
+//   (req, res, next) => {
+//     req.baseUrl = "/feed";
+//     next();
+//   },
+//   adminProcessFeedFile,
+//   attachAdminFeedFiles,
+//   adminFeedUpload 
+// );
 
 router.get("/admin/get/all/feed",getAllFeedAdmin);
 router.delete("/delete/feed", deleteFeed);
@@ -631,13 +646,13 @@ router.get("/analitycal/detail/for/test/:scheduleId",getUpcomingTestInterestedCa
 router.get("/admin/childadmin/list",auth,getChildAdmins);
 router.get("/admin/childadmin/permissions/:childAdminId",getChildAdminPermissions);
 router.put("/admin/childadmin/permissions/:id",updateChildAdminPermissions);
-router.put(
-  "/child/admin/profile/detail/update",
-  auth,
-  adminUploadProfile.single("file"),
-  attachAdminProfileFile,
-  childAdminProfileDetailUpdate
-);
+// router.put(
+//   "/child/admin/profile/detail/update",
+//   auth,
+//   adminUploadProfile.single("file"),
+//   attachAdminProfileFile,
+//   childAdminProfileDetailUpdate
+// );
 
 router.get("/child/admin/:id", getChildAdminById);
 router.patch("/block/child/admin/:id", blockChildAdmin);

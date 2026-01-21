@@ -1,25 +1,22 @@
 const mongoose = require("mongoose");
-const {prithuDB}=require("../database");
+const { prithuDB } = require("../database");
 
 const UserCommentSchema = new mongoose.Schema(
   {
-    userId: { 
-      type: mongoose.Schema.Types.ObjectId, 
-      ref: "User", 
-      index: true 
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User"
     },
 
-    accountId: { 
-      type: mongoose.Schema.Types.ObjectId, 
-      ref: "Account", 
-      index: true 
+    accountId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Account"
     },
 
-    feedId: { 
-      type: mongoose.Schema.Types.ObjectId, 
-      ref: "Feed", 
-      required: true, 
-      index: true 
+    feedId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Feed",
+      required: true
     },
 
     commentText: { type: String, required: true },

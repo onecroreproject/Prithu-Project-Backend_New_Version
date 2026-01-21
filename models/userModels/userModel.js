@@ -15,7 +15,7 @@ const FcmTokenSchema = new mongoose.Schema(
 // ------------ SUBSCRIPTION SUB-SCHEMA -------------
 const SubscriptionSchema = new mongoose.Schema(
   {
-    isActive: { type: Boolean, default: false, index: true },
+    isActive: { type: Boolean, default: false },
     startDate: { type: Date },
     endDate: { type: Date },
     createdAt: { type: Date, default: Date.now },
@@ -34,7 +34,6 @@ const UserSchema = new mongoose.Schema(
       minlength: 3,
       maxlength: 30,
       trim: true,
-      index: true,
     },
 
     email: {
@@ -43,7 +42,6 @@ const UserSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
-      index: true,
     },
 
     passwordHash: {
@@ -62,7 +60,6 @@ const UserSchema = new mongoose.Schema(
       enum: ["personal", "company"],
       default: "personal",
       required: true,
-      index: true,
     },
 
     activeAccount: { type: mongoose.Schema.Types.ObjectId, ref: "Account" },
@@ -133,9 +130,8 @@ const UserSchema = new mongoose.Schema(
 );
 
 // ------------ INDEXES --------------
-UserSchema.index({ email: 1 }, { unique: true });
-UserSchema.index({ userName: 1 }, { unique: true });
-UserSchema.index({ referralCode: 1 }, { unique: true, sparse: true });
+// Note: email, userName, and referralCode already have unique: true in their field definitions
+// which automatically creates unique indexes, so we don't need explicit index() calls for them
 UserSchema.index({ referralCodeIsValid: 1 });
 UserSchema.index({ accountType: 1 });
 UserSchema.index({ "subscription.isActive": 1 });

@@ -378,9 +378,7 @@ exports.generateShareLink = async (req, res) => {
       profileAvatar = profileSettings.profileAvatar;
     }
 
-    // ============ CRITICAL FIX: DEFINE ALL URLS ============
-    const backendShareUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/share/post/${feedId}`;
-
+  
     
     // ============ CRITICAL FIX: Use backend URL for sharing ============
     // WhatsApp/Facebook crawlers MUST hit the backend URL to get OG tags
@@ -468,14 +466,16 @@ exports.generateShareLink = async (req, res) => {
     
  
 
-   res.json({
-  shareUrl: `${process.env.BACKEND_URL}/share/post/${feedId}`,
+ res.json({
+  // 🔥 ONLY frontend URL
+  shareUrl: `${process.env.FRONTEND_URL}/share/post/${feedId}`,
   caption: actualCaption,
   userName,
   mediaType,
   directMediaUrl,
   profileAvatar
 });
+
 
 
   } catch (err) {
@@ -718,10 +718,11 @@ exports.sharePostOG = async (req, res) => {
 <meta property="og:image" content="${ogImageUrl}" />
 ${feed.type === "video" ? `<meta property="og:video" content="${ogVideoUrl}" />` : ""}
 
-<meta name="twitter:card" content="${feed.type === "video" ? "player" : "summary_large_image"}" />
+<meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="${title}" />
 <meta name="twitter:description" content="${caption}" />
 <meta name="twitter:image" content="${ogImageUrl}" />
+
 
 <link rel="canonical" href="${frontendUrl}" />
 </head>

@@ -13,17 +13,15 @@ const { prithuDB } = require("../database");
 
 const TestScheduleSchema = new mongoose.Schema(
   {
-    testName: { 
-      type: String, 
-      required: true, 
-      trim: true,
-      index: true 
+    testName: {
+      type: String,
+      required: true,
+      trim: true
     },
 
     testId: {
       type: Number,
-      required: true,
-      index: true
+      required: true
     },
 
     description: { type: String, default: "" },
@@ -38,13 +36,12 @@ const TestScheduleSchema = new mongoose.Schema(
 
     totalScore: { type: Number, required: true },
 
-    passingScore:{ type: Number, required: true },
+    passingScore: { type: Number, required: true },
 
     status: {
       type: String,
       enum: ["upcoming", "running", "completed", "cancelled"],
-      default: "upcoming",
-      index: true
+      default: "upcoming"
     },
 
     isActive: { type: Boolean, default: true },
@@ -86,18 +83,18 @@ function updateStatus(doc) {
 /* ---------------------------------------------------------
  * ⭐ APPLY AUTO STATUS WHEN FETCHED FROM DB
  * --------------------------------------------------------- */
-TestScheduleSchema.post("find", function(docs) {
+TestScheduleSchema.post("find", function (docs) {
   docs.forEach(updateStatus);
 });
 
-TestScheduleSchema.post("findOne", function(doc) {
+TestScheduleSchema.post("findOne", function (doc) {
   updateStatus(doc);
 });
 
 /* ---------------------------------------------------------
  * ⭐ BEFORE SAVE — Recalculate status IF needed
  * --------------------------------------------------------- */
-TestScheduleSchema.pre("save", function(next) {
+TestScheduleSchema.pre("save", function (next) {
   updateStatus(this);
   next();
 });

@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const {prithuDB}=require("../../database");
+const { prithuDB } = require("../../database");
 
 
 const UserCategorySchema = new mongoose.Schema(
@@ -17,11 +17,11 @@ const UserCategorySchema = new mongoose.Schema(
      * No extra objects → faster queries, less document size
      */
     interestedCategories: [
-      { type: mongoose.Schema.Types.ObjectId, ref: "Categories", index: true }
+      { type: mongoose.Schema.Types.ObjectId, ref: "Categories" }
     ],
 
     nonInterestedCategories: [
-      { type: mongoose.Schema.Types.ObjectId, ref: "Categories", index: true }
+      { type: mongoose.Schema.Types.ObjectId, ref: "Categories" }
     ],
 
     /**

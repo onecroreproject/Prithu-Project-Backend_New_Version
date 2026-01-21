@@ -1,78 +1,287 @@
 const mongoose = require("mongoose");
 const { prithuDB } = require("../database");
-
 const feedSchema = new mongoose.Schema(
   {
-    // image | video
-    type: { type: String, required: true },
-
-    language: { type: String, default: "en" },
-
+    // UPLOAD TYPE: Normal OR Template
+    uploadType: {
+      type: String,
+      enum: ["normal", "template"],
+      required: true,
+      default: "normal"
+    },
+    // Post type: image, video, image+audio
+    postType: {
+      type: String,
+      enum: ["image", "video", "image+audio"],
+      required: true
+    },
+    // Upload mode for each file (normal/template)
+    uploadMode: {
+      type: String,
+      enum: ["normal", "template"],
+      default: "normal"
+    },
+    language: {
+      type: String,
+      default: "en"
+    },
     category: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Categories",
       required: true,
     },
-
-    // Video duration (if video)
+    // Duration for videos and audio
     duration: { type: Number, default: null },
-
-    // Public URL of stored file
-    contentUrl: { type: String, required: true },
-
-    // Array for multiple files support
+    // Primary media URL
+    mediaUrl: { type: String, required: true },
+    // Multiple files support with upload mode per file
     files: [{
       url: { type: String, required: true },
-      type: { type: String, enum: ["image", "video"], required: true },
+      type: {
+        type: String,
+        enum: ["image", "video", "audio"],
+        required: true
+      },
+      uploadMode: {
+        type: String,
+        enum: ["normal", "template"],
+        default: "normal"
+      },
       mimeType: { type: String },
       size: { type: Number },
-      thumbnail: { type: String }, // For video thumbnails
-      duration: { type: Number }, // For videos
-      order: { type: Number, default: 0 }
+      driveFileId: { type: String }, // Google Drive file ID
+      thumbnail: { type: String },
+      duration: { type: Number },
+      order: { type: Number, default: 0 },
+      dimensions: {
+        width: { type: Number },
+        height: { type: Number },
+        ratio: { type: Number }
+      }
     }],
-
-    // Local filename for deletion / update
-    localFilename: { type: String },
-
-    // Optional: absolute local path
-    localPath: { type: String },
-
-    // Description
-    dec: { type: String, default: "" },
-
-    // Duplicate detection hash
-    fileHash: { type: String, index: true },
-
-    // Creator
-    createdByAccount: {
-      type: mongoose.Schema.Types.ObjectId,
-      refPath: "roleRef",
-      required: true,
-      index: true,
+    // Optional audio file for image+audio templates
+    audioFile: {
+      url: { type: String },
+      driveFileId: { type: String },
+      mimeType: { type: String },
+      size: { type: Number },
+      duration: { type: Number }
     },
-
+    // Description/caption
+    caption: { type: String, default: "" },
+    // File hash for duplicate detection
+    fileHash: {
+      type: String,
+      sparse: true
+    },
+    // Creator information
+    postedBy: {
+      userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        refPath: "roleRef",
+        required: true,
+      },
+      name: { type: String },
+      profilePicture: { type: String },
+      role: { type: String }
+    },
     roleRef: {
       type: String,
       enum: ["Admin", "Child_Admin", "User"],
       default: "User",
-      index: true,
     },
+    // ========== MODERATION & WORKFLOW ==========
+    isApproved: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    moderatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin"
+    },
+    moderatedAt: { type: Date },
+    rejectionReason: { type: String },
+    adminNotes: { type: String },
 
-    // Precomputed colors
-    themeColor: {
-      primary: { type: String, default: "#ffffff" },
-      secondary: { type: String, default: "#cccccc" },
-      accent: { type: String, default: "#999999" },
-      gradient: {
-        type: String,
-        default: "linear-gradient(135deg, #ffffff, #cccccc, #999999)",
+    // Administrative visibility
+    isFeatured: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    priority: {
+      type: Number,
+      default: 0,
+      index: true
+    },
+    // ========== TEMPLATE DESIGN METADATA ==========
+    designMetadata: {
+      isTemplate: { type: Boolean, default: false },
+      templateName: { type: String },
+      overlayElements: [{
+        id: {
+          type: String,
+          required: true
+        },
+        type: {
+          type: String,
+          // UPDATED: Added username as per frontend TemplateEditor
+          enum: ["avatar", "logo", "text", "username", "shape", "watermark", "dynamicText"],
+          required: true
+        },
+        xPercent: { type: Number, required: true },
+        yPercent: { type: Number, required: true },
+        wPercent: { type: Number, required: true },
+        hPercent: { type: Number, required: true },
+        animation: {
+          enabled: { type: Boolean, default: false },
+          direction: {
+            type: String,
+            enum: ["top", "top-right", "right", "bottom-right",
+              "bottom", "bottom-left", "left", "top-left", "none"],
+            default: "top"
+          },
+          speed: {
+            type: Number,
+            default: 1,
+            min: 0.1,
+            max: 5
+          },
+          delay: { type: Number, default: 0 },
+          finalStopPosition: {
+            xPercent: { type: Number },
+            yPercent: { type: Number }
+          }
+        },
+        visible: { type: Boolean, default: true },
+        zIndex: { type: Number, default: 10 },
+        avatarConfig: {
+          shape: {
+            type: String,
+            enum: ["circle", "square", "rounded"],
+            default: "circle"
+          },
+          borderColor: { type: String, default: "#ffffff" },
+          borderWidth: { type: Number, default: 2 },
+          shadow: { type: Boolean, default: true }
+        },
+        textConfig: {
+          content: { type: String }, // This can store value for static or 'username' placeholder
+          fontFamily: { type: String, default: "Arial" },
+          fontSize: { type: Number, default: 16 },
+          fontWeight: { type: String, default: "normal" },
+          color: { type: String, default: "#ffffff" },
+          backgroundColor: { type: String },
+          padding: { type: Number, default: 5 },
+          lineHeight: { type: Number, default: 1.2 }, // Added for better typography control
+          align: {
+            type: String,
+            enum: ["left", "center", "right"],
+            default: "center"
+          }
+        },
+        mediaConfig: {
+          url: { type: String },
+          opacity: { type: Number, default: 1, min: 0, max: 1 },
+          maintainAspectRatio: { type: Boolean, default: true }
+        },
+        shapeConfig: {
+          type: {
+            type: String,
+            enum: ["rectangle", "circle", "triangle", "line", "ellipse"]
+          },
+          fillColor: { type: String, default: "#ffffff" },
+          strokeColor: { type: String, default: "#000000" },
+          strokeWidth: { type: Number, default: 1 },
+          borderRadius: { type: Number, default: 0 }
+        },
+        metadata: {
+          type: mongoose.Schema.Types.Mixed,
+          default: {}
+        }
+      }],
+      audioConfig: {
+        enabled: { type: Boolean, default: false },
+        audioFileId: { type: String },
+        crop: {
+          start: { type: Number, default: 0 },
+          end: { type: Number },
+          duration: { type: Number }
+        },
+        volume: { type: Number, default: 1, min: 0, max: 1 },
+        loop: { type: Boolean, default: false },
+        fadeIn: { type: Number, default: 0 },
+        fadeOut: { type: Number, default: 0 }
       },
-      text: { type: String, default: "#000000" },
+      footerConfig: {
+        enabled: { type: Boolean, default: false },
+        position: {
+          type: String,
+          enum: ["bottom", "top", "left", "right"],
+          default: "bottom"
+        },
+        heightPercent: { type: Number, default: 15, min: 5, max: 30 },
+        backgroundColor: { type: String, default: "rgba(0,0,0,0.7)" },
+        textColor: { type: String, default: "#ffffff" },
+        showElements: {
+          name: { type: Boolean, default: true },
+          email: { type: Boolean, default: false },
+          phone: { type: Boolean, default: false },
+          socialIcons: { type: Boolean, default: true }
+        },
+        socialIcons: [{
+          platform: {
+            type: String,
+            enum: ["facebook", "instagram", "twitter", "linkedin",
+              "youtube", "whatsapp", "telegram", "website"]
+          },
+          visible: { type: Boolean, default: true },
+          urlTemplate: { type: String }
+        }],
+        useDominantColor: { type: Boolean, default: true },
+        dominantColor: { type: String }
+      },
+      canvasSettings: {
+        referenceWidth: { type: Number, default: 1080 },
+        referenceHeight: { type: Number, default: 1920 },
+        aspectRatio: { type: String, default: "9:16" },
+        zoom: { type: Number, default: 1, min: 0.1, max: 5 },
+        backgroundColor: { type: String, default: "transparent" },
+        safeArea: {
+          top: { type: Number, default: 50 },
+          bottom: { type: Number, default: 100 },
+          left: { type: Number, default: 20 },
+          right: { type: Number, default: 20 }
+        }
+      },
+      theme: {
+        primaryColor: {
+          type: String,
+          default: "#1e5a78",
+          validate: {
+            validator: function (v) {
+              return /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(v);
+            }
+          }
+        },
+        secondaryColor: { type: String, default: "#0f3a4d" },
+        accentColor: { type: String, default: "#ff6b6b" },
+        textColor: { type: String, default: "#ffffff" },
+        backgroundGradient: { type: String }
+      },
+      playbackSettings: {
+        autoPlay: { type: Boolean, default: true },
+        loop: { type: Boolean, default: false },
+        muteByDefault: { type: Boolean, default: true },
+        restartOnView: { type: Boolean, default: true },
+        pauseOnHidden: { type: Boolean, default: true }
+      }
     },
-
-    hashtags: [{ type: String, index: true }],
-
-    // New: Mentioned/tagged users
+    hashtags: [{
+      type: String,
+      lowercase: true
+    }],
     taggedUsers: [{
       userId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -80,31 +289,28 @@ const feedSchema = new mongoose.Schema(
         required: true
       },
       userName: { type: String },
-      name: { type: String }
+      name: { type: String },
+      taggedAt: { type: Date, default: Date.now }
     }],
-
-    // New: Post editing metadata
     editMetadata: {
-      // Crop and positioning
       crop: {
-        ratio: { 
-          type: String, 
-          enum: ["original", "1:1", "4:5", "16:9"], 
-          default: "original" 
+        ratio: {
+          type: String,
+          enum: ["original", "1:1", "4:5", "16:9", "9:16"],
+          default: "original"
         },
-        zoomLevel: { type: Number, default: 1, min: 1, max: 3 },
+        zoomLevel: { type: Number, default: 1, min: 0.1, max: 5 },
         position: {
           x: { type: Number, default: 0 },
           y: { type: Number, default: 0 }
         }
       },
-      // Filters and adjustments
       filters: {
-        preset: { 
-          type: String, 
-          enum: ["original", "aden", "clarendon", "crema", "gingham", "juno", 
-                "lark", "ludwig", "moon", "perpetua", "reyes", "slumber"], 
-          default: "original" 
+        preset: {
+          type: String,
+          enum: ["original", "aden", "clarendon", "crema", "gingham", "juno",
+            "lark", "ludwig", "moon", "perpetua", "reyes", "slumber"],
+          default: "original"
         },
         adjustments: {
           brightness: { type: Number, default: 0, min: -100, max: 100 },
@@ -116,209 +322,163 @@ const feedSchema = new mongoose.Schema(
         }
       }
     },
-
-    // Audience settings
     audience: {
       type: String,
       enum: ["public", "private", "followers", "specific"],
       default: "public"
     },
-    // For "specific" audience
     allowedUsers: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: "User"
     }],
-
-
-    storageType: {
-  type: String,
-  enum: ["local", "gdrive"],
-  default: "local"
-},
-
-driveFileId: {
-  type: String,
-  default: null
-},
-
-
-    // Location
+    storage: {
+      type: {
+        type: String,
+        enum: ["local", "gdrive", "s3", "cloudinary"],
+        default: "gdrive"
+      },
+      drive: {
+        fileId: { type: String },
+        thumbnailFileId: { type: String },
+        audioFileId: { type: String },
+        folderId: { type: String },
+        webViewLink: { type: String },
+        webContentLink: { type: String }
+      },
+      urls: {
+        media: { type: String },
+        audio: { type: String },
+        thumbnail: { type: String },
+        download: { type: String }
+      }
+    },
     location: {
       name: { type: String },
       coordinates: {
         type: { type: String, enum: ["Point"], default: "Point" },
-        coordinates: { type: [Number], default: [0, 0] } // [lng, lat]
+        coordinates: { type: [Number], default: [0, 0] }
       }
     },
-
-    // Stats
     statsId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "FeedStats",
       index: true,
     },
-
-    // Scheduling support
-    isScheduled: { type: Boolean, default: false },
-    scheduleDate: { type: Date, default: null, index: true },
-
-    // Post status
+    isScheduled: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    scheduleDate: {
+      type: Date,
+      default: null,
+      index: true
+    },
     status: {
       type: String,
-      enum: ["Pending", "Published", "Draft", "Scheduled", "Archived", "Deleted"],
-      default: "Published",
+      enum: ["draft", "published", "scheduled", "archived", "deleted"],
+      default: "published"
     },
-
-    // Soft delete
-    isDeleted: { type: Boolean, default: false },
-    deletedAt: { type: Date },
-
-    // Version for edit history
-    version: { type: Number, default: 1 },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    deletedAt: {
+      type: Date,
+      index: true
+    },
+    version: {
+      type: Number,
+      default: 1
+    },
     previousVersions: [{
-      dec: { type: String },
+      caption: { type: String },
       files: [{
         url: { type: String },
         type: { type: String },
-        mimeType: { type: String }
+        driveFileId: { type: String },
+        size: { type: Number }
       }],
-      editMetadata: { type: mongoose.Schema.Types.Mixed },
+      designMetadata: { type: mongoose.Schema.Types.Mixed },
       editedAt: { type: Date, default: Date.now },
-      editedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
-    }]
+      editedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+      },
+      changeDescription: { type: String }
+    }],
+    downloads: [{
+      userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+      },
+      downloadedAt: { type: Date, default: Date.now },
+      generatedFileId: { type: String },
+      downloadUrl: { type: String }
+    }],
+    playbackStats: {
+      totalViews: { type: Number, default: 0 },
+      averageViewTime: { type: Number, default: 0 },
+      completionRate: { type: Number, default: 0 }
+    },
+    seoMetadata: {
+      title: { type: String },
+      description: { type: String },
+      keywords: [{ type: String }],
+      ogImage: { type: String },
+      ogTitle: { type: String },
+      ogDescription: { type: String }
+    }
   },
-  { 
+  {
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    toJSON: {
+      virtuals: true,
+      transform: function (doc, ret) {
+        ret.id = ret._id;
+        delete ret._id;
+        delete ret.__v;
+        delete ret.fileHash;
+        return ret;
+      }
+    }
   }
 );
-
-// Virtual for formatted URL
-feedSchema.virtual('formattedUrl').get(function() {
-  return this.contentUrl || (this.files && this.files[0]?.url);
-});
-
-// Virtual for thumbnail URL
-feedSchema.virtual('thumbnailUrl').get(function() {
-  if (this.type === 'video' && this.files && this.files[0]?.thumbnail) {
-    return this.files[0].thumbnail;
-  }
-  return this.contentUrl || (this.files && this.files[0]?.url);
-});
-
-// Index for geospatial queries
-feedSchema.index({ "location.coordinates": "2dsphere" });
-
-// PERFORMANCE INDEXES
+// Primary indexes for Admin Dashboard
 feedSchema.index({ createdAt: -1 });
-feedSchema.index({ createdByAccount: 1 });
-feedSchema.index({ roleRef: 1 });
-feedSchema.index({ category: 1 });
-feedSchema.index({ isScheduled: 1, scheduleDate: 1 });
-feedSchema.index({ fileHash: 1 });
-feedSchema.index({ language: 1 });
-feedSchema.index({ hashtags: 1 });
-feedSchema.index({ status: 1 });
-feedSchema.index({ audience: 1 });
-feedSchema.index({ "taggedUsers.userId": 1 });
-feedSchema.index({ "editMetadata.filters.preset": 1 });
-
-// Pre-save middleware
+feedSchema.index({ isApproved: 1, status: 1 });
+feedSchema.index({ isFeatured: 1, priority: -1 });
+feedSchema.index({ category: 1, createdAt: -1 });
+// Full text search update
+feedSchema.index({
+  caption: 'text',
+  hashtags: 'text',
+  'designMetadata.templateName': 'text'
+}, {
+  weights: {
+    caption: 10,
+    hashtags: 5,
+    'designMetadata.templateName': 8
+  },
+  name: 'feed_text_search'
+});
+// Middleware for Auto-Logic
 feedSchema.pre("save", function (next) {
-  this.updatedAt = Date.now();
-  
-  // Extract hashtags from description
-  if (this.dec && this.isModified('dec')) {
-    const hashtagRegex = /#(\w+)/g;
-    const matches = this.dec.match(hashtagRegex);
-    this.hashtags = matches ? matches.map(tag => tag.slice(1)) : [];
+  // Auto-set uploadType if missing but design metadata suggests template
+  if (this.designMetadata?.isTemplate && !this.uploadType) {
+    this.uploadType = 'template';
   }
-  
-  // Set status based on scheduling
-  if (this.isScheduled && this.scheduleDate > new Date()) {
-    this.status = "Scheduled";
+  // Set postType based on files
+  if (this.isModified('files') || this.isModified('designMetadata')) {
+    if (this.files?.some(f => f.type === 'video')) {
+      this.postType = 'video';
+    } else if (this.designMetadata?.audioConfig?.enabled) {
+      this.postType = 'image+audio';
+    } else if (this.files?.some(f => f.type === 'image')) {
+      this.postType = 'image';
+    }
   }
-  
   next();
 });
-
-// Method to get filter CSS
-feedSchema.methods.getFilterStyle = function() {
-  if (!this.editMetadata?.filters) return '';
-  
-  const { preset, adjustments } = this.editMetadata.filters;
-  let filterStyle = '';
-  
-  // Apply preset filter
-  switch(preset) {
-    case 'aden':
-      filterStyle += 'sepia(0.2) brightness(1.15) saturate(1.4) ';
-      break;
-    case 'clarendon':
-      filterStyle += 'contrast(1.2) saturate(1.35) ';
-      break;
-    case 'crema':
-      filterStyle += 'sepia(0.5) contrast(1.25) brightness(1.15) saturate(0.9) ';
-      break;
-    case 'gingham':
-      filterStyle += 'contrast(1.1) brightness(1.1) ';
-      break;
-    case 'juno':
-      filterStyle += 'sepia(0.35) contrast(1.15) brightness(1.15) saturate(1.8) ';
-      break;
-    case 'lark':
-      filterStyle += 'contrast(0.9) ';
-      break;
-    case 'ludwig':
-      filterStyle += 'sepia(0.25) contrast(1.05) brightness(1.05) saturate(2) ';
-      break;
-    case 'moon':
-      filterStyle += 'grayscale(1) contrast(1.1) brightness(1.1) ';
-      break;
-    case 'perpetua':
-      filterStyle += 'contrast(1.1) brightness(1.25) saturate(1.1) ';
-      break;
-    case 'reyes':
-      filterStyle += 'sepia(0.75) contrast(0.75) brightness(1.25) saturate(1.4) ';
-      break;
-    case 'slumber':
-      filterStyle += 'saturate(0.66) brightness(1.05) ';
-      break;
-    default:
-      // Original - no preset filter
-      break;
-  }
-  
-  // Apply adjustments
-  if (adjustments) {
-    filterStyle += `brightness(${1 + (adjustments.brightness / 100)}) `;
-    filterStyle += `contrast(${1 + (adjustments.contrast / 100)}) `;
-    filterStyle += `saturate(${1 + (adjustments.saturation / 100)}) `;
-    filterStyle += `sepia(${adjustments.fade / 100}) `;
-    filterStyle += `hue-rotate(${adjustments.temperature}deg) `;
-  }
-  
-  return filterStyle.trim();
-};
-
-// Method to create edit history
-feedSchema.methods.saveEditHistory = async function(userId) {
-  const historyEntry = {
-    dec: this.dec,
-    files: this.files.map(file => ({
-      url: file.url,
-      type: file.type,
-      mimeType: file.mimeType
-    })),
-    editMetadata: this.editMetadata,
-    editedBy: userId
-  };
-  
-  this.previousVersions.push(historyEntry);
-  this.version += 1;
-  
-  return this.save();
-};
-
 module.exports = prithuDB.model("Feed", feedSchema, "Feeds");

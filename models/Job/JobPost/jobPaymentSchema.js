@@ -12,7 +12,6 @@ const PaymentSchema = new mongoose.Schema(
     jobId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "JobPost",
-      index: true,
     },
 
     amount: { type: Number, required: true, index: true },
