@@ -91,7 +91,7 @@ exports.adminFeedUpload = async (req, res) => {
         const driveFileId = upload.fileId;
         const mediaUrl = isImage
           ? `https://lh3.googleusercontent.com/d/${driveFileId}`
-          : `/media/${driveFileId}`;
+          : `http://localhost:5000/media/${driveFileId}`;
         // Prepare feed document
         const currentPostType = isImage ? (uploadedAudio ? 'image+audio' : 'image') : 'video';
         const currentUploadType = baseDesignMetadata.isTemplate ? 'template' : 'normal';
@@ -128,6 +128,10 @@ exports.adminFeedUpload = async (req, res) => {
               enabled: !!uploadedAudio,
               audioFileId: uploadedAudio?.driveFileId
             }
+          },
+          editMetadata: baseDesignMetadata.editMetadata || {
+            crop: { ratio: "original", zoomLevel: 1, position: { x: 0, y: 0 } },
+            filters: { preset: "original", adjustments: {} }
           },
           audience,
           storage: {

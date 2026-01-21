@@ -15,8 +15,8 @@ const ImageStats = require("../../models/userModels/MediaSchema/imageViewModel.j
 const VideoStats = require("../../models/userModels/MediaSchema/videoViewStatusModel");
 const cloudinary = require("cloudinary").v2;
 const HiddenPost = require("../../models/userModels/hiddenPostSchema.js")
-const {deleteFeedFile}=require("../../middlewares/services/feedUploadSpydy.js");
-const Categories=require("../../models/categorySchema.js");
+const { deleteFeedFile } = require("../../middlewares/services/feedUploadSpydy.js");
+const Categories = require("../../models/categorySchema.js");
 const path = require("path");
 const { google } = require("googleapis");
 const { oAuth2Client } = require("../../middlewares/services/googleDriveMedia/googleDriverAuth");
@@ -26,10 +26,10 @@ const { oAuth2Client } = require("../../middlewares/services/googleDriveMedia/go
 
 exports.getAllFeedsByUserId = async (req, res) => {
   console.log("🔵 START: getAllFeedsByUserId");
-  
+
   let hiddenPostIds = [];
   let notInterestedCategoryIds = [];
-  
+
   try {
     const rawUserId = req.Id || req.body.userId;
     if (!rawUserId) return res.status(404).json({ message: "User ID Required" });
@@ -42,18 +42,18 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const viewerProfile = await ProfileSettings.findOne({ userId })
       .select("name userName profileAvatar phoneNumber socialLinks privacy modifyAvatar")
       .lean();
-    
+
     const viewerUser = await User.findById(userId).select("email").lean();
-    
+
     // Format viewer social icons safely
     let viewerSocialIcons = [];
     if (viewerProfile?.socialLinks) {
-       // Logic to normalize various social link formats (array, object, or JSON string)
-       if (Array.isArray(viewerProfile.socialLinks)) {
-         viewerSocialIcons = viewerProfile.socialLinks.map(l => ({ platform: l.platform, url: l.url, visible: l.visible !== false }));
-       } else if (typeof viewerProfile.socialLinks === 'object') {
-         viewerSocialIcons = Object.entries(viewerProfile.socialLinks).map(([k, v]) => ({ platform: k, url: typeof v === 'string' ? v : v.url, visible: true }));
-       }
+      // Logic to normalize various social link formats (array, object, or JSON string)
+      if (Array.isArray(viewerProfile.socialLinks)) {
+        viewerSocialIcons = viewerProfile.socialLinks.map(l => ({ platform: l.platform, url: l.url, visible: l.visible !== false }));
+      } else if (typeof viewerProfile.socialLinks === 'object') {
+        viewerSocialIcons = Object.entries(viewerProfile.socialLinks).map(([k, v]) => ({ platform: k, url: typeof v === 'string' ? v : v.url, visible: true }));
+      }
     }
     const viewer = {
       id: userId,
@@ -61,7 +61,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
       userName: viewerProfile?.userName || "user",
       email: viewerUser?.email || null,
       phoneNumber: viewerProfile?.privacy?.showPhoneNumber === false ? null : (viewerProfile?.phoneNumber || null),
-      profileAvatar:  viewerProfile?.modifyAvatar || "https://via.placeholder.com/150",
+      profileAvatar: viewerProfile?.modifyAvatar || "https://via.placeholder.com/150",
       socialLinks: viewerSocialIcons
     };
     /* -----------------------------------------------------
@@ -90,79 +90,146 @@ exports.getAllFeedsByUserId = async (req, res) => {
       { $sort: { createdAt: -1 } },
       { $skip: (page - 1) * limit },
       { $limit: limit },
-      // Lookups for Creator Info
-      { $lookup: { from: "Admin", localField: "postedBy.userId", foreignField: "_id", as: "admin" } },
-      { $lookup: { from: "Child_Admin", localField: "postedBy.userId", foreignField: "_id", as: "childAdmin" } },
-      { $lookup: { from: "User", localField: "postedBy.userId", foreignField: "_id", as: "userAccount" } },
-      
-      {
-         $addFields: {
-           creatorData: {
-             $switch: {
-               branches: [
-                 { case: { $eq: ["$roleRef", "Admin"] }, then: { $arrayElemAt: ["$admin", 0] } },
-                 { case: { $eq: ["$roleRef", "Child_Admin"] }, then: { $arrayElemAt: ["$childAdmin", 0] } },
-                 { case: { $eq: ["$roleRef", "User"] }, then: { $arrayElemAt: ["$userAccount", 0] } }
-               ],
-               default: null
-             }
-           }
-         }
-      },
-      // Join ProfileSettings for Creator Avatar/Socials
+
+      // 🛑 OPTIMIZED LOOKUPS: Only project needed fields to keep pipeline memory low
+      { $lookup: { from: "Admin", localField: "postedBy.userId", foreignField: "_id", pipeline: [{ $project: { userName: 1, name: 1 } }], as: "admin" } },
+      { $lookup: { from: "Child_Admin", localField: "postedBy.userId", foreignField: "_id", pipeline: [{ $project: { userName: 1, name: 1 } }], as: "childAdmin" } },
+      { $lookup: { from: "User", localField: "postedBy.userId", foreignField: "_id", pipeline: [{ $project: { userName: 1, name: 1 } }], as: "userAccount" } },
+
+      // 🔄 DYNAMIC PROFILE JOIN: Match based on roleRef
       {
         $lookup: {
           from: "ProfileSettings",
-          localField: "postedBy.userId",
-          foreignField: "userId",
+          let: { creatorId: "$postedBy.userId", role: "$roleRef" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $and: [{ $eq: ["$$role", "Admin"] }, { $eq: ["$adminId", "$$creatorId"] }] },
+                    { $and: [{ $eq: ["$$role", "Child_Admin"] }, { $eq: ["$childAdminId", "$$creatorId"] }] },
+                    { $and: [{ $eq: ["$$role", "User"] }, { $eq: ["$userId", "$$creatorId"] }] }
+                  ]
+                }
+              }
+            },
+            { $project: { name: 1, userName: 1, profileAvatar: 1, modifyAvatar: 1 } }
+          ],
           as: "creatorProfile"
         }
       },
       { $unwind: { path: "$creatorProfile", preserveNullAndEmptyArrays: true } },
-      // ... existing UserFeedActions lookups (Like, Dislike, Share, Views) ...
+
+      {
+        $addFields: {
+          creatorData: {
+            $let: {
+              vars: {
+                rawAccount: {
+                  $switch: {
+                    branches: [
+                      { case: { $eq: ["$roleRef", "Admin"] }, then: { $arrayElemAt: ["$admin", 0] } },
+                      { case: { $eq: ["$roleRef", "Child_Admin"] }, then: { $arrayElemAt: ["$childAdmin", 0] } },
+                      { case: { $eq: ["$roleRef", "User"] }, then: { $arrayElemAt: ["$userAccount", 0] } }
+                    ],
+                    default: null
+                  }
+                }
+              },
+              in: {
+                id: "$postedBy.userId",
+                // Prefer data from ProfileSettings, fallback to Account info
+                userName: { $ifNull: ["$creatorProfile.userName", "$$rawAccount.userName", "unknown"] },
+                name: { $ifNull: ["$creatorProfile.name", "$$rawAccount.name", "User"] },
+                // Avatar Priority: Background-removed -> Original -> Placeholder
+                avatar: {
+                  $ifNull: [
+                    "$creatorProfile.modifyAvatar",
+                    "$creatorProfile.profileAvatar",
+                    "https://via.placeholder.com/150"
+                  ]
+                },
+                role: "$roleRef"
+              }
+            }
+          }
+        }
+      },
+      // FINAL CLEANUP: Remove lookup artifacts
+      {
+        $project: {
+          admin: 0,
+          childAdmin: 0,
+          userAccount: 0,
+          creatorProfile: 0,
+          postedBy: 0,
+          fileHash: 0,
+          __v: 0
+        }
+      }
     ]);
+
     /* -----------------------------------------------------
        ✅ 4️⃣ POST-PROCESSING (Normal vs Template Logic)
     ------------------------------------------------------*/
     const enrichedFeeds = feeds.map(feed => {
-      const isTemplateMode = feed.uploadMode === 'template' || feed.uploadType === 'template';
-      
+      const isTemplateMode = feed.uploadType === 'template';
       const themeColor = feed.themeColor || { primary: "#2563eb", secondary: "#1e40af", accent: "#ffffff", text: "#000000" };
-      // ⚠️ IMPORTANT: If Normal mode, we disable designState
-      const designState = isTemplateMode ? {
-        elements: feed.designMetadata?.overlayElements || [],
-        footer: feed.designMetadata?.footerConfig || { visible: true, colors: themeColor },
-        mediaDimensions: feed.designMetadata?.canvasSettings || { width: 1080, height: 1920 },
-        audioConfig: feed.designMetadata?.audioConfig || null,
-        themeColors: themeColor
-      } : null;
+
+      // Simplified designState for Template feeds
+      let designState = null;
+      if (isTemplateMode && feed.designMetadata) {
+        designState = {
+          elements: feed.designMetadata.overlayElements || [],
+          footer: feed.designMetadata.footerConfig || { enabled: true, colors: themeColor },
+          mediaDimensions: feed.designMetadata.canvasSettings || { width: 1080, height: 1920 },
+          audioConfig: feed.designMetadata.audioConfig || null,
+          themeColors: themeColor
+        };
+      }
+
       return {
         ...feed,
         feedId: feed._id,
-        uploadMode: feed.uploadMode || 'normal',
-        viewer: viewer, // Inject viewer info for frontend to bind overlays
-        
-        // Conditional footer
+        uploadType: feed.uploadType || 'normal',
+
+        // Footer Configuration with Viewer Social Icons injected
         footerDisplay: isTemplateMode ? {
           ...(feed.designMetadata?.footerConfig || {}),
-          socialIcons: viewerSocialIcons // Inject viewer's icons
-        } : { visible: false },
-        designState: designState,
-        
-        // Stat & Interaction formatting...
+          socialIcons: viewerSocialIcons
+        } : { enabled: false },
+
+        designState,
+
+        // Final Interaction Stats
         stats: {
-           likes: feed.likesCount || 0,
-           views: feed.viewsCount || 0 
-           // ... (other stats)
+          likes: feed.likesCount || 0,
+          views: feed.viewsCount || 0,
+          comments: feed.commentsCount || 0,
+          shares: feed.shareCount || 0
         }
       };
     });
+
     res.status(200).json({
       success: true,
       data: {
-        viewer: viewer,
+        viewer,
         feeds: enrichedFeeds,
-        pagination: { page, limit, total: await Feed.countDocuments({ /* same filter */ }) }
+        pagination: {
+          page,
+          limit,
+          total: await Feed.countDocuments({
+            _id: { $nin: hiddenPostIds },
+            category: { $nin: notInterestedCategoryIds },
+            $or: [
+              { isScheduled: { $ne: true } },
+              { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] }
+            ],
+            isDeleted: false,
+            status: { $in: ["Published", "Scheduled", "published", "scheduled"] }
+          })
+        }
       }
     });
   } catch (err) {
@@ -1570,9 +1637,9 @@ exports.deleteFeed = async (req, res) => {
   try {
     const { feedId } = req.body;
     const drive = google.drive({
-  version: "v3",
-  auth: oAuth2Client
-});
+      version: "v3",
+      auth: oAuth2Client
+    });
 
 
     if (!feedId) {

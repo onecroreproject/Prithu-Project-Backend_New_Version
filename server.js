@@ -69,6 +69,7 @@ const drive = google.drive({
 });
 
 app.get("/media/:fileId", async (req, res) => {
+  console.log("working in media")
   try {
     const fileId = req.params.fileId;
 
