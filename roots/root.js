@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middlewares/jwtAuthentication');
-const {   adminUploadProfile,
+const { adminUploadProfile,
   attachAdminProfileFile,
 
 
@@ -10,9 +10,9 @@ const {   adminUploadProfile,
   adminProcessFeedFile,
   attachAdminFeedFiles,
 
-  
 
-  }=require('../middlewares/services/googleDriveMedia/adminGooleDriveUpload');
+
+} = require('../middlewares/services/googleDriveMedia/adminGooleDriveUpload');
 
 
 const {
@@ -29,7 +29,7 @@ const {
   getUserHidePost,
   getTrendingFeeds,
   deleteFeed,
-  
+
 } = require('../controllers/feedControllers/feedsController');
 
 const {
@@ -45,7 +45,7 @@ const {
 
 const {
   getUserDetailWithId,
-  setAppLanguage ,
+  setAppLanguage,
   getAppLanguage,
   getFeedLanguage,
   setFeedLanguage,
@@ -55,11 +55,11 @@ const {
   blockUserById,
 } = require('../controllers/userControllers/userDetailController');
 
-const{
+const {
   userSelectCategory,
   userNotInterestedCategory,
   userInterestedCategory,
-}=require('../controllers/userControllers/userCategoryController')
+} = require('../controllers/userControllers/userCategoryController')
 
 const {
   getfeedWithCategoryWithId,
@@ -88,7 +88,7 @@ const {
   getVisibilitySettingsWeb,
   updateFieldVisibilityWeb,
   getProfileCompletion,
-  } = require('../controllers/profileControllers/profileController');
+} = require('../controllers/profileControllers/profileController');
 
 const {
   getUsersStatus,
@@ -110,7 +110,10 @@ const {
   getUserLikedFeeds,
   userHideFeed,
   getUserCategory,
+  requestDownloadFeed,
+  getDownloadJobStatus,
 } = require('../controllers/feedControllers/userActionsFeedController');
+
 
 
 
@@ -164,47 +167,47 @@ const {
 
 
 
-const{
+const {
   getCommentsByFeed,
   getRepliesForComment,
-}=require('../controllers/conmmentController')
+} = require('../controllers/conmmentController')
 
 
-const{
+const {
   userVideoViewCount,
   userImageViewCount,
   fetchUserFeeds,
-fetchUserFollowing,
-fetchUserInterested,
-fetchUserHidden,
-fetchUserLiked,
-fetchUserDisliked,
-fetchUserCommented,
-fetchUserShared,
-fetchUserDownloaded,
-getUserAnalyticsSummary,
-fetchUserNonInterested,
-getUserdetailWithinTheFeed,
-  getUserPost ,
-}=require('../controllers/userControllers/userFeedController');
+  fetchUserFollowing,
+  fetchUserInterested,
+  fetchUserHidden,
+  fetchUserLiked,
+  fetchUserDisliked,
+  fetchUserCommented,
+  fetchUserShared,
+  fetchUserDownloaded,
+  getUserAnalyticsSummary,
+  fetchUserNonInterested,
+  getUserdetailWithinTheFeed,
+  getUserPost,
+} = require('../controllers/userControllers/userFeedController');
 
-const{
+const {
   getDashboardMetricCount,
   getDashUserRegistrationRatio,
   getDashUserSubscriptionRatio,
-}=require('../controllers/adminControllers/dashboardController');
+} = require('../controllers/adminControllers/dashboardController');
 
 
 
-const{
-getStartQuestion,
-getNextQuestion,
-getReportTypes,
-createFeedReport,
-}=require('../controllers/adminControllers/userReportController');
+const {
+  getStartQuestion,
+  getNextQuestion,
+  getReportTypes,
+  createFeedReport,
+} = require('../controllers/adminControllers/userReportController');
 
-const{
- sendAdminNotification,
+const {
+  sendAdminNotification,
   notifyUserFollow,
   getNotifications,
   markNotificationAsRead,
@@ -212,12 +215,12 @@ const{
   markAllRead,
   clearAllNotifications,
   deleteNotification,
-}=require('../controllers/adminControllers/notificationController');
+} = require('../controllers/adminControllers/notificationController');
 
-const{
+const {
   refreshAccessToken,
   heartbeat,
-}=require('../controllers/sessionController')
+} = require('../controllers/sessionController')
 
 const {
   getChildAdmins,
@@ -227,89 +230,89 @@ const {
   blockChildAdmin,
   deleteChildAdmin,
 
-}=require('../controllers/adminControllers/adminChildAdminController');
+} = require('../controllers/adminControllers/adminChildAdminController');
 
-const{
+const {
   getAnalytics,
   getRecentSubscriptionUsers,
   getTopReferralUsers,
   getUserAndSubscriptionCountsDaily,
-}=require("../controllers/adminControllers/SalesDashboard/salesDashboardMetricksController");
+} = require("../controllers/adminControllers/SalesDashboard/salesDashboardMetricksController");
 
 const {
-uploadFrames,
-getAllFrames,
-deleteFrame,
-}=require("../controllers/adminControllers/frameController");
+  uploadFrames,
+  getAllFrames,
+  deleteFrame,
+} = require("../controllers/adminControllers/frameController");
 
-const {frameUpload } =require("../middlewares/helper/frameUpload");
+const { frameUpload } = require("../middlewares/helper/frameUpload");
 
 
 
-const {getUserEarnings}=require("../controllers/userControllers/userEarningsController");
+const { getUserEarnings } = require("../controllers/userControllers/userEarningsController");
 
-const {saveUserLocation,
+const { saveUserLocation,
   getUserLocation,
-}=require("../controllers/userControllers/userLoactionController");
+} = require("../controllers/userControllers/userLoactionController");
 
 
 /*-----------------Web Controller ------------------*/
 const {
   getUserFeedsWeb,
-}=require("../WebController/UserController/userFeedControllerWeb");
+} = require("../WebController/UserController/userFeedControllerWeb");
 
-const{
+const {
   getUserFollowing,
   getUserFollowers,
-}=require("../WebController/UserController/userFolloweController");
+} = require("../WebController/UserController/userFolloweController");
 
 
-const{
+const {
   addReportQuestion,
-getQuestionsByType,
-createReportType,
-adminGetReportTypes,
-updateReportStatus,
-getReportLogs,
-getQuestionById,
-deleteQuestion,
-toggleReportType,
-deleteReportType,
-getReports,
-linkNextQuestion,
-adminTakeActionOnReport,
-getAllQuestions,
-getAllReports
-}=require("../controllers/adminControllers/adminReportController");
+  getQuestionsByType,
+  createReportType,
+  adminGetReportTypes,
+  updateReportStatus,
+  getReportLogs,
+  getQuestionById,
+  deleteQuestion,
+  toggleReportType,
+  deleteReportType,
+  getReports,
+  linkNextQuestion,
+  adminTakeActionOnReport,
+  getAllQuestions,
+  getAllReports
+} = require("../controllers/adminControllers/adminReportController");
 const { getPostVolumeWeekly,
   getPostVolumeDaily,
   getPostVolumeMonthly,
- } = require('../controllers/feedControllers/feedVolumController');
+} = require('../controllers/feedControllers/feedVolumController');
 
 
 
- const{
+const {
   getDashboardStats,
-getSystemStatus,
-getRecentTests,
-getUpcomingTests,
-exportTestResults,
-getTopPerformers,
-createTestSchedule,
-getAllTestSchedules,
-getSingleTestSchedule,
-updateTestSchedule,
-deleteTestSchedule,
-getUpcomingTestInterestedCandidates,
- }=require("../controllers/aptitudeController");
+  getSystemStatus,
+  getRecentTests,
+  getUpcomingTests,
+  exportTestResults,
+  getTopPerformers,
+  createTestSchedule,
+  getAllTestSchedules,
+  getSingleTestSchedule,
+  updateTestSchedule,
+  deleteTestSchedule,
+  getUpcomingTestInterestedCandidates,
+} = require("../controllers/aptitudeController");
 const { getJobDashboardStats } = require('../controllers/companyDashboardController');
 const { getAllCompanies,
   getCompanyById,
   inactivateCompany,
   removeCompany,
   activateCompany,
- } = require('../controllers/adminCompany/adminCompanyController');
-const { getAllJobs ,
+} = require('../controllers/adminCompany/adminCompanyController');
+const { getAllJobs,
   approveJob,
   rejectJob,
   deleteJob,
@@ -337,38 +340,40 @@ const {
 
 
 // /* --------------------- User Referral API Actions --------------------- */
-router.get('/user/referal/code',auth,getUserReferalCode);
+router.get('/user/referal/code', auth, getUserReferalCode);
 
 
 // /* --------------------- Fresh Users API --------------------- */
-router.post('/user/app/language',auth, setAppLanguage );
-router.get('/user/get/app/language',auth,getAppLanguage);
-router.post('/user/feed/language',auth, setFeedLanguage );
-router.get('/user/get/feed/language', auth, getFeedLanguage );
-router.get('/user/get/content/catagories',auth,getUserContentCategories);
-router.post('/user/select/category',auth, userSelectCategory);
-router.get("/check/username/availability",checkUsernameAvailability);
-router.get("/check/email/availability",checkEmailAvailability);
+router.post('/user/app/language', auth, setAppLanguage);
+router.get('/user/get/app/language', auth, getAppLanguage);
+router.post('/user/feed/language', auth, setFeedLanguage);
+router.get('/user/get/feed/language', auth, getFeedLanguage);
+router.get('/user/get/content/catagories', auth, getUserContentCategories);
+router.post('/user/select/category', auth, userSelectCategory);
+router.get("/check/username/availability", checkUsernameAvailability);
+router.get("/check/email/availability", checkEmailAvailability);
 
 
 
 // /* --------------------- User Feed Get Actions --------------------- */
-router.get('/user/get/saved/feeds',auth, getUserSavedFeeds);
-router.get('/user/download/feeds', auth, getUserDownloadedFeeds);
-router.get('/user/liked/feeds',auth, getUserLikedFeeds);
-router.post('/get/comments/for/feed',auth,getCommentsByFeed);
-router.post('/get/comments/relpy/for/feed',auth,getRepliesForComment);
-router.post('/user/hide/feed',auth,userHideFeed);
-router.get("/user/notintrested/category",auth,getUserCategory);
-router.get("/get/user/detail/at/feed/icon",auth,getUserdetailWithinTheFeed);
+router.get('/user/get/saved/feeds', auth, getUserSavedFeeds);
+
+
+router.get('/user/liked/feeds', auth, getUserLikedFeeds);
+
+router.post('/get/comments/for/feed', auth, getCommentsByFeed);
+router.post('/get/comments/relpy/for/feed', auth, getRepliesForComment);
+router.post('/user/hide/feed', auth, userHideFeed);
+router.get("/user/notintrested/category", auth, getUserCategory);
+router.get("/get/user/detail/at/feed/icon", auth, getUserdetailWithinTheFeed);
 
 // /* --------------------- User Subscription --------------------- */
-router.post('/user/plan/subscription',auth,subscribePlan);
-router.put('/user/cancel/subscription',auth,cancelSubscription);
+router.post('/user/plan/subscription', auth, subscribePlan);
+router.put('/user/cancel/subscription', auth, cancelSubscription);
 router.get('/user/getall/subscriptions', getAllPlans);
-router.get('/user/user/subscriptions', auth,getUserSubscriptionPlanWithId);
-router.post('/user/activate/trial/plan',auth,userTrailPlanActive);
-router.get('/user/check/active/subcription',auth,checkUserActiveSubscription);
+router.get('/user/user/subscriptions', auth, getUserSubscriptionPlanWithId);
+router.post('/user/activate/trial/plan', auth, userTrailPlanActive);
+router.get('/user/check/active/subcription', auth, checkUserActiveSubscription);
 
 /*----------------------User Report -----------------------------*/
 router.get("/report-questions/start", getStartQuestion);
@@ -379,60 +384,60 @@ router.get("/report-logs/:reportId", getReportLogs);
 
 
 /*-------------------------User Session API ---------------------*/
- router.post("/refresh-token", refreshAccessToken);
- router.post("/heartbeat",auth, heartbeat);
+router.post("/refresh-token", refreshAccessToken);
+router.post("/heartbeat", auth, heartbeat);
 
- /* --------------------- User Subscription --------------------- */
+/* --------------------- User Subscription --------------------- */
 router.get('/user/user/subscriptions', auth, getUserSubscriptionPlanWithId);
 
 /*---------------------- User Feed API -------------------------*/
 
-router.get("/get/trending/feed",auth,getTrendingFeeds);
-router.get('/get/all/feeds/user',auth,getAllFeedsByUserId);
-router.post('/user/watching/vidoes',auth,userVideoViewCount);
-router.post('/user/image/view/count',auth,userImageViewCount);
-router.get('/user/get/feed/with/cat/:id',auth,getfeedWithCategoryWithId);
-router.get('/user/get/feed/with/search/cat/:categoryId',getFeedWithCategoryId);
- router.get('/get/creator/detail/feed/:feedId',auth,getUserInfoAssociatedFeed);
- router.get('/get/user/hide/post',auth,getUserHidePost);
+router.get("/get/trending/feed", auth, getTrendingFeeds);
+router.get('/get/all/feeds/user', auth, getAllFeedsByUserId);
+router.post('/user/watching/vidoes', auth, userVideoViewCount);
+router.post('/user/image/view/count', auth, userImageViewCount);
+router.get('/user/get/feed/with/cat/:id', auth, getfeedWithCategoryWithId);
+router.get('/user/get/feed/with/search/cat/:categoryId', getFeedWithCategoryId);
+router.get('/get/creator/detail/feed/:feedId', auth, getUserInfoAssociatedFeed);
+router.get('/get/user/hide/post', auth, getUserHidePost);
 
- router.get("/user/list/willingtopost", getUsersWillingToPost);
- router.put("/update/user/post/status/:userId",updateUserPostPermission);
-
-
+router.get("/user/list/willingtopost", getUsersWillingToPost);
+router.put("/update/user/post/status/:userId", updateUserPostPermission);
 
 
 
-router.post('/user/get/post',getUserPost);
-router.get('/user/get/feed/category',auth,getFeedLanguageCategories);
+
+
+router.post('/user/get/post', getUserPost);
+router.get('/user/get/feed/category', auth, getFeedLanguageCategories);
 router.get('/user/get/all/category', getUserPostCategories);
 
 /* --------------------- User Follower API --------------------- */
- router.post('/user/follow/creator',followAccount);
- router.post('/user/unfollow/creator',unFollowAccount);
- router.get('/user/following/data',auth,getUserFollowersData);
+router.post('/user/follow/creator', followAccount);
+router.post('/user/unfollow/creator', unFollowAccount);
+router.get('/user/following/data', auth, getUserFollowersData);
 
- /* --------------------- User Notifiction API --------------------- */
- router.post("/admin/send/notification", sendAdminNotification )
+/* --------------------- User Notifiction API --------------------- */
+router.post("/admin/send/notification", sendAdminNotification)
 
 
 // router.post("/user/follow", auth, notifyUserFollow);
-router.put("/mark/all/notification/read",auth,markAllRead);
-router.get("/get/user/all/notification",auth,getNotifications);
-router.delete("/user/delete/notification",auth,deleteNotification);
-router.delete("/user/delete/all/notification",auth,clearAllNotifications);
+router.put("/mark/all/notification/read", auth, markAllRead);
+router.get("/get/user/all/notification", auth, getNotifications);
+router.delete("/user/delete/notification", auth, deleteNotification);
+router.delete("/user/delete/all/notification", auth, clearAllNotifications);
 router.put("/user/read", auth, markNotificationAsRead);
-router.post("/notifications/save-token",auth,saveToken);
-router.delete("/user/cover/photo/delete",auth,deleteCoverPhoto);
-router.get('/get/profile/detail',auth,getUserProfileDetail);
+router.post("/notifications/save-token", auth, saveToken);
+router.delete("/user/cover/photo/delete", auth, deleteCoverPhoto);
+router.get('/get/profile/detail', auth, getUserProfileDetail);
 
 /* --------------------- User Earnings API --------------------- */
 
-router.get('/get/userearnigs/referrals',getUserEarnings);
+router.get('/get/userearnigs/referrals', getUserEarnings);
 
 /*-----------------------User Location API ---------------------*/
-router.post("/save/user/location",auth,saveUserLocation);
-router.get("/get/user/location",auth,getUserLocation);
+router.post("/save/user/location", auth, saveUserLocation);
+router.get("/get/user/location", auth, getUserLocation);
 
 
 
@@ -450,13 +455,13 @@ router.get("/get/user/location",auth,getUserLocation);
 
 
 /* --------------------- Admin Authentication --------------------- */
-router.post('/auth/admin/register',auth,newAdmin);
+router.post('/auth/admin/register', auth, newAdmin);
 router.post('/auth/admin/login', adminLogin);
 router.post('/auth/admin/sent-otp', adminSendOtp);
 router.post('/auth/exist/admin/verify-otp', existAdminVerifyOtp);
 router.post('/auth/new/admin/verify-otp', newAdminVerifyOtp);
 router.post('/auth/admin/reset-password', adminPasswordReset);
-router.get('/api/admin/verify-token',auth, verifyToken);
+router.get('/api/admin/verify-token', auth, verifyToken);
 router.get("/auth/check-availability", checkAvailability);
 
 
@@ -475,11 +480,12 @@ router.get("/auth/check-availability", checkAvailability);
 // Admin feed upload with design metadata
 router.post(
   "/admin/feed-upload",
- adminUploadFeed.fields([
-  { name: "files", maxCount: 20 },  // image/video
-  { name: "audio", maxCount: 1 }    // optional audio
-])
-, // Accept multiple files
+  auth,
+  adminUploadFeed.fields([
+    { name: "files", maxCount: 20 },  // image/video
+    { name: "audio", maxCount: 1 }    // optional audio
+  ])
+  , // Accept multiple files
   adminProcessFeedFile,
   attachAdminFeedFiles,
   adminFeedUpload
@@ -512,14 +518,14 @@ router.post(
 //   adminFeedUpload 
 // );
 
-router.get("/admin/get/all/feed",getAllFeedAdmin);
+router.get("/admin/get/all/feed", getAllFeedAdmin);
 router.delete("/delete/feed", deleteFeed);
 
 /* --------------------- Admin Category API --------------------- */
 router.post('/admin/add/feed/category', adminAddCategory);
 router.delete('/admin/feed/category/:id', deleteCategory);
 router.get('/admin/get/feed/category', getAllCategories);
-router.put('/admin/update/category',updateCategory);
+router.put('/admin/update/category', updateCategory);
 
 /* --------------------- Admin Subscription API --------------------- */
 router.post('/admin/create/subscription', createPlan);
@@ -529,21 +535,21 @@ router.get('/admin/getall/subscriptions', getAllPlans);
 
 /* --------------------- Admin User API --------------------- */
 router.get('/admin/getall/users', getAllUserDetails);
-router.get("/admin/search/user",searchAllUserDetails);
-router.get('/admin/get/user/social/media/profile/detail/:id',getUserSocialMeddiaDetailWithIdForAdmin);
+router.get("/admin/search/user", searchAllUserDetails);
+router.get('/admin/get/user/social/media/profile/detail/:id', getUserSocialMeddiaDetailWithIdForAdmin);
 router.get("/admin/users/status", getUsersStatus);
 router.get("/admin/user/detail/by-date", getUsersByDate);
-router.get ('/admin/user/action/intersection/count/:userId',getAnaliticalCountforUser);
-router.get('/admin/get/user/analytical/data/:userId',getUserAnalyticalData);
-router.get("/admin/user/tree/level/:userId",getUserLevelWithEarnings);
-router.patch("/admin/block/user/:userId",blockUserById);
-router.get('/admin/user/profile/metricks',getUserProfileDashboardMetricCount);
-router.get('/admin/user/likes/:userId',getUserLikedFeedsforAdmin);
-router.delete('/admin/delete/user/:userId',deleteUserAndAllRelated);
+router.get('/admin/user/action/intersection/count/:userId', getAnaliticalCountforUser);
+router.get('/admin/get/user/analytical/data/:userId', getUserAnalyticalData);
+router.get("/admin/user/tree/level/:userId", getUserLevelWithEarnings);
+router.patch("/admin/block/user/:userId", blockUserById);
+router.get('/admin/user/profile/metricks', getUserProfileDashboardMetricCount);
+router.get('/admin/user/likes/:userId', getUserLikedFeedsforAdmin);
+router.delete('/admin/delete/user/:userId', deleteUserAndAllRelated);
 
-router.get("/feeds/:userId",fetchUserFeeds);
-router.get("/following/:userId",fetchUserFollowing);
-router.get("/interested/:userId",fetchUserInterested);
+router.get("/feeds/:userId", fetchUserFeeds);
+router.get("/following/:userId", fetchUserFollowing);
+router.get("/interested/:userId", fetchUserInterested);
 router.get("/hidden/:userId", fetchUserHidden);
 router.get("/liked/:userId", fetchUserLiked);
 router.get("/disliked/:userId", fetchUserDisliked);
@@ -556,7 +562,7 @@ router.get("/nonInterested/:userId", fetchUserNonInterested);
 
 
 // /*-------------------Admin Report API -------------------------*/
-router.post("/admin/add/report/questions",addReportQuestion);
+router.post("/admin/add/report/questions", addReportQuestion);
 router.get("/admin/get/Questions/ByType", getQuestionsByType);
 router.patch("/admin/linkNextQuestion", linkNextQuestion);
 router.get("/admin/get/QuestionById", getQuestionById);
@@ -567,58 +573,58 @@ router.patch("/admin/toggleReportType", toggleReportType);
 router.delete("/admin/deleteReportType", deleteReportType);
 router.delete("/admin/deleteQuestion", deleteQuestion);
 router.put("/:reportId/status", updateReportStatus);
-router.get("/:reportId/logs", auth,getReportLogs);
-router.get ('/admin/user/report',getAllReports);
-router.put("/admin/report/action/update/:reportId",auth,adminTakeActionOnReport);
+router.get("/:reportId/logs", auth, getReportLogs);
+router.get('/admin/user/report', getAllReports);
+router.put("/admin/report/action/update/:reportId", auth, adminTakeActionOnReport);
 
 
 /*---------------------Admin DashBoard API---------------------*/
-router.get("/admin/dashboard/metricks/counts",getDashboardMetricCount);
-router.get("/admin/users/monthly-registrations",getDashUserRegistrationRatio);
+router.get("/admin/dashboard/metricks/counts", getDashboardMetricCount);
+router.get("/admin/users/monthly-registrations", getDashUserRegistrationRatio);
 router.get('/posts/daily', getPostVolumeDaily);
 
 // GET /api/metrics/posts/weekly
-router.get('/posts/weekly',getPostVolumeWeekly);
-router.get('/posts/monthly',getPostVolumeMonthly);
-router.get("/admin/user/subscriptionration",getDashUserSubscriptionRatio)
+router.get('/posts/weekly', getPostVolumeWeekly);
+router.get('/posts/monthly', getPostVolumeMonthly);
+router.get("/admin/user/subscriptionration", getDashUserSubscriptionRatio)
 
 // /* --------------------- Admin Creator API --------------------- */
 router.get('/admin/getall/creators', getAllCreatorDetails);
 router.get('/admin/get/user/detail', getUserProfileDetail);
-router.get ('/admin/get/trending/creator',getAllTrendingCreators);
+router.get('/admin/get/trending/creator', getAllTrendingCreators);
 // router.get("/admin/users/status", getUserStatus);
 // router.get("/admin/user/detail/by-date", getUsersByDate);
 
 
 /*---------------------------Admin Feed ________________________*/
-router.get("/admin/get/trending/feed",adminGetTrendingFeeds)
+router.get("/admin/get/trending/feed", adminGetTrendingFeeds)
 
 /*----------------------Admin Sales Dashboard------------------*/
 router.get("/sales/dashboard/analytics", getAnalytics);
-router.get("/get/recent/subscribers",getRecentSubscriptionUsers);
-router.get("/top/referral/users",getTopReferralUsers);
-router.get("/dashboard/user-subscription-counts",getUserAndSubscriptionCountsDaily);
+router.get("/get/recent/subscribers", getRecentSubscriptionUsers);
+router.get("/top/referral/users", getTopReferralUsers);
+router.get("/dashboard/user-subscription-counts", getUserAndSubscriptionCountsDaily);
 
 
 /*---------------------Admin Frame Management-----------------*/
 router.post("/upload/frame", frameUpload.array("frame"), uploadFrames);
 router.get("/get/allframe", getAllFrames);
-router.delete("/delete/frame/:id",deleteFrame)
+router.delete("/delete/frame/:id", deleteFrame)
 
 /*-------------------AdminCompny---------------------------*/
-router.get("/get/comapany/status",getJobDashboardStats);
-router.get("/get/all/companies",getAllCompanies);
-router.delete('/companies/:companyId',removeCompany);
-router.put('/companies/:companyId/suspend',inactivateCompany);
+router.get("/get/comapany/status", getJobDashboardStats);
+router.get("/get/all/companies", getAllCompanies);
+router.delete('/companies/:companyId', removeCompany);
+router.put('/companies/:companyId/suspend', inactivateCompany);
 router.put('/companies/:companyId/activate', activateCompany);
 router.get('/companies/:companyId', getCompanyById);
 
 
 /*----------------AdminJos--------------------------------- */
-router.get("/get/all/company/jobs",getAllJobs)
-router.put('/jobs/:jobId/approve',approveJob);
+router.get("/get/all/company/jobs", getAllJobs)
+router.put('/jobs/:jobId/approve', approveJob);
 router.put('/jobs/:jobId/suspend', suspendJob);
-router.put("/jobs/:jobId/reject",rejectJob);
+router.put("/jobs/:jobId/reject", rejectJob);
 router.get("/admin/get/job/:jobId", getJobByIdforAdmin);
 
 
@@ -631,21 +637,21 @@ router.get("/aptitude/tests/recent", getRecentTests);
 router.get("/aptitude/tests/upcoming", getUpcomingTests);
 router.get("/aptitude/tests/:testId/export", exportTestResults);
 router.get("/aptitude/results/top-performers", getTopPerformers);
-router.post("/aptitude/create/test/schedule",createTestSchedule);
-router.get("/get/all/aptitude/test",getAllTestSchedules);
-router.put("/aptitude/test/update/:scheduleId",updateTestSchedule);
-router.delete("/delete/aptitude/test/:scheduleId",deleteTestSchedule);
-router.get("/get/single/schedule/:scheduleId",getSingleTestSchedule);
-router.get("/analitycal/detail/for/test/:scheduleId",getUpcomingTestInterestedCandidates);
+router.post("/aptitude/create/test/schedule", createTestSchedule);
+router.get("/get/all/aptitude/test", getAllTestSchedules);
+router.put("/aptitude/test/update/:scheduleId", updateTestSchedule);
+router.delete("/delete/aptitude/test/:scheduleId", deleteTestSchedule);
+router.get("/get/single/schedule/:scheduleId", getSingleTestSchedule);
+router.get("/analitycal/detail/for/test/:scheduleId", getUpcomingTestInterestedCandidates);
 
 
 /*---------------------Admin Notification API-------------------*/
 // router.post("/admin/post/notification",adminSentNotification);
 
 /* --------------------- Child Admin Profile API --------------------- */
-router.get("/admin/childadmin/list",auth,getChildAdmins);
-router.get("/admin/childadmin/permissions/:childAdminId",getChildAdminPermissions);
-router.put("/admin/childadmin/permissions/:id",updateChildAdminPermissions);
+router.get("/admin/childadmin/list", auth, getChildAdmins);
+router.get("/admin/childadmin/permissions/:childAdminId", getChildAdminPermissions);
+router.put("/admin/childadmin/permissions/:id", updateChildAdminPermissions);
 // router.put(
 //   "/child/admin/profile/detail/update",
 //   auth,
@@ -660,24 +666,24 @@ router.delete("/delete/child/admin/:id", deleteChildAdmin);
 
 
 /* --------------------- Category API --------------------- */
-router.post('/search/all/category',searchCategories)
-router.get("/get/feed/category",getCategoriesWithFeeds);
+router.post('/search/all/category', searchCategories)
+router.get("/get/feed/category", getCategoriesWithFeeds);
 
 
 /*----------------------ProfileUpdate-------------------*/
-router.put("/profile/toggle-visibility",auth,
+router.put("/profile/toggle-visibility", auth,
   toggleFieldVisibility
 );
 
 router.get(
-  "/profile/visibility",auth,
+  "/profile/visibility", auth,
   getVisibilitySettings
 );
 
 
-/*---------------Admin Driver API----------------------*/ 
-router.get("/admin/drive/dashboard",auth,getDriveDashboard);
-router.post("/admin/drive/command",auth,driveCommand);
+/*---------------Admin Driver API----------------------*/
+router.get("/admin/drive/dashboard", auth, getDriveDashboard);
+router.post("/admin/drive/command", auth, driveCommand);
 
 
 
@@ -704,16 +710,16 @@ router.get("/company", getPrithuCompany);
 
 
 /*---------------------Website----------------------------------*/
-router.get("/get/profile/overview",auth,getProfileOverview);
-router.post("/user/update/visibility/settings",auth,updateFieldVisibilityWeb);
-router.get("/user/update/visibility/settings",auth,getVisibilitySettingsWeb);
+router.get("/get/profile/overview", auth, getProfileOverview);
+router.post("/user/update/visibility/settings", auth, updateFieldVisibilityWeb);
+router.get("/user/update/visibility/settings", auth, getVisibilitySettingsWeb);
 
 
 
-router.get("/get/user/post",auth,getUserFeedsWeb);
+router.get("/get/user/post", auth, getUserFeedsWeb);
 router.get("/user/following", auth, getUserFollowing);
 router.get("/user/followers", auth, getUserFollowers);
-router.get("/user/profile/completion",auth,getProfileCompletion);
+router.get("/user/profile/completion", auth, getProfileCompletion);
 
 
 
@@ -730,7 +736,7 @@ router.get("/user/profile/completion",auth,getProfileCompletion);
 //       { $set: { isOnline: false } } // update field
 //     );
 
-  
+
 
 //   } catch (error) {
 //     console.error("Error updating users:", error);

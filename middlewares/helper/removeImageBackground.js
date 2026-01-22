@@ -25,7 +25,7 @@ async function removeImageBackground(imageSource) {
     fs.writeFileSync(targetPath, outputBuffer);
 
     return {
-      secure_url: `/media/user/modifyAvatar/${filename}`,
+      secure_url: `${process.env.BACKEND_URL}/media/user/modifyAvatar/${filename}`,
       public_id: filename,
       localPath: targetPath,
     };

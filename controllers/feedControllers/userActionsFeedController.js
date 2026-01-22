@@ -8,7 +8,7 @@ const path = require('path')
 const fs = require('fs')
 const User = require('../../models/userModels/userModel');
 const mongoose = require("mongoose");
-  const ffmpeg = require('fluent-ffmpeg');
+const ffmpeg = require('fluent-ffmpeg');
 const ProfileSettings = require('../../models/profileSettingModel');
 const { feedTimeCalculator } = require("../../middlewares/feedTimeCalculator");
 const UserCategory = require('../../models/userModels/userCategotyModel.js');
@@ -19,6 +19,8 @@ const Notification = require("../../models/notificationModel.js");
 const { createAndSendNotification } = require("../../middlewares/helper/socketNotification.js");
 const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
 const idToString = (id) => (id ? id.toString() : null);
+const downloadQueue = require("../../queue/downloadQueue");
+
 
 
 
@@ -241,60 +243,111 @@ exports.toggleSaveFeed = async (req, res) => {
 
 
 
-exports.downloadFeed = async (req, res) => {
+// Request a Video Download Job
+exports.requestDownloadFeed = async (req, res) => {
   const userId = req.Id || req.body.userId;
-  const feedId = req.body.feedId;
+  const feedId = req.params.feedId;
+  // const designMetadata = req.body.designMetadata; // Optional: Override metadata
 
   if (!userId) return res.status(400).json({ message: "userId is required" });
   if (!feedId) return res.status(400).json({ message: "feedId is required" });
 
   try {
-    // Record download
-    const updatedDoc = await UserFeedActions.findOneAndUpdate(
-      { userId },
-      {
-        $push: {
-          downloadedFeeds: {
-            feedId,
-            downloadedAt: new Date(),
-          }
-        }
-      },
-      { upsert: true, new: true }
-    );
-
-    const feed = await Feeds.findById(feedId).select(
-      "contentUrl fileUrl downloadUrl"
-    );
-
-    if (!feed) return res.status(404).json({ message: "Feed not found" });
-
-    await logUserActivity({
-      userId,
-      actionType: "DOWNLOAD_POST",
-      targetId: feedId,
-      targetModel: "Feed",
-      metadata: { platform: "web" },
-    });
-
-    const downloadLink =
-      feed.downloadUrl || feed.fileUrl || feed.contentUrl;
-
-    if (!downloadLink) {
-      return res.status(400).json({ message: "No downloadable link available" });
+    // 1. FETCH FEED
+    const feed = await Feeds.findById(feedId).lean();
+    if (!feed) {
+      return res.status(404).json({ message: "Feed not found" });
     }
 
-    res.status(201).json({
-      message: "Download recorded successfully",
-      downloadedFeeds: updatedDoc.downloadedFeeds,
-      downloadLink,
+    // 2. FETCH VIEWER PROFILE
+    const [viewerProfile, userRecord] = await Promise.all([
+      ProfileSettings.findOne({ userId: userId }).lean(),
+      User.findById(userId).select('email userName').lean()
+    ]);
+
+    if (!viewerProfile) {
+      console.warn(`[DownloadRequest] Profile not found for userId: ${userId}`);
+    }
+
+    // Combine metadata: Use provided override or feed's own metadata
+    const metadataToUse = feed.designMetadata;
+
+    // Add Job to Queue
+    const job = await downloadQueue.add({
+      feed,
+      userId,
+      viewer: {
+        userName: viewerProfile?.userName || userRecord?.userName || viewerProfile?.name || "User",
+        profileAvatar: viewerProfile?.modifyAvatar || null,
+        name: viewerProfile?.name || "",
+        email: userRecord?.email || "",
+        phone: viewerProfile?.phoneNumber || ""
+      },
+      designMetadata: metadataToUse
+    }, {
+      attempts: 2,
+      backoff: 5000,
+      removeOnComplete: { age: 3600 }, // Keep in redis for 1 hour so status can be checked
+      removeOnFail: false
+    });
+
+    console.log(`[DownloadRequest] Job ${job.id} created for user ${userId}, feed ${feedId}`);
+
+    // Record Activity
+    await logUserActivity({
+      userId,
+      actionType: "DOWNLOAD_POST_REQUEST",
+      targetId: feedId,
+      targetModel: "Feed",
+      metadata: { platform: "web", jobId: job.id }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Download processing started",
+      jobId: job.id,
+      status: "queued"
     });
 
   } catch (err) {
-    console.error("Error in downloadFeed:", err);
+    console.error("Error in requestDownloadFeed:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+// Check Job Status
+exports.getDownloadJobStatus = async (req, res) => {
+  const { jobId } = req.params;
+  if (!jobId) return res.status(400).json({ message: "jobId required" });
+
+  try {
+    const job = await downloadQueue.getJob(jobId);
+    if (!job) {
+      console.warn(`[JobStatus] Job ${jobId} not found in queue.`);
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    const state = await job.getState();
+    const progress = job.progress();
+    console.log(`[JobStatus] Job ${jobId} state: ${state}, progress: ${progress}%`);
+
+    let result = null;
+    if (state === 'completed') {
+      result = job.returnvalue; // { downloadUrl: ... }
+    }
+
+    res.json({
+      jobId,
+      status: state, // queued, active, completed, failed
+      progress,
+      result
+    });
+  } catch (err) {
+    console.error("Error checking job status:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 
 
 
@@ -372,25 +425,25 @@ exports.generateShareLink = async (req, res) => {
     // Get username - prioritize userName, then name
     let userName = 'User';
     let profileAvatar = null;
-    
+
     if (profileSettings) {
       userName = profileSettings.userName || profileSettings.name || 'User';
       profileAvatar = profileSettings.profileAvatar;
     }
 
-  
-    
+
+
     // ============ CRITICAL FIX: Use backend URL for sharing ============
     // WhatsApp/Facebook crawlers MUST hit the backend URL to get OG tags
-    
-    
+
+
     // Generate OG image URL based on media type
     let ogImageUrl = '';
     let directMediaUrl = feed.contentUrl;
     let mediaType = feed.type || 'image';
 
     // IMPORTANT: Make sure image URLs are publicly accessible and optimized for OG tags
-    
+
     // Handle Cloudinary images
     if (feed.contentUrl && feed.contentUrl.includes('cloudinary.com')) {
       // Cloudinary - optimize for OG tags (1200x630 is ideal for Facebook/WhatsApp)
@@ -404,7 +457,7 @@ exports.generateShareLink = async (req, res) => {
       ogImageUrl = feed.contentUrl;
       directMediaUrl = feed.contentUrl;
       mediaType = feed.type || 'image';
-      
+
       // If it's a video and we have thumbnail
       if (feed.type === 'video') {
         // Try to get thumbnail from files array
@@ -416,7 +469,7 @@ exports.generateShareLink = async (req, res) => {
           const videoPath = feed.files[0].localPath;
           const baseName = path.basename(videoPath, path.extname(videoPath));
           const thumbPath = path.join(path.dirname(videoPath), `${baseName}_thumb.jpg`);
-          
+
           if (fs.existsSync(thumbPath)) {
             const relativePath = thumbPath.split('/uploads/').pop();
             if (relativePath) {
@@ -459,28 +512,28 @@ exports.generateShareLink = async (req, res) => {
 
     // IMPORTANT: Validate the OG image URL is accessible
     // You might want to check if the image exists and is publicly accessible
-    
+
     // Get description - use actual caption if available
     const actualCaption = feed.dec || feed.caption || '';
- 
-    
- 
 
- res.json({
-  // 🔥 ONLY frontend URL
-  shareUrl: `${process.env.FRONTEND_URL}/share/post/${feedId}`,
-  caption: actualCaption,
-  userName,
-  mediaType,
-  directMediaUrl,
-  profileAvatar
-});
+
+
+
+    res.json({
+      // 🔥 ONLY frontend URL
+      shareUrl: `${process.env.FRONTEND_URL}/share/post/${feedId}`,
+      caption: actualCaption,
+      userName,
+      mediaType,
+      directMediaUrl,
+      profileAvatar
+    });
 
 
 
   } catch (err) {
     console.error("Error generating share link:", err);
-    res.status(500).json({ 
+    res.status(500).json({
       message: "Internal server error",
       error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
@@ -494,7 +547,7 @@ exports.getVideoThumbnail = async (req, res) => {
 
   try {
     const feed = await Feeds.findById(feedId).lean();
-    
+
     if (!feed || feed.type !== 'video') {
       return serveDefaultThumbnail(res);
     }
@@ -515,7 +568,7 @@ exports.getVideoThumbnail = async (req, res) => {
       const baseName = path.basename(videoPath, path.extname(videoPath));
       const thumbName = `${baseName}_thumb.jpg`;
       const thumbPath = path.join(path.dirname(videoPath), thumbName);
-      
+
       if (fs.existsSync(thumbPath)) {
         res.setHeader('Cache-Control', 'public, max-age=31536000');
         res.setHeader('Content-Type', 'image/jpeg');
@@ -556,7 +609,7 @@ async function generateVideoThumbnail(videoPath) {
   // This requires ffmpeg to be installed
 
   const thumbPath = videoPath.replace(path.extname(videoPath), '_thumb.jpg');
-  
+
   return new Promise((resolve, reject) => {
     ffmpeg(videoPath)
       .screenshots({
@@ -1166,7 +1219,7 @@ exports.getUserDownloadedFeeds = async (req, res) => {
         feed.downloadUrl ||
         feed.fileUrl ||
         (feed.contentUrl
-          ? `https://192.168.1.48:5000/uploads/${folder}/${path.basename(feed.contentUrl)}`
+          ? `${process.env.BACKEND_URL}/uploads/${folder}/${path.basename(feed.contentUrl)}`
           : null);
 
       return {

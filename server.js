@@ -1,4 +1,5 @@
 require("dotenv").config();
+require("./Config/ffmpegConfig");
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -34,6 +35,7 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+app.use("/logo", express.static(path.join(__dirname, "logo")));
 // 🟢 Static files (IMPORTANT for OG images)
 app.use("/media", express.static(path.join(__dirname, "media"), {
   setHeaders: (res, path) => {
@@ -48,8 +50,8 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads"), {
   setHeaders: (res, path) => {
     // Allow CORS for images since they're used in OG tags
     if (path.match(/\.(jpg|jpeg|png|webp)$/)) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-}
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
 
   }
 }));

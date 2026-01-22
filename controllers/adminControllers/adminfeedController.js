@@ -70,7 +70,7 @@ exports.adminFeedUpload = async (req, res) => {
       const upload = await uploadToDrive(audioFile.buffer, audioFile.originalname, audioFile.mimetype, audioFolder);
       if (upload?.fileId) {
         uploadedAudio = {
-          url: `/media/${upload.fileId}`,
+          url: `${process.env.BACKEND_URL}/media/${upload.fileId}`,
           driveFileId: upload.fileId,
           mimeType: audioFile.mimetype
         };
@@ -91,7 +91,7 @@ exports.adminFeedUpload = async (req, res) => {
         const driveFileId = upload.fileId;
         const mediaUrl = isImage
           ? `https://lh3.googleusercontent.com/d/${driveFileId}`
-          : `http://localhost:5000/media/${driveFileId}`;
+          : `${process.env.BACKEND_URL}/media/${driveFileId}`;
         // Prepare feed document
         const currentPostType = isImage ? (uploadedAudio ? 'image+audio' : 'image') : 'video';
         const currentUploadType = baseDesignMetadata.isTemplate ? 'template' : 'normal';
