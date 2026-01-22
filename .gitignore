@@ -10,7 +10,7 @@ lerna-debug.log*
 
 media/
 
-
+/uploads/
 
 
 .env
