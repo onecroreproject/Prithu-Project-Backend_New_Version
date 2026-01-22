@@ -247,7 +247,6 @@ exports.toggleSaveFeed = async (req, res) => {
 exports.requestDownloadFeed = async (req, res) => {
   const userId = req.Id || req.body.userId;
   const feedId = req.params.feedId;
-  // const designMetadata = req.body.designMetadata; // Optional: Override metadata
 
   if (!userId) return res.status(400).json({ message: "userId is required" });
   if (!feedId) return res.status(400).json({ message: "feedId is required" });
@@ -270,7 +269,7 @@ exports.requestDownloadFeed = async (req, res) => {
     }
 
     // Combine metadata: Use provided override or feed's own metadata
-    const metadataToUse = feed.designMetadata;
+    const metadataToUse = feed.designMetadata || {};
 
     // Add Job to Queue
     const job = await downloadQueue.add({
@@ -283,7 +282,7 @@ exports.requestDownloadFeed = async (req, res) => {
         email: userRecord?.email || "",
         phone: viewerProfile?.phoneNumber || ""
       },
-      designMetadata: metadataToUse
+      designMetadata: metadataToUse,
     }, {
       attempts: 2,
       backoff: 5000,
