@@ -1,7 +1,6 @@
 // ✅ controllers/searchController.js
 const Categories = require("../models/categorySchema");
 const ProfileSettings = require("../models/profileSettingModel");
-const JobPost = require("../models/Job/JobPost/jobSchema");
 const Hashtag = require("../models/hashTagModel");
 const Feed = require("../models/feedModel");
 const { feedTimeCalculator } = require('../middlewares/feedTimeCalculator');
@@ -28,34 +27,6 @@ exports.globalSearch = async (req, res) => {
         ? new RegExp("^" + query, "i")
         : new RegExp(query, "i");
 
-    /* -------------------------------------------
-       1️⃣ JOB SEARCH (Regex + Full Text)
-    --------------------------------------------*/
-    const regexJobQuery = JobPost.find({
-      status: "active",
-      $or: [
-        { title: prefixRegex },
-        { role: prefixRegex },
-        { jobRole: prefixRegex },
-        { companyName: prefixRegex },
-        { location: prefixRegex },
-        { description: prefixRegex },
-        { keyword: prefixRegex },
-      ],
-    })
-      .select("title role jobRole companyName location")
-      .limit(10);
-
-    const textJobQuery =
-      query.length >= 3
-        ? JobPost.find({
-            $text: { $search: query },
-            status: "active",
-          })
-            .select("title role jobRole companyName location score")
-            .limit(10)
-            .sort({ score: { $meta: "textScore" } })
-        : Promise.resolve([]);
 
 
     /* -------------------------------------------
@@ -299,7 +270,7 @@ exports.globalSearch = async (req, res) => {
     /* -------------------------------------------
        3️⃣ RUN JOB + PEOPLE + CATEGORY FETCHES
     --------------------------------------------*/
-    const [categories, people, regexJobs, textJobs] = await Promise.all([
+    const [categories, people] = await Promise.all([
       Hashtag.find({ tag: prefixRegex })
         .select("tag count updatedAt")
         .limit(10),
@@ -313,15 +284,7 @@ exports.globalSearch = async (req, res) => {
       })
         .select("userName profileAvatar name userId")
         .limit(10),
-
-      regexJobQuery,
-      textJobQuery,
     ]);
-
-    /* MERGE JOBS */
-    const jobMap = new Map();
-    [...regexJobs, ...textJobs].forEach(job => jobMap.set(String(job._id), job));
-    const jobs = Array.from(jobMap.values()).slice(0, 10);
 
 
     /* -------------------------------------------
@@ -332,7 +295,6 @@ exports.globalSearch = async (req, res) => {
       query,
       categories,
       people,
-      jobs,
       feeds: enrichedFeeds,
     });
 

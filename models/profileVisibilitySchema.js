@@ -1,6 +1,5 @@
-const mongoose=require("mongoose")
-const {prithuDB}=require("../database");
-
+const mongoose = require("mongoose");
+const { prithuDB } = require("../database");
 
 const ProfileVisibilitySchema = new mongoose.Schema(
   {
@@ -35,6 +34,7 @@ const ProfileVisibilitySchema = new mongoose.Schema(
       enum: ["public", "followers", "private"],
       default: "public",
     },
+
     dateOfBirth: {
       type: String,
       enum: ["public", "followers", "private"],
@@ -97,43 +97,11 @@ const ProfileVisibilitySchema = new mongoose.Schema(
       default: "public",
     },
 
-    // 🔹 Social Links (visibility for the entire social link section)
+    // ✅ Social links VISIBILITY (single control)
     socialLinks: {
-      facebook: {
-        type: String,
-        enum: ["public", "followers", "private"],
-        default: "public",
-      },
-      instagram: {
-        type: String,
-        enum: ["public", "followers", "private"],
-        default: "public",
-      },
-      twitter: {
-        type: String,
-        enum: ["public", "followers", "private"],
-        default: "public",
-      },
-      linkedin: {
-        type: String,
-        enum: ["public", "followers", "private"],
-        default: "public",
-      },
-      github: {
-        type: String,
-        enum: ["public", "followers", "private"],
-        default: "public",
-      },
-      youtube: {
-        type: String,
-        enum: ["public", "followers", "private"],
-        default: "public",
-      },
-      website: {
-        type: String,
-        enum: ["public", "followers", "private"],
-        default: "public",
-      },
+      type: String,
+      enum: ["public", "followers", "private"],
+      default: "public",
     },
 
     // 🔹 Extra / Privacy fields
@@ -146,4 +114,8 @@ const ProfileVisibilitySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = prithuDB.model("ProfileVisibility", ProfileVisibilitySchema, "ProfileVisibility");
+module.exports = prithuDB.model(
+  "ProfileVisibility",
+  ProfileVisibilitySchema,
+  "ProfileVisibility"
+);

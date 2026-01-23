@@ -11,7 +11,6 @@ const { initSocket } = require("./middlewares/webSocket");
 const { monitorMiddleware } = require("./middlewares/monitor");
 const { oAuth2Client } = require("./middlewares/services/googleDriveMedia/googleDriverAuth");
 const { sharePostOG } = require("./controllers/feedControllers/userActionsFeedController");
-const jobRoot = require("./roots/jobPostRoot");
 const webRoot = require("./roots/webroot");
 const root = require("./roots/root");
 
@@ -143,7 +142,6 @@ app.get("/media/:fileId", async (req, res) => {
 //
 // 🟢 API ROUTES
 //
-app.use("/web/job", jobRoot);
 app.use("/api", root);
 app.use("/web/api", webRoot);
 

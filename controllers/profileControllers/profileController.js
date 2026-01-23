@@ -483,12 +483,13 @@ exports.updateFieldVisibilityWeb = async (req, res) => {
   try {
     const userId = req.Id;
     const role = req.role;
-    const { field, value, parent } = req.body; // optional parent for nested updates
+    const { field, value } = req.body;
 
     const allowedValues = ["public", "followers", "private"];
     if (!field || !allowedValues.includes(value)) {
       return res.status(400).json({
-        message: "Invalid request. Field and value ('public' | 'followers' | 'private') required.",
+        message:
+          "Invalid request. Field and value ('public' | 'followers' | 'private') required.",
       });
     }
 
@@ -504,31 +505,31 @@ exports.updateFieldVisibilityWeb = async (req, res) => {
     if (!profile) return res.status(404).json({ message: "Profile not found" });
 
     let visibility = profile.visibility;
+
+    // If visibility missing create new
     if (!visibility) {
-      visibility = await ProfileVisibility.create({ profileSettingsId: profile._id });
+      visibility = await ProfileVisibility.create({});
       profile.visibility = visibility._id;
       await profile.save();
     }
 
-    // Update field (nested or top-level)
-    if (parent === "socialLinks") {
-      if (!visibility.socialLinks[field]) {
-        return res.status(400).json({ message: `Invalid social link field: ${field}` });
-      }
-      visibility.socialLinks[field] = value;
-    } else {
-      const validFields = Object.keys(ProfileVisibility.schema.paths);
-      if (!validFields.includes(field)) {
-        return res.status(400).json({ message: `Invalid field name: ${field}` });
-      }
-      visibility[field] = value;
+    // ✅ Only allow valid fields from schema
+    const validFields = Object.keys(ProfileVisibility.schema.paths).filter(
+      (k) => !["_id", "__v", "createdAt", "updatedAt"].includes(k)
+    );
+
+    if (!validFields.includes(field)) {
+      return res.status(400).json({ message: `Invalid field name: ${field}` });
     }
+
+    // ✅ Update field directly (including socialLinks)
+    visibility[field] = value;
 
     await visibility.save();
 
     return res.json({
       success: true,
-      message: `Visibility for '${parent ? parent + "." : ""}${field}' updated to '${value}'`,
+      message: `Visibility for '${field}' updated to '${value}'`,
       visibility,
     });
   } catch (err) {
@@ -536,6 +537,7 @@ exports.updateFieldVisibilityWeb = async (req, res) => {
     return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
+
 
 // ===========================================================
 // ✅ 4️⃣ Get visibility settings (Web)

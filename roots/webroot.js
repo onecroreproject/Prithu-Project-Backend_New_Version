@@ -354,7 +354,6 @@ const {
   getHiddenPosts,
   removeHiddenPost,
 } = require("../controllers/userControllers/hiddenPostController");
-const { applyForJob, getAppliedJobsByUser, getSavedJobsByUser } = require('../controllers/userControllers/userJobController');
 const { startAptitudeTest,
   aptitudeCallback,
   getLatestAptitudeResult,
@@ -367,11 +366,8 @@ const { getManiBoardStats } = require('../controllers/mainHomeControlle');
 const { getPostInterestStatus,
   requestPostInterest
 } = require('../controllers/postIntrestedController');
-const { getAllCompanies } = require('../controllers/adminCompany/adminCompanyController');
-const { getJobWithResolvedLocation, getAllActiveJobLocations, getPlatformStats } = require('../controllers/JobController/jobpostController');
 const { getHelpFAQ } = require('../controllers/adminControllers/adminHelpController');
 const { submitUserFeedback, getMyFeedbackAndReports } = require('../controllers/feedBackController');
-const { getPrithuCompany } = require('../controllers/adminControllers/companyDetailController');
 
 
 
@@ -514,12 +510,7 @@ router.post("/aptitude/user/intrest", auth, addInterestedUser);
 router.get("/top/aptitude/performers", getTopAptitudePerformers);
 
 
-/*_______________________User JOB API_____________________________*/
-router.post("/apply/job", auth, applyForJob);
-router.get("/get/job/locations", getAllActiveJobLocations);
-router.get("/company/platform/status", getPlatformStats);
-router.get("/job-applications/applied-jobs", auth, getAppliedJobsByUser);
-router.get("/get/user/saved/jobs", auth, getSavedJobsByUser);
+
 
 /* --------------------- User Notifiction API --------------------- */
 router.post("/admin/send/notification", sendAdminNotification)
@@ -777,7 +768,6 @@ router.get("/get/user/birthday", getUpcomingBirthdays);
 
 router.get("/main/board/status", getManiBoardStats);
 
-router.get("/get/all/companies", getAllCompanies);
 
 
 // Public
@@ -786,7 +776,6 @@ router.get("/help", getHelpFAQ);
 router.post("/feedback", auth, submitUserFeedback);
 router.get("/feedback/my", auth, getMyFeedbackAndReports);
 
-router.get("/company", getPrithuCompany);
 
 
 module.exports = router;

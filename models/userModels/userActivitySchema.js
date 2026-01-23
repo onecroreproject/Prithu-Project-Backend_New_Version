@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const {prithuDB}=require("../../database");
+const { prithuDB } = require("../../database");
 
 
 const UserActivitySchema = new mongoose.Schema(
@@ -27,7 +27,7 @@ const UserActivitySchema = new mongoose.Schema(
         "LOGOUT",
         "DOWNLOAD_POST",
         "REMOVE_FOLLOWER",
-        "DOWNLOAD_POST_REQUEST", 
+        "DOWNLOAD_POST_REQUEST",
       ],
       required: true,
       index: true,
@@ -41,7 +41,7 @@ const UserActivitySchema = new mongoose.Schema(
 
     targetModel: {
       type: String,
-      enum: ["User", "Feed", "JobPost", "UserCurricluam"],
+      enum: ["User", "Feed", "UserCurricluam"],
       default: null,
     },
 

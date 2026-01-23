@@ -20,7 +20,7 @@ const Categories = require("../../models/categorySchema.js");
 const path = require("path");
 const { google } = require("googleapis");
 const { oAuth2Client } = require("../../middlewares/services/googleDriveMedia/googleDriverAuth");
-
+const ProfileVisibility=require("../../models/profileVisibilitySchema.js")
 
 
 
@@ -30,40 +30,91 @@ exports.getAllFeedsByUserId = async (req, res) => {
   let hiddenPostIds = [];
   let notInterestedCategoryIds = [];
 
+  // Helper function for visibility check
+  const canShow = (rule) => rule === "public"; // ONLY public visible
+
   try {
     const rawUserId = req.Id || req.body.userId;
     if (!rawUserId) return res.status(404).json({ message: "User ID Required" });
     const userId = new mongoose.Types.ObjectId(rawUserId);
     const page = Math.max(1, Number(req.query.page || 1));
     const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
+    
     /* -----------------------------------------------------
        ✅ 1️⃣ FETCH VIEWER PROFILE (LOGGED-IN USER)
     ------------------------------------------------------*/
     const viewerProfile = await ProfileSettings.findOne({ userId })
-      .select("name userName profileAvatar phoneNumber socialLinks privacy modifyAvatar")
+      .select("name userName profileAvatar phoneNumber socialLinks privacy modifyAvatar visibility")
       .lean();
 
+    let viewerVisibility = null;
+
+if (viewerProfile?.visibility) {
+  viewerVisibility = await ProfileVisibility.findById(viewerProfile.visibility).lean();
+}
+
     const viewerUser = await User.findById(userId).select("email").lean();
+console.log("viewerProfile.visibility =", viewerProfile?.visibility);
+console.log("viewerVisibility.socialLinks =", viewerVisibility?.socialLinks);
+console.log("viewerProfile.socialLinks =", viewerProfile?.socialLinks);
 
     // Format viewer social icons safely
-    let viewerSocialIcons = [];
-    if (viewerProfile?.socialLinks) {
-      // Logic to normalize various social link formats (array, object, or JSON string)
-      if (Array.isArray(viewerProfile.socialLinks)) {
-        viewerSocialIcons = viewerProfile.socialLinks.map(l => ({ platform: l.platform, url: l.url, visible: l.visible !== false }));
-      } else if (typeof viewerProfile.socialLinks === 'object') {
-        viewerSocialIcons = Object.entries(viewerProfile.socialLinks).map(([k, v]) => ({ platform: k, url: typeof v === 'string' ? v : v.url, visible: true }));
-      }
-    }
+let viewerSocialIcons = [];
+
+if (viewerProfile?.socialLinks && typeof viewerProfile.socialLinks === "object") {
+  viewerSocialIcons = Object.entries(viewerProfile.socialLinks)
+    .map(([platform, url]) => ({
+      platform,
+      url: typeof url === "string" ? url.trim() : "",
+      visible: true,
+    }))
+    .filter((i) => i.url); // ✅ keep only valid links
+}
+
+
+    // ✅ Social Icons Filter based on visibility rules
+   const safeSocialLinks = viewerSocialIcons.filter((icon) => {
+  const rule = viewerVisibility?.socialLinks || "private";
+  return canShow(rule) && icon.visible !== false && !!icon.url;
+});
+
+
+    // ✅ Footer visibility config
+    const footerVisibilityConfig = {
+      showElements: {
+        name: canShow(viewerVisibility?.name || "public"),
+        email: canShow(viewerVisibility?.email || "private"),
+        phone: canShow(viewerVisibility?.phoneNumber || "private"),
+        socialIcons: safeSocialLinks.length > 0
+      },
+      socialIcons: safeSocialLinks.map((icon) => ({
+        platform: icon.platform,
+        visible: true,
+        urlTemplate: icon.url
+      }))
+    };
+
+    console.log("viewerSocialIcons =", viewerSocialIcons);
+console.log("safeSocialLinks =", safeSocialLinks);
+console.log("safeSocialLinks length =", safeSocialLinks.length);
+
+
     const viewer = {
       id: userId,
       name: viewerProfile?.name || "User",
       userName: viewerProfile?.userName || "user",
-      email: viewerUser?.email || null,
-      phoneNumber: viewerProfile?.privacy?.showPhoneNumber === false ? null : (viewerProfile?.phoneNumber || null),
+      email: canShow(viewerVisibility?.email || "private")
+  ? viewerUser?.email || null
+  : null,
+
+     phoneNumber: canShow(viewerVisibility?.phoneNumber || "private")
+  ? viewerProfile?.phoneNumber || null
+  : null,
+
       profileAvatar: viewerProfile?.modifyAvatar || "https://via.placeholder.com/150",
-      socialLinks: viewerSocialIcons
+      socialLinks: safeSocialLinks // Use filtered social links
     };
+
     /* -----------------------------------------------------
        ✅ 2️⃣ FETCH HIDDEN POSTS & BLOCKED CATEGORIES
     ------------------------------------------------------*/
@@ -71,6 +122,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
     hiddenPostIds = hiddenPosts.map(h => h.postId);
     const userCategories = await UserCategory.findOne({ userId }).select("nonInterestedCategories").lean();
     notInterestedCategoryIds = userCategories?.nonInterestedCategories || [];
+
     /* -----------------------------------------------------
        ✅ 3️⃣ AGGREGATION PIPELINE
     ------------------------------------------------------*/
@@ -181,7 +233,12 @@ exports.getAllFeedsByUserId = async (req, res) => {
       if (isTemplateMode && feed.designMetadata) {
         designState = {
           elements: feed.designMetadata.overlayElements || [],
-          footer: feed.designMetadata.footerConfig || { enabled: true, colors: themeColor },
+          footer: {
+  ...(feed.designMetadata.footerConfig || { enabled: true }),
+  ...footerVisibilityConfig,
+  colors: themeColor
+},
+
           mediaDimensions: feed.designMetadata.canvasSettings || { width: 1080, height: 1920 },
           audioConfig: feed.designMetadata.audioConfig || null,
           themeColors: themeColor
@@ -193,11 +250,13 @@ exports.getAllFeedsByUserId = async (req, res) => {
         feedId: feed._id,
         uploadType: feed.uploadType || 'normal',
 
-        // Footer Configuration with Viewer Social Icons injected
-        footerDisplay: isTemplateMode ? {
-          ...(feed.designMetadata?.footerConfig || {}),
-          socialIcons: viewerSocialIcons
-        } : { enabled: false },
+        // ✅ Footer Configuration with Privacy-Aware Social Icons
+        footerDisplay: isTemplateMode
+          ? {
+              ...(feed.designMetadata?.footerConfig || {}),
+              ...footerVisibilityConfig
+            }
+          : { enabled: false },
 
         designState,
 

@@ -1,46 +1,45 @@
 const Users = require("../../models/userModels/userModel.js");
-const {userTimeAgo}=require('../../middlewares/userStatusTimeAgo.js');
-const UserFeedActions=require('../../models/userFeedInterSectionModel');
-const ProfileSettings=require('../../models/profileSettingModel.js');
-const mongoose=require("mongoose");
-const ImageStats=require("../../models/userModels/MediaSchema/imageViewModel.js")
-const VideoStats=require("../../models/userModels/MediaSchema/videoViewStatusModel.js")
+const { userTimeAgo } = require('../../middlewares/userStatusTimeAgo.js');
+const UserFeedActions = require('../../models/userFeedInterSectionModel');
+const ProfileSettings = require('../../models/profileSettingModel.js');
+const mongoose = require("mongoose");
+const ImageStats = require("../../models/userModels/MediaSchema/imageViewModel.js")
+const VideoStats = require("../../models/userModels/MediaSchema/videoViewStatusModel.js")
 const UserDevices = require("../../models/userModels/userSession-Device/deviceModel");
-const Subscriptions=require('../../models/subcriptionModels/userSubscreptionModel.js');
-const UserLanguage=require('../../models/userModels/userLanguageModel.js');
-const Follower=require("../../models/userFollowingModel.js");
-const UserCategory=require('../../models/userModels/userCategotyModel.js');
-const ImageView=require('../../models/userModels/MediaSchema/userImageViewsModel.js');
-const VideoView=require('../../models/userModels/MediaSchema/userVideoViewModel.js');
-const Feed =require('../../models/feedModel.js');
-const UserLevel =require('../../models/userModels/userRefferalModels/userReferralLevelModel');
-const Withdrawal=require('../../models/userModels/withdrawal.js');
-const UserEarning=require('../../models/userModels/referralEarnings.js');
-const Session=require('../../models/userModels/userSession-Device/sessionModel.js');
-const UserSubscription=require("../../models/subcriptionModels/userSubscreptionModel.js");
-const Account=require("../../models/accountSchemaModel.js");
-const Report=require('../../models/feedReportModel.js');
-const ReportType=require('../../models/userModels/Report/reportTypeModel');
-const Followers =require("../../models/creatorFollowerModel.js");
-const HeldReferrals=require("../../models/userModels/userRefferalModels/heldUsers.js");
-const HiddenPost=require("../../models/userModels/hiddenPostSchema.js");
-const UserComments=require("../../models/userCommentModel.js");
-const UserEarnings =require('../../models/userModels/referralEarnings.js');
-const UserFeedCategories=require('../../models/userModels/userCategotyModel.js');
-const UserFollowings=require("../../models/userFollowingModel.js");
-const UserLevels=require("../../models/userModels/userRefferalModels/userReferralLevelModel");
-const UserNotification=require("../../models/notificationModel.js");
-const UserViews=require("../../models/userModels/MediaSchema/userImageViewsModel.js");
-const {extractPublicId}=require("../../middlewares/helper/cloudnaryDetete.js");
-const {deleteCloudinaryBatch}=require("../../middlewares/helper/geatherPubliceIds.js");
-const {gatherFeedPublicIds}=require("../../middlewares/helper/geatherPubliceIds");
-const UserSubscriptions=require("../../models/subcriptionModels/userSubscreptionModel.js");
-const CommentLikes=require("../../models/commentsLikeModel.js");
-const CreatorFollowers=require('../../models/creatorFollowerModel.js');
-const Devices=require("../../models/userModels/userSession-Device/deviceModel.js");
-const UserReferral =require("../../models/userModels/userReferralModel");
-const JobPost=require("../../models/Job/JobPost/jobSchema.js");
-const TrendingCreators=require("../../models/treandingCreators.js")
+const Subscriptions = require('../../models/subcriptionModels/userSubscreptionModel.js');
+const UserLanguage = require('../../models/userModels/userLanguageModel.js');
+const Follower = require("../../models/userFollowingModel.js");
+const UserCategory = require('../../models/userModels/userCategotyModel.js');
+const ImageView = require('../../models/userModels/MediaSchema/userImageViewsModel.js');
+const VideoView = require('../../models/userModels/MediaSchema/userVideoViewModel.js');
+const Feed = require('../../models/feedModel.js');
+const UserLevel = require('../../models/userModels/userRefferalModels/userReferralLevelModel');
+const Withdrawal = require('../../models/userModels/withdrawal.js');
+const UserEarning = require('../../models/userModels/referralEarnings.js');
+const Session = require('../../models/userModels/userSession-Device/sessionModel.js');
+const UserSubscription = require("../../models/subcriptionModels/userSubscreptionModel.js");
+const Account = require("../../models/accountSchemaModel.js");
+const Report = require('../../models/feedReportModel.js');
+const ReportType = require('../../models/userModels/Report/reportTypeModel');
+const Followers = require("../../models/creatorFollowerModel.js");
+const HeldReferrals = require("../../models/userModels/userRefferalModels/heldUsers.js");
+const HiddenPost = require("../../models/userModels/hiddenPostSchema.js");
+const UserComments = require("../../models/userCommentModel.js");
+const UserEarnings = require('../../models/userModels/referralEarnings.js');
+const UserFeedCategories = require('../../models/userModels/userCategotyModel.js');
+const UserFollowings = require("../../models/userFollowingModel.js");
+const UserLevels = require("../../models/userModels/userRefferalModels/userReferralLevelModel");
+const UserNotification = require("../../models/notificationModel.js");
+const UserViews = require("../../models/userModels/MediaSchema/userImageViewsModel.js");
+const { extractPublicId } = require("../../middlewares/helper/cloudnaryDetete.js");
+const { deleteCloudinaryBatch } = require("../../middlewares/helper/geatherPubliceIds.js");
+const { gatherFeedPublicIds } = require("../../middlewares/helper/geatherPubliceIds");
+const UserSubscriptions = require("../../models/subcriptionModels/userSubscreptionModel.js");
+const CommentLikes = require("../../models/commentsLikeModel.js");
+const CreatorFollowers = require('../../models/creatorFollowerModel.js');
+const Devices = require("../../models/userModels/userSession-Device/deviceModel.js");
+const UserReferral = require("../../models/userModels/userReferralModel");
+const TrendingCreators = require("../../models/treandingCreators.js")
 
 
 
@@ -49,7 +48,7 @@ const TrendingCreators=require("../../models/treandingCreators.js")
 // Get single user detail
 exports.getUserProfileDetail = async (req, res) => {
   try {
-    const {userId }=req.body; // from auth middleware
+    const { userId } = req.body; // from auth middleware
 
     if (!userId) {
       return res.status(400).json({ success: false, message: "User ID is required" });
@@ -57,8 +56,8 @@ exports.getUserProfileDetail = async (req, res) => {
 
     // ✅ Run queries in parallel
     const [user, profile, languages] = await Promise.all([
-      User.findById(userId).select("userName email").lean(),
-      Profile.findOne({ userId }).lean(),
+      Users.findById(userId).select("userName email").lean(),
+      ProfileSettings.findOne({ userId }).lean(),
       UserLanguage.find({ userId, active: true }).select("appLanguageCode feedLanguageCode").lean()
     ]);
 
@@ -86,12 +85,12 @@ exports.getUserProfileDetail = async (req, res) => {
 
 // Get user status with devices
 exports.getUserStatus = async (req, res) => {
-  
+
   try {
     const client = await getRedis();
-  
-    const users = await User.find({}, "_id name role").lean();
-    
+
+    const users = await Users.find({}, "_id name role").lean();
+
     const result = [];
 
     for (const user of users) {
@@ -109,7 +108,7 @@ exports.getUserStatus = async (req, res) => {
       result.push({
         ...user,
         status: sockets.length > 0 ? "online" : "offline",
-        lastSeen: sockets.length > 0 ? "now" : lastSeen ?userTimeAgo(lastSeen) : "unknown",
+        lastSeen: sockets.length > 0 ? "now" : lastSeen ? userTimeAgo(lastSeen) : "unknown",
         devices,
       });
     }
@@ -124,7 +123,7 @@ exports.getUserStatus = async (req, res) => {
 
 exports.getUsersByDate = async (req, res) => {
   try {
-    const { date, type = "created" } = req.query; 
+    const { date, type = "created" } = req.query;
     // type = "created" (default) or "updated"
 
     if (!date) {
@@ -751,7 +750,7 @@ exports.getUserAnalyticalData = async (req, res) => {
   try {
     const { userId } = req.params;
     const { startDate, endDate, type, tab } = req.query;
-    
+
     if (!userId) return res.status(400).json({ message: "userId is required" });
 
     // Build base query for date filtering
@@ -960,18 +959,18 @@ exports.getUserAnalyticalData = async (req, res) => {
     // Filter interactions by date if provided
     const filterByDate = (items, dateField) => {
       if (!startDate && !endDate) return items || [];
-      
+
       const start = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : null;
       const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : null;
-      
+
       return (items || []).filter(item => {
         if (!item || !item[dateField]) return false;
-        
+
         const itemDate = new Date(item[dateField]).getTime();
-        
+
         if (start && itemDate < start) return false;
         if (end && itemDate > end) return false;
-        
+
         return true;
       });
     };
@@ -1199,7 +1198,7 @@ exports.getUserLevelWithEarnings = async (req, res) => {
     const currentUser = {
       userId: userId || null,
       userName: currentUserProfile?.userName || "Unknown User",
-      profileAvatar: currentUserProfile?.profileAvatar ,
+      profileAvatar: currentUserProfile?.profileAvatar,
     };
 
     // 2️⃣ Find the topmost level for this user
@@ -1358,37 +1357,37 @@ exports.getReports = async (req, res) => {
         }
 
         return {
-          _id:report._id,
+          _id: report._id,
           reportId: index + 1, // convert to 1,2,3,4...
           type: reportType ? reportType.name : "Unknown",
           reportedBy: reporterProfile
             ? {
-                username: reporterProfile.userName || "Unknown",
-                avatar: reporterProfile.profileAvatar || null,
-              }
+              username: reporterProfile.userName || "Unknown",
+              avatar: reporterProfile.profileAvatar || null,
+            }
             : { username: "Unknown", avatar: null },
 
           target: feedData
             ? {
-                contentUrl: feedData.contentUrl || null,
-                createdBy: creatorProfile
-                  ? {
-                      username: creatorProfile.userName || "Unknown",
-                      avatar: creatorProfile.profileAvatar || null,
-                    }
-                  : { username: "Unknown", avatar: null },
-              }
+              contentUrl: feedData.contentUrl || null,
+              createdBy: creatorProfile
+                ? {
+                  username: creatorProfile.userName || "Unknown",
+                  avatar: creatorProfile.profileAvatar || null,
+                }
+                : { username: "Unknown", avatar: null },
+            }
             : null,
 
           answers:
             report.answers && report.answers.length > 0
               ? report.answers.map((a) => ({
-                  questionId: a.questionId,
-                  questionText: a.questionText,
-                  selectedOption: a.selectedOption,
-                }))
+                questionId: a.questionId,
+                questionText: a.questionText,
+                selectedOption: a.selectedOption,
+              }))
               : "Not Available",
-    
+
           status: report.status,
           actionTaken: report.actionTaken,
           actionDate: report.actionDate,

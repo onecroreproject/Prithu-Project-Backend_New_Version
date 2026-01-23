@@ -1,5 +1,4 @@
 const Notification = require("../../models/notificationModel");
-const { jobDB } = require("../../database"); // ✅ FIXED
 const User = require("../../models/userModels/userModel");
 const {
   broadcastNotification,
@@ -7,9 +6,6 @@ const {
 } = require("../../middlewares/helper/socketNotification");
 
 // 🔹 JOB DB MODELS (cross-db safe)
-const JobPost = jobDB.model("JobPost");
-const CompanyLogin = jobDB.model("CompanyLogin");
-const CompanyProfile = jobDB.model("CompanyProfile");
 
 
 
@@ -116,72 +112,12 @@ exports.getNotifications = async (req, res) => {
       )
       .lean();
 
-    /* -----------------------------------------------------
-     * 2️⃣ Collect Job & Company IDs
-     * --------------------------------------------------- */
-    const jobIds = [];
-    const companyIds = [];
-
-    notifications.forEach(n => {
-      if (n.jobId) jobIds.push(n.jobId.toString());
-      if (n.companyId) companyIds.push(n.companyId.toString());
-    });
-
-    /* -----------------------------------------------------
-     * 3️⃣ Fetch Job & Company data (JOB DB)
-     * --------------------------------------------------- */
-    const [jobs, companies, companyProfiles] = await Promise.all([
-      JobPost.find({ _id: { $in: jobIds } })
-        .select("jobTitle")
-        .lean(),
-
-      CompanyLogin.find({ _id: { $in: companyIds } })
-        .select("companyName")
-        .lean(),
-
-      CompanyProfile.find({ companyId: { $in: companyIds } })
-        .select("companyId logo")
-        .lean(),
-    ]);
-
-    /* -----------------------------------------------------
-     * 4️⃣ Create lookup maps
-     * --------------------------------------------------- */
-    const jobMap = {};
-    jobs.forEach(j => (jobMap[j._id.toString()] = j));
-
-    const companyMap = {};
-    companies.forEach(c => (companyMap[c._id.toString()] = c));
-
-    const companyLogoMap = {};
-    companyProfiles.forEach(cp => {
-      companyLogoMap[cp.companyId.toString()] = cp.logo;
-    });
-
-    /* -----------------------------------------------------
-     * 5️⃣ Format response
-     * --------------------------------------------------- */
     const formattedNotifications = notifications.map(n => {
       const senderProfile =
         n.senderUserProfile ||
         n.senderAdminProfile ||
         n.senderChildAdminProfile ||
         null;
-
-      const isJobNotification = n.type === "JOB_STATUS_UPDATE";
-
-      const job = isJobNotification
-        ? {
-            jobId: n.jobId || null,
-            jobTitle: jobMap[n.jobId?.toString()]?.jobTitle || "",
-            status: n.status || "",
-            companyId: n.companyId || null,
-            companyName:
-              companyMap[n.companyId?.toString()]?.companyName || "",
-            companyLogo:
-              companyLogoMap[n.companyId?.toString()] || "",
-          }
-        : null;
 
       return {
         _id: n._id,
@@ -193,18 +129,15 @@ exports.getNotifications = async (req, res) => {
 
         sender: senderProfile
           ? {
-              userName: senderProfile.userName,
-              displayName: senderProfile.displayName,
-              profileAvatar: senderProfile.profileAvatar,
-            }
+            userName: senderProfile.userName,
+            displayName: senderProfile.displayName,
+            profileAvatar: senderProfile.profileAvatar,
+          }
           : null,
 
         feedInfo: n.feedInfo || null,
-        job,
       };
     });
-
-  
 
     return res.status(200).json({
       success: true,

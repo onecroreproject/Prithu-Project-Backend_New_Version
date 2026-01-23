@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const {prithuDB}=require("../database");
+const { prithuDB } = require("../database");
 
 const notificationSchema = new mongoose.Schema(
   {
@@ -38,7 +38,6 @@ const notificationSchema = new mongoose.Schema(
         "ADMIN_ANNOUNCEMENT",
         "SYSTEM_ALERT",
         "REMOVED_FROM_FOLLOWERS",
-        "JOB_STATUS_UPDATE",
       ],
       required: true,
     },
@@ -50,7 +49,7 @@ const notificationSchema = new mongoose.Schema(
     },
     entityType: {
       type: String,
-      enum: ["Post", "Comment","Follow","Unfollow", null,"Feed","RemoveFollower","JobApplication",],
+      enum: ["Post", "Comment", "Follow", "Unfollow", null, "Feed", "RemoveFollower",],
       default: null,
     },
 
@@ -64,9 +63,7 @@ const notificationSchema = new mongoose.Schema(
       commentId: { type: mongoose.Schema.Types.ObjectId, ref: "Comment" },
     },
 
-  jobId: { type: mongoose.Schema.Types.ObjectId, ref: "JobPost" },
-  companyId: { type: mongoose.Schema.Types.ObjectId, ref: "CompanyLogin" },
-  status: { type: String },
+    status: { type: String },
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
