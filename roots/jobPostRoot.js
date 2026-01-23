@@ -1,0 +1,105 @@
+const express = require("express");
+const router = express.Router();
+const { createJob,updateJob,saveJobDraft,createOrUpdateJob, getAllJobs, getJobById ,getJobsByCompany,deleteJobs,getRankedJobs,getAllJobsForAdmin, getTopRankedJobs, getSimilarJobs} = require("../controllers/JobController/jobpostController");
+const { updateEngagement, getJobEngagementStats,getUserEngagements} = require("../controllers/JobController/engagementController");
+const {companyJobUpload}=require("../middlewares/services/jobImageUploadSpydy.js");
+const {auth}=require("../middlewares/jwtAuthentication.js");
+const {getAllJobPostsAdmin}=require("../controllers/adminControllers/JobPost/adminJobPostController.js")
+const {deleteJob,approveJob}=require("../controllers/ChildAdminControllers/childAdminJobsController.js");
+const {
+registerCompany,
+loginCompany,
+sendOtp,
+verifyOtp,
+resetPassword,
+checkAvailability
+}=require("../controllers/authenticationControllers/companyAuthController.js")
+const {companyAuth}=require("../middlewares/jwtCompany.js")
+const {companyUpload}=require("../middlewares/services/companyUploadSpydy.js");
+const {updateCompanyProfile,getRecentDrafts,getDraftById,
+    getCompanyProfile,getSingleCompanyProfile,companyLocation,
+    getCompanyProfileStrength
+}=require("../controllers/JobController/CompanyControllers/companyProfileController.js");
+const { getCompanyApplicants, updateApplicationStatus, 
+  updateCompanyProfileVisibility,
+  getCompanyProfileVisibilityStatus,getRecentCompanyActivities, getCompanyJobStats, getTopPerformingJobs } = require("../controllers/JobController/CompanyControllers/companyJobCotroller.js");
+
+
+//CompanyLogin API
+router.post("/company/register",registerCompany);
+router.post("/company/login",loginCompany);
+router.post("/company/send-otp",sendOtp);
+router.post("/company/verify-otp",verifyOtp);
+router.post("/company/reset-password",resetPassword);
+router.get("/avilability/check", checkAvailability);
+
+
+//CompanyProfileUpdate
+router.put(
+  "/update/company/profile",
+  companyAuth,
+  companyUpload.fields([
+    { name: "logo", maxCount: 1 },
+    { name: "coverImage", maxCount: 1 },
+    { name: "profileAvatar", maxCount: 1 },
+     { name: "galleryImages", maxCount: 5 },
+  ]),
+  updateCompanyProfile
+);
+
+router.post(
+  "/company/create/job",
+  companyAuth,
+  companyJobUpload.fields([
+    { name: "jobImage", maxCount: 1 },
+    { name: "postImage", maxCount: 1 }
+  ]),
+  createOrUpdateJob
+);
+
+
+
+// router.put("/company/update/job",companyAuth,updateJob);
+// router.post("/company/draft/job",companyAuth,saveJobDraft);
+
+ router.get("/get/jobs/by/company/",companyAuth,getJobsByCompany);
+router.get("/get/draft/jobs/:id",companyAuth,getDraftById);
+ router.delete("/delete/jobs/:jobId",companyAuth,deleteJobs);
+router.get("/get/company/profile",companyAuth,getCompanyProfile);
+router.get("/get/single/company/profile/:companyId",getSingleCompanyProfile);
+ router.get("/get/recent/drafts",companyAuth,getRecentDrafts);
+router.get("/get/company/applicatns",companyAuth,getCompanyApplicants);
+router.put("/update/application/status",companyAuth,updateApplicationStatus);
+router.get("/company/activity/status",companyAuth,getRecentCompanyActivities);
+router.get("/get/company/stats",companyAuth,getCompanyJobStats);
+router.get("/get/top/performing/job",companyAuth,getTopPerformingJobs);
+router.post("/company/privacy/update",companyAuth,updateCompanyProfileVisibility);
+router.get("/get/company/privacy/status",companyAuth,getCompanyProfileVisibilityStatus);
+router.post("/update/company/location",companyAuth,companyLocation);
+router.get("/company/profile/strength",companyAuth,getCompanyProfileStrength);
+
+
+// User routes
+ router.get("/user/get/all",auth,getAllJobs);
+ router.get("/get/jobs/by/id/:id",auth,getJobById);
+ router.get("/top/ranked/jobs", auth,getTopRankedJobs);
+ router.get("/get/similar/jobs/:jobId",getSimilarJobs);
+
+//User Action API
+router.post("/update", auth, updateEngagement);
+router.get("/stats/:jobId",auth, getJobEngagementStats);
+router.get("/user/:userId", auth, getUserEngagements);
+
+
+//Admin Roots
+router.get("/admin/get/all", getAllJobPostsAdmin);
+
+router.post("/childadmin/job/approval",auth,approveJob);
+router.post("/chiladmin/job/delete",auth,deleteJob);
+
+
+
+
+
+// Engagement
+module.exports = router;

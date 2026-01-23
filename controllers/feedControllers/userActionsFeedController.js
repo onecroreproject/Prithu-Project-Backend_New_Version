@@ -1,0 +1,1457 @@
+const UserFeedActions = require("../../models/userFeedInterSectionModel.js");
+const Feeds = require("../../models/feedModel.js");
+const { getActiveUserAccount } = require('../../middlewares/creatorAccountactiveStatus.js');
+const UserComment = require("../../models/userCommentModel.js");
+const UserReplyComment = require('../../models/userRepliesModel')
+const CommentLike = require("../../models/commentsLikeModel.js");
+const path = require('path')
+const fs = require('fs')
+const User = require('../../models/userModels/userModel');
+const mongoose = require("mongoose");
+const ffmpeg = require('fluent-ffmpeg');
+const ProfileSettings = require('../../models/profileSettingModel');
+const { feedTimeCalculator } = require("../../middlewares/feedTimeCalculator");
+const UserCategory = require('../../models/userModels/userCategotyModel.js');
+const Category = require('../../models/categorySchema.js');
+const HiddenPost = require("../../models/userModels/hiddenPostSchema.js");
+const Feed = require("../../models/feedModel.js");
+const Notification = require("../../models/notificationModel.js");
+const { createAndSendNotification } = require("../../middlewares/helper/socketNotification.js");
+const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
+const idToString = (id) => (id ? id.toString() : null);
+const downloadQueue = require("../../queue/downloadQueue");
+
+
+
+
+
+
+
+
+exports.likeFeed = async (req, res) => {
+  const userId = req.Id || req.body.userId;
+  const feedId = req.body.feedId;
+
+  if (!userId || !feedId) {
+    return res.status(400).json({ message: "userId and feedId required" });
+  }
+
+  try {
+    const existingAction = await UserFeedActions.findOne({
+      userId,
+      "likedFeeds.feedId": feedId,
+    });
+
+    let updatedDoc, message, isLike;
+
+    // record activity
+    await logUserActivity({
+      userId,
+      actionType: "LIKE_POST",
+      targetId: feedId,
+      targetModel: "Feed",
+      metadata: { platform: "web" },
+    });
+
+    if (existingAction) {
+      updatedDoc = await UserFeedActions.findOneAndUpdate(
+        { userId },
+        { $pull: { likedFeeds: { feedId } } },
+        { new: true }
+      );
+      message = "Unliked successfully";
+      isLike = false;
+    } else {
+      updatedDoc = await UserFeedActions.findOneAndUpdate(
+        { userId },
+        { $push: { likedFeeds: { feedId, likedAt: new Date() } } },
+        { upsert: true, new: true }
+      );
+      message = "Liked successfully";
+      isLike = true;
+    }
+
+    // 🔹 Create notification only if liked
+    if (isLike) {
+      const feed = await Feeds.findById(feedId)
+        .select("createdByAccount contentUrl roleRef")
+        .lean();
+
+      if (feed && feed.createdByAccount.toString() !== userId.toString()) {
+        await createAndSendNotification({
+          senderId: userId,
+          receiverId: feed.createdByAccount,
+          type: "LIKE_POST",
+          title: "New Like ❤️",
+          message: "",
+          entityId: feed._id,
+          entityType: "Feed",
+          image: feed.contentUrl || "",
+          roleRef: feed.roleRef || "User", // optional, for context
+        });
+      }
+    }
+
+
+    res.status(200).json({
+      message,
+      likedFeeds: updatedDoc.likedFeeds,
+    });
+  } catch (err) {
+    console.error("Error in likeFeed:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+
+
+exports.toggleDislikeFeed = async (req, res) => {
+  try {
+    const { feedId } = req.body;
+    const userId = req.Id || req.body.userId;
+
+
+    if (!feedId) {
+      return res.status(400).json({ success: false, message: "Feed ID is required" });
+    }
+
+    if (!userId && !accountId) {
+      return res.status(400).json({ success: false, message: "User or Account ID is required" });
+    }
+
+    //  Identify the query based on user type
+    const query = userId ? { userId } : { accountId };
+
+    //  Find or create user action document
+    let userActions = await UserFeedActions.findOne(query);
+
+    if (!userActions) {
+      userActions = new UserFeedActions({
+        ...query,
+        disLikeFeeds: [],
+      });
+    }
+
+    //  Check if feed is already disliked
+    const isDisliked = userActions.disLikeFeeds.some(
+      (item) => item.feedId.toString() === feedId
+    );
+
+    if (isDisliked) {
+      //  Pull feedId (remove dislike)
+      await UserFeedActions.updateOne(query, {
+        $pull: { disLikeFeeds: { feedId: new mongoose.Types.ObjectId(feedId) } },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Dislike removed successfully",
+        action: "removed",
+      });
+    } else {
+      //  Push feedId (add dislike)
+      await UserFeedActions.updateOne(
+        query,
+        {
+          $push: {
+            disLikeFeeds: {
+              feedId: new mongoose.Types.ObjectId(feedId),
+              downloadedAt: new Date(),
+            },
+          },
+        },
+        { upsert: true }
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Feed disliked successfully",
+        action: "added",
+      });
+    }
+  } catch (error) {
+    console.error("❌ Error toggling dislike:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+
+
+
+
+
+
+
+
+exports.toggleSaveFeed = async (req, res) => {
+  const userId = req.Id || req.body.userId;
+  const { feedId } = req.body;
+
+  if (!userId || !feedId) {
+    return res.status(400).json({ message: "userId and feedId required" });
+  }
+
+  try {
+    const feedObjectId = new mongoose.Types.ObjectId(feedId);
+
+    // Check if the feed is already saved
+    const existingAction = await UserFeedActions.findOne({
+      userId,
+      "savedFeeds.feedId": feedObjectId,
+    });
+
+    let updatedDoc, message;
+
+    if (existingAction) {
+      // Already saved → remove the feed object
+      updatedDoc = await UserFeedActions.findOneAndUpdate(
+        { userId },
+        { $pull: { savedFeeds: { feedId: feedObjectId } } },
+        { new: true }
+      );
+      message = "Unsaved successfully";
+    } else {
+      // Not saved → push new feed object with timestamp
+      updatedDoc = await UserFeedActions.findOneAndUpdate(
+        { userId },
+        { $push: { savedFeeds: { feedId: feedObjectId, savedAt: new Date() } } },
+        { upsert: true, new: true }
+      );
+      message = "Saved successfully";
+    }
+
+    res.status(200).json({
+      message,
+      savedFeeds: updatedDoc.savedFeeds,
+    });
+  } catch (err) {
+    console.error("Error in toggleSaveFeed:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+
+
+
+
+
+
+
+// Request a Video Download Job
+exports.requestDownloadFeed = async (req, res) => {
+  const userId = req.Id || req.body.userId;
+  const feedId = req.params.feedId;
+
+  if (!userId) return res.status(400).json({ message: "userId is required" });
+  if (!feedId) return res.status(400).json({ message: "feedId is required" });
+
+  try {
+    // 1. FETCH FEED
+    const feed = await Feeds.findById(feedId).lean();
+    if (!feed) {
+      return res.status(404).json({ message: "Feed not found" });
+    }
+
+    // 2. FETCH VIEWER PROFILE
+    const [viewerProfile, userRecord] = await Promise.all([
+      ProfileSettings.findOne({ userId: userId }).lean(),
+      User.findById(userId).select('email userName').lean()
+    ]);
+
+    if (!viewerProfile) {
+      console.warn(`[DownloadRequest] Profile not found for userId: ${userId}`);
+    }
+
+    // Combine metadata: Use provided override or feed's own metadata
+    const metadataToUse = feed.designMetadata || {};
+
+    // Add Job to Queue
+    const job = await downloadQueue.add({
+      feed,
+      userId,
+      viewer: {
+        userName: viewerProfile?.userName || userRecord?.userName || viewerProfile?.name || "User",
+        profileAvatar: viewerProfile?.modifyAvatar || null,
+        name: viewerProfile?.name || "",
+        email: userRecord?.email || "",
+        phone: viewerProfile?.phoneNumber || ""
+      },
+      designMetadata: metadataToUse,
+    }, {
+      attempts: 2,
+      backoff: 5000,
+      removeOnComplete: { age: 3600 }, // Keep in redis for 1 hour so status can be checked
+      removeOnFail: false
+    });
+
+    console.log(`[DownloadRequest] Job ${job.id} created for user ${userId}, feed ${feedId}`);
+
+    // Record Activity
+    await logUserActivity({
+      userId,
+      actionType: "DOWNLOAD_POST_REQUEST",
+      targetId: feedId,
+      targetModel: "Feed",
+      metadata: { platform: "web", jobId: job.id }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Download processing started",
+      jobId: job.id,
+      status: "queued"
+    });
+
+  } catch (err) {
+    console.error("Error in requestDownloadFeed:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// Check Job Status
+exports.getDownloadJobStatus = async (req, res) => {
+  const { jobId } = req.params;
+  if (!jobId) return res.status(400).json({ message: "jobId required" });
+
+  try {
+    const job = await downloadQueue.getJob(jobId);
+    if (!job) {
+      console.warn(`[JobStatus] Job ${jobId} not found in queue.`);
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    const state = await job.getState();
+    const progress = job.progress();
+    console.log(`[JobStatus] Job ${jobId} state: ${state}, progress: ${progress}%`);
+
+    let result = null;
+    if (state === 'completed') {
+      result = job.returnvalue; // { downloadUrl: ... }
+    }
+
+    res.json({
+      jobId,
+      status: state, // queued, active, completed, failed
+      progress,
+      result
+    });
+  } catch (err) {
+    console.error("Error checking job status:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+
+
+
+
+
+exports.shareFeed = async (req, res) => {
+  const userId = req.Id || req.body.userId;
+  const { feedId, shareChannel, shareTarget } = req.body;
+
+  if (!userId || !feedId) {
+    return res.status(400).json({ message: "userId and feedId are required" });
+  }
+
+  try {
+    const user = await User.findById(userId).lean();
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const feed = await Feeds.findById(feedId).lean();
+    if (!feed) return res.status(404).json({ message: "Feed not found" });
+
+    // SAVE SHARE ACTION
+    await UserFeedActions.findOneAndUpdate(
+      { userId },
+      {
+        $push: {
+          sharedFeeds: {
+            feedId,
+            shareChannel: shareChannel || "copy_link",
+            shareTarget: shareTarget || null,
+            sharedAt: new Date()
+          }
+        }
+      },
+      { upsert: true }
+    );
+
+    await logUserActivity({
+      userId,
+      actionType: "SHARE_POST",
+      targetId: feedId,
+      targetModel: "Feed",
+      metadata: { platform: "web" },
+    });
+
+    res.status(200).json({
+      message: "Share recorded successfully",
+    });
+
+  } catch (err) {
+    console.error("Error generating share link:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+
+
+
+exports.generateShareLink = async (req, res) => {
+  const { feedId } = req.params;
+
+  try {
+    // Find the feed
+    const feed = await Feeds.findById(feedId).lean();
+    if (!feed) {
+      return res.status(404).json({ message: "Feed not found" });
+    }
+
+    // Get user info from ProfileSettings using createdByAccount
+    const profileSettings = await ProfileSettings.findOne({
+      accountId: feed.createdByAccount
+    }).select('userName name profileAvatar').lean();
+
+    // Get username - prioritize userName, then name
+    let userName = 'User';
+    let profileAvatar = null;
+
+    if (profileSettings) {
+      userName = profileSettings.userName || profileSettings.name || 'User';
+      profileAvatar = profileSettings.profileAvatar;
+    }
+
+
+
+    // ============ CRITICAL FIX: Use backend URL for sharing ============
+    // WhatsApp/Facebook crawlers MUST hit the backend URL to get OG tags
+
+
+    // Generate OG image URL based on media type
+    let ogImageUrl = '';
+    let directMediaUrl = feed.contentUrl;
+    let mediaType = feed.type || 'image';
+
+    // IMPORTANT: Make sure image URLs are publicly accessible and optimized for OG tags
+
+    // Handle Cloudinary images
+    if (feed.contentUrl && feed.contentUrl.includes('cloudinary.com')) {
+      // Cloudinary - optimize for OG tags (1200x630 is ideal for Facebook/WhatsApp)
+      ogImageUrl = feed.contentUrl.replace('/upload/', '/upload/c_fill,w_1200,h_630,f_auto,q_auto:best/');
+      directMediaUrl = feed.contentUrl;
+      mediaType = 'image';
+    }
+    // Handle local server images/videos
+    else if (feed.contentUrl && feed.contentUrl.includes('1croreprojects.com')) {
+      // For local server, make sure the URL is publicly accessible
+      ogImageUrl = feed.contentUrl;
+      directMediaUrl = feed.contentUrl;
+      mediaType = feed.type || 'image';
+
+      // If it's a video and we have thumbnail
+      if (feed.type === 'video') {
+        // Try to get thumbnail from files array
+        if (feed.files && feed.files.length > 0 && feed.files[0].thumbnail) {
+          ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${feed.files[0].thumbnail}`;
+        }
+        // Try to find _thumb.jpg file
+        else if (feed.files && feed.files.length > 0 && feed.files[0].localPath) {
+          const videoPath = feed.files[0].localPath;
+          const baseName = path.basename(videoPath, path.extname(videoPath));
+          const thumbPath = path.join(path.dirname(videoPath), `${baseName}_thumb.jpg`);
+
+          if (fs.existsSync(thumbPath)) {
+            const relativePath = thumbPath.split('/uploads/').pop();
+            if (relativePath) {
+              ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/uploads/${relativePath}`;
+            }
+          } else {
+            // Use video thumbnail endpoint as fallback
+            ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/api/feed/video-thumbnail/${feedId}`;
+          }
+        }
+      }
+    }
+
+    // Fallback: Check files array
+    if (!ogImageUrl && feed.files && feed.files.length > 0) {
+      const firstFile = feed.files[0];
+      if (firstFile.url) {
+        ogImageUrl = firstFile.url;
+        directMediaUrl = firstFile.url;
+      }
+      // For video thumbnails
+      if (feed.type === 'video' && firstFile.thumbnail) {
+        ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${firstFile.thumbnail}`;
+      }
+    }
+
+    // Fallback: Check localPath
+    if (!ogImageUrl && feed.localPath) {
+      const pathPart = feed.localPath.split('/media/').pop();
+      if (pathPart) {
+        ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${pathPart}`;
+        directMediaUrl = ogImageUrl;
+      }
+    }
+
+    // ULTIMATE FALLBACK: Use default OG image
+    if (!ogImageUrl || !ogImageUrl.startsWith('http')) {
+      ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/default-og-image.jpg`;
+    }
+
+    // IMPORTANT: Validate the OG image URL is accessible
+    // You might want to check if the image exists and is publicly accessible
+
+    // Get description - use actual caption if available
+    const actualCaption = feed.dec || feed.caption || '';
+
+
+
+
+    res.json({
+      // 🔥 ONLY frontend URL
+      shareUrl: `${process.env.FRONTEND_URL}/share/post/${feedId}`,
+      caption: actualCaption,
+      userName,
+      mediaType,
+      directMediaUrl,
+      profileAvatar
+    });
+
+
+
+  } catch (err) {
+    console.error("Error generating share link:", err);
+    res.status(500).json({
+      message: "Internal server error",
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+
+
+exports.getVideoThumbnail = async (req, res) => {
+  const { feedId } = req.params;
+
+  try {
+    const feed = await Feeds.findById(feedId).lean();
+
+    if (!feed || feed.type !== 'video') {
+      return serveDefaultThumbnail(res);
+    }
+
+    // Priority 1: Check for existing thumbnail in files
+    if (feed.files?.[0]?.thumbnail) {
+      const thumbnailPath = path.join(__dirname, '../../uploads', feed.files[0].thumbnail);
+      if (fs.existsSync(thumbnailPath)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 year cache
+        res.setHeader('Content-Type', 'image/jpeg');
+        return res.sendFile(thumbnailPath);
+      }
+    }
+
+    // Priority 2: Check for _thumb.jpg file
+    if (feed.files?.[0]?.localPath) {
+      const videoPath = feed.files[0].localPath;
+      const baseName = path.basename(videoPath, path.extname(videoPath));
+      const thumbName = `${baseName}_thumb.jpg`;
+      const thumbPath = path.join(path.dirname(videoPath), thumbName);
+
+      if (fs.existsSync(thumbPath)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000');
+        res.setHeader('Content-Type', 'image/jpeg');
+        return res.sendFile(thumbPath);
+      }
+    }
+
+    // Priority 3: Check contentUrl for Cloudinary
+    if (feed.contentUrl && feed.contentUrl.includes('cloudinary.com')) {
+      const cloudinaryThumb = feed.contentUrl.replace('/upload/', '/upload/w_1200,h_630,c_fill,q_auto:best/') + '.jpg';
+      return res.redirect(cloudinaryThumb);
+    }
+
+    // Priority 4: Generate thumbnail on the fly (if you have ffmpeg)
+    if (feed.files?.[0]?.localPath && fs.existsSync(feed.files[0].localPath)) {
+      try {
+        const thumbnailPath = await generateVideoThumbnail(feed.files[0].localPath);
+        if (thumbnailPath && fs.existsSync(thumbnailPath)) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000');
+          res.setHeader('Content-Type', 'image/jpeg');
+          return res.sendFile(thumbnailPath);
+        }
+      } catch (err) {
+        console.warn('Failed to generate thumbnail:', err.message);
+      }
+    }
+
+    // Final fallback
+    return serveDefaultThumbnail(res);
+
+  } catch (err) {
+    console.error("Error getting video thumbnail:", err);
+    return serveDefaultThumbnail(res);
+  }
+};
+
+async function generateVideoThumbnail(videoPath) {
+  // This requires ffmpeg to be installed
+
+  const thumbPath = videoPath.replace(path.extname(videoPath), '_thumb.jpg');
+
+  return new Promise((resolve, reject) => {
+    ffmpeg(videoPath)
+      .screenshots({
+        timemarks: ['00:00:01'], // Capture at 1 second
+        filename: path.basename(thumbPath),
+        folder: path.dirname(thumbPath),
+        size: '1200x630'
+      })
+      .on('end', () => resolve(thumbPath))
+      .on('error', reject);
+  });
+}
+
+function serveDefaultThumbnail(res) {
+  const defaultPath = path.join(__dirname, '../../public/default-video-thumbnail.jpg');
+  if (fs.existsSync(defaultPath)) {
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // 1 day cache
+    return res.sendFile(defaultPath);
+  }
+
+  // SVG placeholder as last resort
+  const svgPlaceholder = `
+    <svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
+      <rect width="1200" height="630" fill="#3B82F6"/>
+      <text x="600" y="300" font-family="Arial" font-size="40" fill="white" text-anchor="middle">
+        ${process.env.APP_NAME || 'Video'}
+      </text>
+      <circle cx="600" cy="200" r="50" fill="white" opacity="0.8"/>
+      <polygon points="580,180 580,220 620,200" fill="#3B82F6"/>
+    </svg>
+  `;
+
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.send(svgPlaceholder);
+}
+
+async function getOptimizedOGMedia(feed) {
+  let ogImageUrl = '';
+  let ogVideoUrl = '';
+  let directMediaUrl = feed.contentUrl;
+
+  // Handle Cloudinary images
+  if (feed.contentUrl && feed.contentUrl.includes('cloudinary.com')) {
+    ogImageUrl = feed.contentUrl.replace('/upload/', '/upload/c_fill,w_1200,h_630,f_auto,q_auto:best/');
+    directMediaUrl = feed.contentUrl;
+  }
+  // Handle local server images/videos
+  else if (feed.contentUrl && feed.contentUrl.includes('1croreprojects.com')) {
+    ogImageUrl = feed.contentUrl;
+    directMediaUrl = feed.contentUrl;
+
+    // If it's a video and we have thumbnail
+    if (feed.type === 'video') {
+      if (feed.files && feed.files.length > 0 && feed.files[0].thumbnail) {
+        ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${feed.files[0].thumbnail}`;
+      }
+      else if (feed.files && feed.files.length > 0 && feed.files[0].localPath) {
+        const videoPath = feed.files[0].localPath;
+        const baseName = path.basename(videoPath, path.extname(videoPath));
+        const thumbPath = path.join(path.dirname(videoPath), `${baseName}_thumb.jpg`);
+
+        if (fs.existsSync(thumbPath)) {
+          const relativePath = thumbPath.split('/uploads/').pop();
+          if (relativePath) {
+            ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/uploads/${relativePath}`;
+          }
+        } else {
+          ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/api/feed/video-thumbnail/${feed._id}`;
+        }
+      }
+    }
+  }
+
+  // Fallback: Check files array
+  if (!ogImageUrl && feed.files && feed.files.length > 0) {
+    const firstFile = feed.files[0];
+    if (firstFile.url) {
+      ogImageUrl = firstFile.url;
+      directMediaUrl = firstFile.url;
+    }
+    if (feed.type === 'video' && firstFile.thumbnail) {
+      ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${firstFile.thumbnail}`;
+    }
+  }
+
+  // Fallback: Check localPath
+  if (!ogImageUrl && feed.localPath) {
+    const pathPart = feed.localPath.split('/media/').pop();
+    if (pathPart) {
+      ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${pathPart}`;
+      directMediaUrl = ogImageUrl;
+    }
+  }
+
+  // ULTIMATE FALLBACK: Use default OG image
+  if (!ogImageUrl || !ogImageUrl.startsWith('http')) {
+    ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/default-og-image.jpg`;
+  }
+
+  // Set ogVideoUrl for videos
+  if (feed.type === 'video') {
+    ogVideoUrl = directMediaUrl;
+  }
+
+  return { ogImageUrl, ogVideoUrl };
+}
+
+
+
+
+exports.sharePostOG = async (req, res) => {
+  const { feedId } = req.params;
+
+  try {
+    const feed = await Feeds.findById(feedId).lean();
+
+    if (!feed || feed.audience !== "public" || feed.isDeleted) {
+      return res.send(getDefaultOGPage());
+    }
+
+    // detect crawler
+    const ua = req.headers["user-agent"] || "";
+    const isCrawler =
+      /facebookexternalhit|Twitterbot|WhatsApp|Telegram|bot|crawler|preview/i.test(ua);
+
+    // 👤 normal user → frontend
+    if (!isCrawler) {
+      return res.redirect(
+        302,
+        `${process.env.FRONTEND_URL}/home/retrivefeed/${feedId}`
+      );
+    }
+
+    // 🤖 crawler → OG HTML
+    const profile = await ProfileSettings.findOne({
+      accountId: feed.createdByAccount,
+    }).lean();
+
+    const userName = profile?.userName || "User";
+    const caption = feed.dec || `Post by ${userName}`;
+    const title = `${userName}'s ${feed.type === "video" ? "Video" : "Post"}`;
+
+    const currentUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+    const frontendUrl = `${process.env.FRONTEND_URL}/share/post/${feedId}`;
+
+    const { ogImageUrl, ogVideoUrl } = await getOptimizedOGMedia(feed);
+
+    res.set("Content-Type", "text/html");
+    res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>${title}</title>
+
+<meta property="og:url" content="${currentUrl}" />
+<meta property="og:title" content="${title}" />
+<meta property="og:description" content="${caption}" />
+<meta property="og:image" content="${ogImageUrl}" />
+${feed.type === "video" ? `<meta property="og:video" content="${ogVideoUrl}" />` : ""}
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${title}" />
+<meta name="twitter:description" content="${caption}" />
+<meta name="twitter:image" content="${ogImageUrl}" />
+
+
+<link rel="canonical" href="${frontendUrl}" />
+</head>
+<body></body>
+</html>
+    `);
+  } catch (err) {
+    console.error("OG Share Error:", err);
+    return res.status(500).send(getErrorOGPage());
+  }
+};
+
+
+
+
+
+
+function getDefaultOGPage() {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Post not available</title>
+  <meta property="og:title" content="Post not available" />
+  <meta property="og:description" content="This post is private or no longer exists." />
+  <meta property="og:image" content="${process.env.BACKEND_URL}/default-og-image.jpg" />
+  <meta property="og:type" content="website" />
+</head>
+<body>
+  <h3>Post not available</h3>
+</body>
+</html>
+  `;
+}
+
+function getErrorOGPage() {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Something went wrong</title>
+  <meta property="og:title" content="Something went wrong" />
+  <meta property="og:description" content="Unable to load this post." />
+  <meta property="og:image" content="${process.env.BACKEND_URL}/default-og-image.jpg" />
+  <meta property="og:type" content="website" />
+</head>
+<body>
+  <h3>Something went wrong</h3>
+</body>
+</html>
+  `;
+}
+
+
+
+
+
+
+
+
+
+
+exports.postComment = async (req, res) => {
+  try {
+    const userId = req.Id || req.body.userId;
+    const { feedId, commentText, parentCommentId } = req.body;
+
+    if (!userId || !feedId || !commentText?.trim()) {
+      return res.status(400).json({ message: "Invalid input" });
+    }
+
+    if (parentCommentId && !(await UserComment.exists({ _id: parentCommentId }))) {
+      return res.status(400).json({ message: "Parent comment not found" });
+    }
+
+    const newComment = await UserComment.create({
+      userId,
+      feedId,
+      commentText: commentText.trim(),
+      parentCommentId: parentCommentId || null,
+      createdAt: new Date(),
+    });
+
+    const userProfile = await ProfileSettings.findOne({ userId })
+      .select("userName profileAvatar")
+      .lean();
+    // 🔹 Notify feed owner
+    const feed = await Feeds.findById(feedId)
+      .select("createdByAccount contentUrl roleRef")
+      .lean();
+
+
+    await logUserActivity({
+      userId,
+      actionType: "COMMENT",
+      targetId: feedId,
+      targetModel: "Feed",
+      metadata: { platform: "web" },
+    });
+
+
+    if (feed && feed.createdByAccount.toString() !== userId.toString()) {
+      await createAndSendNotification({
+        senderId: userId,
+        receiverId: feed.createdByAccount,
+        type: "COMMENT",
+        title: "Commented on your Photo 💬",
+        message: `"${commentText.slice(0, 50)}..."`,
+        entityId: feed._id,
+        entityType: "Feed",
+        image: feed.contentUrl || "",
+        roleRef: feed.roleRef || "User", // optional
+      });
+    }
+
+
+    res.status(201).json({
+      message: "Comment posted successfully",
+      comment: {
+        ...newComment.toObject(),
+        timeAgo: feedTimeCalculator(newComment.createdAt),
+        username: userProfile?.userName || "Unknown User",
+        avatar: userProfile?.profileAvatar || null,
+      },
+    });
+  } catch (err) {
+    console.error("Error posting comment:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+exports.likeReplyComment = async (req, res) => {
+  try {
+    const { replyCommentId } = req.body;
+    const userIdRaw = req.Id;
+
+    if (!userIdRaw) return res.status(401).json({ message: "Unauthorized" });
+    if (!replyCommentId) return res.status(400).json({ message: "replyCommentId is required" });
+
+    const userId = new mongoose.Types.ObjectId(userIdRaw);
+    const replyId = new mongoose.Types.ObjectId(replyCommentId);
+
+    // check if already liked
+    const existing = await UserReplyComment.findOne({ _id: replyId, likes: userId }).lean();
+
+    if (existing) {
+      // unlike
+      const updated = await UserReplyComment.findByIdAndUpdate(replyId, {
+        $pull: { likes: userId },
+        $inc: { likeCount: -1 }
+      }, { new: true }).lean();
+
+      return res.json({ liked: false, likeCount: updated ? (updated.likeCount || (Array.isArray(updated.likes) ? updated.likes.length : 0)) : 0 });
+    }
+
+    // like
+    const updated = await UserReplyComment.findByIdAndUpdate(replyId, {
+      $addToSet: { likes: userId },
+      $inc: { likeCount: 1 }
+    }, { new: true }).lean();
+
+    return res.json({ liked: true, likeCount: updated ? (updated.likeCount || (Array.isArray(updated.likes) ? updated.likes.length : 0)) : 1 });
+  } catch (err) {
+    console.error("likeReplyComment error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+
+exports.likeMainComment = async (req, res) => {
+  const { commentId } = req.body;
+  const userIdRaw = req.Id;
+
+  if (!userIdRaw)
+    return res.status(401).json({ message: "Unauthorized" });
+
+  if (!commentId)
+    return res.status(400).json({ message: "commentId is required" });
+
+  try {
+    const userId = new mongoose.Types.ObjectId(userIdRaw);
+
+    const filter = {
+      userId,
+      commentId: new mongoose.Types.ObjectId(commentId),
+    };
+
+    // Check if already liked
+    const existing = await CommentLike.findOne(filter);
+
+    if (existing) {
+      // Unlike
+      await CommentLike.deleteOne(filter);
+      return res.json({ liked: false, message: "Comment unliked" });
+    }
+
+    // Like
+    await CommentLike.create(filter);
+
+    return res.json({ liked: true, message: "Comment liked" });
+
+  } catch (err) {
+    console.error("Main Comment Like Error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+exports.postReplyComment = async (req, res) => {
+  try {
+    const userId = req.Id || req.body.userId;
+    const { commentText, parentCommentId, parentReplyId } = req.body;
+
+    console.log({ commentText, parentCommentId, parentReplyId });
+
+    if (!userId || !commentText?.trim()) {
+      return res.status(400).json({ message: "Invalid input" });
+    }
+
+    let finalParentCommentId = parentCommentId;
+    let notificationReceiverId = null;
+    let feedId = null;
+
+    // If this is a nested reply (reply to another reply)
+    if (parentReplyId) {
+      const parentReply = await UserReplyComment.findById(parentReplyId)
+        .select("userId parentCommentId")
+        .lean();
+
+      if (!parentReply) {
+        return res.status(400).json({ message: "Parent reply not found" });
+      }
+
+      finalParentCommentId = parentReply.parentCommentId;
+      notificationReceiverId = parentReply.userId;
+    } else {
+      // Regular reply to main comment
+      if (!parentCommentId) {
+        return res.status(400).json({ message: "Parent comment ID is required" });
+      }
+
+      const parentComment = await UserComment.findById(parentCommentId)
+        .select("userId feedId")
+        .lean();
+
+      if (!parentComment) {
+        return res.status(400).json({ message: "Parent comment not found" });
+      }
+
+      notificationReceiverId = parentComment.userId;
+      feedId = parentComment.feedId;
+    }
+
+    // Create the reply
+    const newReply = await UserReplyComment.create({
+      userId,
+      replyText: commentText.trim(),
+      parentCommentId: finalParentCommentId,
+      parentReplyId: parentReplyId || undefined, // Only set if it's a nested reply
+      createdAt: new Date(),
+    });
+
+    // Get user profile for response
+    const userProfile = await ProfileSettings.findOne({ userId })
+      .select("userName profileAvatar")
+      .lean();
+
+    // 🔹 Send notification if receiver is different from sender
+    if (notificationReceiverId && notificationReceiverId.toString() !== userId.toString()) {
+      // Get feed ID if not already available
+      if (!feedId) {
+        const parentComment = await UserComment.findById(finalParentCommentId)
+          .select("feedId")
+          .lean();
+        feedId = parentComment?.feedId;
+      }
+
+      if (feedId) {
+        const feed = await Feeds.findById(feedId).select("contentUrl").lean();
+
+        await createAndSendNotification({
+          senderId: userId,
+          receiverId: notificationReceiverId,
+          type: "COMMENT",
+          title: parentReplyId ? "New Reply to Your Comment 💬" : "New Reply 💬",
+          message: commentText.slice(0, 50) + "...",
+          entityId: feedId,
+          entityType: "Comment",
+          image: feed?.contentUrl || "",
+        });
+      }
+    }
+
+    res.status(201).json({
+      message: "Reply posted successfully",
+      reply: {
+        ...newReply.toObject(),
+        timeAgo: feedTimeCalculator(newReply.createdAt),
+        username: userProfile?.userName || "Unknown User",
+        avatar: userProfile?.profileAvatar || null,
+        replyId: newReply._id,
+        isNested: !!parentReplyId,
+      },
+    });
+  } catch (err) {
+    console.error("Error posting reply:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+
+
+
+
+
+
+exports.postView = async (req, res) => {
+  const userId = req.Id || req.body.userId; // optional, for anonymous views
+  const { feedId, watchDuration } = req.body;
+
+  if (!feedId) return res.status(400).json({ message: "feedId is required" });
+
+  try {
+    // Create a new view entry
+    const view = await UserView.create({
+      userId: userId || null, // allow anonymous views
+      feedId,
+      watchDuration: watchDuration || 0
+    });
+
+    res.status(201).json({
+      message: "View recorded successfully",
+      view
+    });
+  } catch (err) {
+    console.error("Error recording view:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+
+exports.getUserSavedFeeds = async (req, res) => {
+  try {
+    const userId = req.Id || req.body.userId;
+
+
+    // 1️⃣ Validate
+    if (!userId) {
+      return res.status(400).json({ message: "userId or accountId is required" });
+    }
+
+    // 2️⃣ Get actions doc for this user/account
+    const userActions = await UserFeedActions.findOne({ userId }).lean();
+
+    if (!userActions || userActions.savedFeeds.length === 0) {
+      return res.status(200).json({ savedFeeds: [] });
+    }
+
+    const savedFeedIds = userActions.savedFeeds.map((f) => f.feedId);
+
+    // 3️⃣ Fetch feed details (FAST — uses _id index)
+    const feeds = await Feeds.find({ _id: { $in: savedFeedIds } })
+      .select("_id type contentUrl")
+      .lean();
+
+    // 4️⃣ FAST like count using aggregate with indexed field
+    const likesAggregation = await UserFeedActions.aggregate([
+      { $unwind: "$likedFeeds" },
+      {
+        $match: {
+          "likedFeeds.feedId": { $in: savedFeedIds },
+        },
+      },
+      {
+        $group: {
+          _id: "$likedFeeds.feedId",
+          likeCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // Build a map for O(1) lookup
+    const likeMap = {};
+    likesAggregation.forEach((l) => {
+      likeMap[l._id.toString()] = l.likeCount;
+    });
+
+    // 5️⃣ Final response combining savedAt + feed data + likeCount
+    const result = feeds.map((feed) => {
+      const savedData = userActions.savedFeeds.find(
+        (f) => f.feedId.toString() === feed._id.toString()
+      );
+
+      return {
+        _id: feed._id,
+        type: feed.type,
+        contentUrl: feed.contentUrl || null,
+        savedAt: savedData?.savedAt,
+        likeCount: likeMap[feed._id.toString()] || 0,
+      };
+    });
+
+    return res.status(200).json({ savedFeeds: result });
+
+  } catch (error) {
+    console.error("❌ Error getUserSavedFeeds:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+
+
+exports.getUserDownloadedFeeds = async (req, res) => {
+  const userId = req.Id || req.body.userId;
+
+  if (!userId) return res.status(400).json({ message: "userId is required" });
+
+  try {
+    const userActions = await UserFeedActions.findOne({ userId })
+      .populate("downloadedFeeds.feedId", "contentUrl fileUrl downloadUrl type")
+      .lean();
+
+    if (!userActions || !userActions.downloadedFeeds.length) {
+      return res.status(404).json({ message: "No downloaded feeds found" });
+    }
+
+    // Map with timestamp
+    const downloadedFeeds = userActions.downloadedFeeds.map(item => {
+      const feed = item.feedId;
+      if (!feed) return null;
+
+      const folder = feed.type === "video" ? "videos" : "images";
+      const url =
+        feed.downloadUrl ||
+        feed.fileUrl ||
+        (feed.contentUrl
+          ? `${process.env.BACKEND_URL}/uploads/${folder}/${path.basename(feed.contentUrl)}`
+          : null);
+
+      return {
+        feedId: feed._id,
+        url,
+        type: feed.type,
+        downloadedAt: item.downloadedAt, // ✅ include timestamp
+      };
+    }).filter(Boolean);
+
+    res.status(200).json({
+      message: "Downloaded feeds retrieved successfully",
+      count: downloadedFeeds.length,
+      downloadedFeeds,
+    });
+  } catch (err) {
+    console.error("Error fetching downloaded feeds:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+exports.getUserLikedFeeds = async (req, res) => {
+  const userId = req.Id || req.body.userId;
+
+  if (!userId) return res.status(400).json({ message: "userId is required" });
+
+  try {
+    const likedFeeds = await UserFeedActions.aggregate([
+      { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+      { $unwind: "$likedFeeds" },
+
+      // Join feed data
+      {
+        $lookup: {
+          from: "Feeds",
+          localField: "likedFeeds.feedId",
+          foreignField: "_id",
+          as: "feed",
+        },
+      },
+      { $unwind: "$feed" },
+
+      // Count total likes for each feed
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$likedFeeds.feedId" },
+          pipeline: [
+            { $unwind: "$likedFeeds" },
+            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$feedId"] } } },
+            { $count: "totalLikes" },
+          ],
+          as: "likeStats",
+        },
+      },
+
+      // Format output (no host concatenation)
+      {
+        $project: {
+          feedId: "$feed._id",
+          type: "$feed.type",
+          likedAt: "$likedFeeds.likedAt",
+          totalLikes: { $ifNull: [{ $arrayElemAt: ["$likeStats.totalLikes", 0] }, 0] },
+          url: {
+            $cond: [
+              { $ifNull: ["$feed.downloadUrl", false] },
+              "$feed.downloadUrl",
+              {
+                $cond: [
+                  { $ifNull: ["$feed.fileUrl", false] },
+                  "$feed.fileUrl",
+                  {
+                    $cond: [
+                      { $ifNull: ["$feed.contentUrl", false] },
+                      "$feed.contentUrl",
+                      null,
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    ]);
+
+    if (!likedFeeds.length) {
+      return res.status(404).json({ message: "No liked feeds found" });
+    }
+
+    res.status(200).json({
+      message: "Liked feeds retrieved successfully",
+      count: likedFeeds.length,
+      likedFeeds,
+    });
+  } catch (err) {
+    console.error("Error fetching liked feeds:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+
+
+
+
+
+
+exports.userHideFeed = async (req, res) => {
+  try {
+    const userId = req.Id || req.body.userId;
+    const postId = req.body.feedId;
+
+    if (!userId || !postId) {
+      return res.status(400).json({ message: "User ID and Post ID are required" });
+    }
+
+    // 1️⃣ Check if hidden already (very fast when index exists)
+    const already = await HiddenPost.findOne({ userId, postId }).lean();
+    if (already) {
+      return res.status(200).json({ message: "Post already hidden" });
+    }
+
+    // 2️⃣ Confirm user exists (light query)
+    const userExists = await User.exists({ _id: userId });
+    if (!userExists) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // 3️⃣ Confirm feed exists (light query)
+    const feedExists = await Feed.exists({ _id: postId });
+    if (!feedExists) {
+      return res.status(404).json({ message: "Feed not found" });
+    }
+
+    // 4️⃣ Hide post
+    await HiddenPost.create({ userId, postId });
+
+    return res.status(200).json({ message: "Post hidden successfully" });
+
+  } catch (err) {
+    console.error("Error hiding post:", err);
+
+    // Handle duplicate index error safely
+    if (err.code === 11000) {
+      return res.status(200).json({ message: "Post already hidden" });
+    }
+
+    return res.status(500).json({
+      message: "Server error",
+      error: err.message,
+    });
+  }
+};
+
+
+
+exports.getUserCategory = async (req, res) => {
+  try {
+    const userId = req.Id || req.body.userId;
+
+
+    if (!userId) {
+      return res.status(400).json({ message: "User ID not found in token" });
+    }
+
+    // Get user category document
+    const userCategory = await UserCategory.findOne({ userId });
+    if (!userCategory) {
+      return res.status(404).json({ message: "User categories not found" });
+    }
+
+    // Extract interested and non-interested IDs
+    const interestedIds = userCategory.interestedCategories.map(c => c.categoryId);
+    const nonInterestedIds = userCategory.nonInterestedCategories.map(c => c.categoryId);
+
+    // Fetch category names
+    const interestedCategories = await Category.find(
+      { _id: { $in: interestedIds } },
+      { _id: 1, name: 1 }
+    );
+
+    const nonInterestedCategories = await Category.find(
+      { _id: { $in: nonInterestedIds } },
+      { _id: 1, name: 1 }
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        interestedCategories,
+        nonInterestedCategories,
+      },
+    });
+  } catch (error) {
+    console.error("Error in getUserCategory:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+
+
+
+
+exports.removeNonInterestedCategory = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { categoryId } = req.body;
+
+    if (!categoryId) {
+      return res.status(400).json({ message: "categoryId is required" });
+    }
+
+    await UserCategory.updateOne(
+      { userId },
+      {
+        $pull: { nonInterestedCategories: categoryId },
+        $set: { [`updatedAtMap.${categoryId}`]: new Date() },
+      }
+    );
+
+    return res.status(200).json({
+      message: "Category removed from Not Interested",
+      categoryId,
+    });
+
+  } catch (err) {
+    console.error("❌ Error removing nonInterested category:", err);
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+
+
+

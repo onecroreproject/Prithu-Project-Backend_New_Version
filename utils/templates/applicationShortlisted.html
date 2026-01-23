@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <style>
+    body { font-family: Arial; background:#f4f6f8; padding:20px; }
+    .box { background:#fff; padding:25px; border-radius:10px; max-width:600px; margin:auto; }
+    .title { color:#16a34a; font-size:22px; font-weight:bold; }
+    .hr { background:#f0fdf4; padding:15px; border-radius:8px; margin-top:15px; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <img src="{logoCid}" width="130" style="display:block;margin:auto;" />
+
+    <p class="title">🎉 You’re Shortlisted!</p>
+
+    <p>Hi <strong>{firstName}</strong>,</p>
+
+    <p>
+      Congratulations! You have been <strong>shortlisted</strong> for the role
+      <strong>{jobTitle}</strong> at <strong>{companyName}</strong>.
+    </p>
+
+    <div class="hr">
+      <p><strong>HR Contact Details</strong></p>
+      <p>Name: {hrName}</p>
+      <p>Designation: {hrPosition}</p>
+      <p>Email: {hrEmail}</p>
+      <p>Phone: {hrPhone}</p>
+      <p>WhatsApp: {hrWhatsApp}</p>
+    </div>
+
+    <p style="margin-top:15px">
+      The HR team will contact you soon to schedule the interview.
+    </p>
+
+    <p style="font-size:12px;color:#999;margin-top:20px">
+      This is an automated email from PRITHU.
+    </p>
+  </div>
+</body>
+</html>

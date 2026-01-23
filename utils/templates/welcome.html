@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to Prithu</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #f9f9f7;
+      font-family: Arial, sans-serif;
+      line-height: 1.4;
+    }
+
+    .email-container {
+      max-width: 600px;
+      margin: 40px auto;
+      background-color: #f9f9f7;
+      box-shadow: 2px 6px 30px rgba(0, 0, 0, 0.15);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .header {
+      background-color: #f9f9f7;
+      color: #064d3b;
+      padding: 40px 20px 20px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .logo-text-container {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      font-family: serif;
+    }
+
+    /* Add rotation animation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Apply the animation to your logo */
+.header img.logo {
+  width: 65px;
+  height: auto;
+  animation: spin 4s linear infinite; /* 4s = rotation speed */
+}
+
+
+    .header h1 {
+      margin: 0;
+      font-size: 30px;
+      color: #064d3b;
+    }
+
+    .content {
+      padding: 0 40px;
+      background-color: #f9f9f7;
+      color: black;
+      text-align: center;
+    }
+
+    .content h2 {
+      font-size: 18px;
+      text-align: left;
+      margin-bottom: 10px;
+    }
+
+    .content p {
+      font-size: 16px;
+      margin-bottom: 15px;
+      text-align: left;
+    }
+
+    .content ul {
+      text-align: left;
+      line-height: 1.6;
+      font-size: 16px;
+      list-style: none;
+      padding-left: 0;
+    }
+
+    .cta-button {
+      display: inline-block;
+      background-color: #4169E1;
+      color: white;
+      padding: 15px 30px;
+      text-decoration: none;
+      border-radius: 5px;
+      font-size: 18px;
+      margin: 20px 0;
+      transition: background 0.3s ease, transform 0.2s ease;
+    }
+
+    .cta-button:hover {
+      background-color: #365fc0;
+      transform: translateY(-2px);
+    }
+
+    .footer {
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #064d3b;
+      background-color: #f9f9f7;
+      border-top: 1px solid rgba(0, 0, 0, 0.05);
+    }
+
+    .footer a {
+      color: #064d3b;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    .footer p {
+      margin: 8px 0;
+      color: black;
+    }
+
+    @media only screen and (max-width: 600px) {
+      .header {
+        padding: 20px;
+      }
+      .logo-text-container {
+        flex-direction: row;
+        align-items: center;
+      }
+      .header img.logo {
+        width: 50px;
+      }
+      .header h1 {
+        font-size: 24px;
+      }
+      .footer {
+        padding: 15px 10px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="email-container">
+    <div class="header" >
+      <div class="logo-text-container">
+        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo" class="logo" />
+        <h1 style="font-size: 37px">Prithu</h1>
+      </div>
+    </div>
+
+    <div class="content">
+        <h2 style="font-size: 19px">Hi {username},</h2>
+      <p  style="font-size: 18px;">Welcome to <strong>Prithu</strong>! We’re thrilled to have you join our creative community.</p>
+
+      <p  style="font-size: 18px;">Here, you can explore trending photos and videos, share your own stories, and connect with amazing creators from all around the world.</p>
+
+      <p style="font-size: 18px;">With Prithu, you can:</p>
+
+      <ul  style="font-size: 18px;">
+        <li>📸 <strong>Post & Share</strong> your favorite moments through images and videos.</li>
+        <li>❤️ <strong>Like, Comment & Download</strong> the content that inspires you.</li>
+        <li>🚀 <strong>Discover What’s Trending</strong> — stay updated with the latest viral posts.</li>
+        <li>👤 <strong>Explore Creator Profiles</strong> and follow your favorites.</li>
+      </ul>
+
+      <a href="#" class="cta-button">Start Exploring Now</a>
+
+      <p style="text-align:center; font-size: 18px">Get ready to be inspired, express yourself, and enjoy endless creativity — all in one place.</p>
+	  
+      <p style="text-align:center;"><strong>Warm regards,<br>The Prithu Team</strong></p>
+    </div>
+
+     <div class="footer">
+      <p><a href="mailto:contact@prithu.in" style="color: black;">info@prithu.in</a></p>
+      <p>If you wish to unsubscribe, <a href="#" style="color: black;">let us know!</a></p>
+      <p><a href="#" style="color: black;">View this email as a web page</a></p>
+    </div>
+  </div>
+</body>
+</html>
