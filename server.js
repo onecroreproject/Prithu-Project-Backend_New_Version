@@ -70,60 +70,52 @@ const drive = google.drive({
 });
 
 app.get("/media/:fileId", async (req, res) => {
-  console.log("working in media")
+  console.log("📥 Media request:", req.params.fileId);
+
   try {
     const fileId = req.params.fileId;
 
-    // 1) Get file metadata first
+    // 🔑 Token validity check (indirect)
+    console.log("🔐 Checking Google token...");
+
     const meta = await drive.files.get({
       fileId,
       fields: "size, mimeType, name",
     });
 
+    // ✅ If this line runs → token is VALID
+    console.log("✅ Google token is VALID");
+
     const fileSize = Number(meta.data.size || 0);
     const mimeType = meta.data.mimeType || "application/octet-stream";
 
-    // ✅ set content type (important for audio/video)
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Cache-Control", "public, max-age=31536000");
 
     const range = req.headers.range;
 
-    // 2) If browser requests a range (important!)
     if (range && fileSize) {
       const parts = range.replace(/bytes=/, "").split("-");
       const start = parseInt(parts[0], 10);
       const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
 
-      // safety
       if (start >= fileSize || end >= fileSize) {
         res.status(416).setHeader("Content-Range", `bytes */${fileSize}`);
         return res.end();
       }
 
-      const chunkSize = end - start + 1;
-
       res.status(206);
       res.setHeader("Content-Range", `bytes ${start}-${end}/${fileSize}`);
-      res.setHeader("Content-Length", chunkSize);
+      res.setHeader("Content-Length", end - start + 1);
 
       const driveStream = await drive.files.get(
         { fileId, alt: "media" },
-        {
-          responseType: "stream",
-          headers: {
-            Range: `bytes=${start}-${end}`,
-          },
-        }
+        { responseType: "stream", headers: { Range: `bytes=${start}-${end}` } }
       );
 
       return driveStream.data.pipe(res);
     }
-
-    // 3) No range request → send whole file
-    res.status(200);
-    if (fileSize) res.setHeader("Content-Length", fileSize);
 
     const driveStream = await drive.files.get(
       { fileId, alt: "media" },
@@ -131,9 +123,16 @@ app.get("/media/:fileId", async (req, res) => {
     );
 
     return driveStream.data.pipe(res);
+
   } catch (err) {
-    console.error("❌ Media stream error:", err.message);
-    res.sendStatus(404);
+    // ❌ If we are here → token is INVALID (or revoked)
+    if (err.message && err.message.includes("invalid_grant")) {
+      console.error("❌ Google token is INVALID (invalid_grant)");
+    } else {
+      console.error("❌ Media stream error:", err.message);
+    }
+
+    return res.sendStatus(404);
   }
 });
 

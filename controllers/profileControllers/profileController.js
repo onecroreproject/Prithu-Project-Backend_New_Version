@@ -133,34 +133,57 @@ exports.userProfileDetailUpdate = async (req, res) => {
     // -----------------------------------------
     // ✅ NEW LOCAL STORAGE HANDLING
     // -----------------------------------------
-    if (req.localFile) {
-      if (profile?.profileAvatarFilename) {
-        const oldPath = path.join(
-          __dirname,
-          "../../media/user",
-          userId.toString(),
-          "profilepic",
-          profile.profileAvatarFilename
-        );
-        deleteLocalFile(oldPath);
-      }
+ if (req.localFile) {
+  // 🧹 delete old profile avatar (local)
+  if (profile?.profileAvatarFilename) {
+    const oldPath = path.join(
+      __dirname,
+      "../../media/user",
+      userId.toString(),
+      "profilepic",
+      profile.profileAvatarFilename
+    );
+    deleteLocalFile(oldPath);
+  }
 
-      updateData.profileAvatar = req.localFile.url;
-      updateData.profileAvatarFilename = req.localFile.filename;
-      updateData.avatarUpdatedAt = req.localFile.uploadedAt;
+  updateData.profileAvatar = req.localFile.url;
+  updateData.profileAvatarFilename = req.localFile.filename;
+  updateData.avatarUpdatedAt = req.localFile.uploadedAt;
 
-      // ✅ Background Removal Integration
-      try {
-        const localFilePath = path.join(req.localFile.path, req.localFile.filename);
-        const removedBg = await removeImageBackground(localFilePath);
-        if (removedBg?.secure_url) {
-          updateData.modifyAvatar = removedBg.secure_url;
-          updateData.modifyAvatarFilename = removedBg.public_id;
-        }
-      } catch (err) {
-        console.error("⚠️ Background removal failed for user:", userId, err.message);
-      }
+  // 🧹 delete old modify avatar (cloud)
+  if (profile?.modifyAvatarFilename) {
+    try {
+      await deleteCloudFile(profile.modifyAvatarFilename);
+    } catch (err) {
+      console.warn(
+        "⚠️ Failed to delete old modifyAvatar:",
+        profile.modifyAvatarFilename
+      );
     }
+  }
+
+  // 🎨 background removal + fallback
+  try {
+    const localFilePath = path.join(
+      req.localFile.path,
+      req.localFile.filename
+    );
+
+    const removedBg = await removeImageBackground(localFilePath);
+
+    if (removedBg?.secure_url) {
+      updateData.modifyAvatar = removedBg.secure_url;
+      updateData.modifyAvatarFilename = removedBg.public_id;
+    } else {
+      updateData.modifyAvatar = req.localFile.url;
+      updateData.modifyAvatarFilename = req.localFile.filename;
+    }
+  } catch (err) {
+    console.error("⚠️ Background removal failed:", err.message);
+    updateData.modifyAvatar = req.localFile.url;
+    updateData.modifyAvatarFilename = req.localFile.filename;
+  }
+} // ✅ IMPORTANT: block closed here
 
 
     // Handle username

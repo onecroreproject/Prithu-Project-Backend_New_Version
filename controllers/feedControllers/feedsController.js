@@ -93,9 +93,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
       }))
     };
 
-    console.log("viewerSocialIcons =", viewerSocialIcons);
-    console.log("safeSocialLinks =", safeSocialLinks);
-    console.log("safeSocialLinks length =", safeSocialLinks.length);
+
 
 
     const viewer = {
