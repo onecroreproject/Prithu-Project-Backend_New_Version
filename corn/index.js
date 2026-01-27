@@ -7,7 +7,7 @@ const deleteQueue = require("../queue/deleteReportQueue");
 const feedQueue = require("../queue/feedPostQueue");
 const trendingQueue = require("../queue/treandingQueue");
 const dailyAnalyticsQueue = require("../queue/salesMetricksUpdate");
-const certificateQueue = require("../queue/aptitudeCertificateSend");
+const notificationQueue = require("../queue/notificationQueue");
 
 // NEW: hashtag trending queue (includes worker inside)
 const hashtagTrendingQueue = require("../queue/hashTagTrendingQueue");
@@ -48,14 +48,14 @@ module.exports = ({ timezone = "Asia/Kolkata" } = {}) => {
     },
     { timezone }
   );
-  
-cron.schedule(
-  "*/5 * * * *",  // every 5 minutes
-  () => {
-    hashtagTrendingQueue.add({});
-  },
-  { timezone }
-);
+
+  cron.schedule(
+    "*/5 * * * *",  // every 5 minutes
+    () => {
+      hashtagTrendingQueue.add({});
+    },
+    { timezone }
+  );
 
 
   // Daily analytics — Midnight
@@ -69,11 +69,7 @@ cron.schedule(
 
 
 
-cron.schedule(
-  "*/10 * * * *",
-  () => certificateQueue.add({}),
-  { timezone }
-);
+
 
 
 

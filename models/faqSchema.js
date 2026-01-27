@@ -24,7 +24,7 @@ const faqItemSchema = new mongoose.Schema({
 const helpSectionSchema = new mongoose.Schema(
   {
     sectionKey: {
-      type: String, // e.g. account, posts, jobs, referral
+      type: String, // e.g. account, posts, referral
       required: true,
       unique: true,
       lowercase: true,
@@ -49,4 +49,4 @@ const helpSectionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = prithuDB.model("HelpFAQ", helpSectionSchema,"HelpFAQ");
+module.exports = prithuDB.model("HelpFAQ", helpSectionSchema, "HelpFAQ");

@@ -101,7 +101,7 @@ exports.userVideoViewCount = async (req, res) => {
     if (!feed) {
       return res.status(404).json({ message: "Feed not found" });
     }
-    if (feed.type !== "video") {
+    if (feed.postType !== "video") {
       return res.status(400).json({ message: "Feed is not a video" });
     }
 

@@ -9,7 +9,8 @@ const { uploadToDrive } = require("../../middlewares/services/googleDriveMedia/g
 const { getFeedUploadFolder } = require("../../middlewares/services/googleDriveMedia/googleDriveFolderStructure");
 const { oAuth2Client } = require("../../middlewares/services/googleDriveMedia/googleDriverAuth");
 const mongoose = require("mongoose");
-const { prithuDB } = require("../../database")
+const { prithuDB } = require("../../database");
+const notificationQueue = require("../../queue/notificationQueue");
 
 
 
@@ -39,27 +40,24 @@ exports.adminFeedUpload = async (req, res) => {
     const roleRef = req.role || "Admin";
     const mediaFiles = req.localFiles || [];
     const audioFile = req.localAudioFile || null;
-    const { categoryId, language = "en", caption = "", designData, scheduleTime, isScheduled = false, audience = "public" } = req.body;
-    if (!categoryId || !mediaFiles.length) {
-      return res.status(400).json({ success: false, message: "Missing required fields" });
+    const { categoryId: globalCategoryId, language = "en", caption: globalCaption, designData: globalDesignData, scheduleTime: globalScheduleTime, audience = "public", perFileMetadata } = req.body;
+
+    if (!mediaFiles.length) {
+      return res.status(400).json({ success: false, message: "No media files provided" });
     }
-    const category = await Category.findById(categoryId).lean();
-    if (!category) return res.status(404).json({ success: false, message: "Category not found" });
-    // Parse Template/Design Metadata
-    let baseDesignMetadata = { isTemplate: false, uploadType: 'normal', overlayElements: [] };
-    try {
-      if (designData) {
-        const parsed = typeof designData === "string" ? JSON.parse(designData) : designData;
-        baseDesignMetadata = { ...baseDesignMetadata, ...parsed };
+    // Parse per-file metadata if provided
+    let fileMetadataMap = {};
+    if (perFileMetadata) {
+      try {
+        fileMetadataMap = typeof perFileMetadata === "string" ? JSON.parse(perFileMetadata) : perFileMetadata;
+      } catch (e) {
+        console.error("Per-file metadata parsing failed", e);
       }
-    } catch (e) {
-      console.error("Design parsing failed", e);
     }
 
-    // Explicitly set template flag if uploadType is template
-    if (baseDesignMetadata.uploadType === 'template') {
-      baseDesignMetadata.isTemplate = true;
-    }
+    const { getIO } = require("../../middlewares/webSocket");
+    const io = getIO();
+
     // 1. Upload Shared Audio (if any)
 
     let uploadedAudio = null;
@@ -83,18 +81,56 @@ exports.adminFeedUpload = async (req, res) => {
     // 2. Process Media Files
     for (const file of mediaFiles) {
       try {
+        // Get specific metadata for this file or fallback to globals
+        const specificMetadata = fileMetadataMap[file.originalname] || {};
+        const categoryId = specificMetadata.categoryId || globalCategoryId;
+        const caption = specificMetadata.caption || globalCaption || "";
+        const scheduleTime = specificMetadata.scheduleTime || globalScheduleTime;
+        const designData = specificMetadata.designData || globalDesignData;
+
+        // Validation for categoryId (either global or specific must exist)
+        if (!categoryId) {
+          throw new Error("Category ID is required");
+        }
+
+        const category = await Category.findById(categoryId).lean();
+        if (!category) throw new Error("Category not found");
+
         const isImage = file.mimetype.startsWith("image/");
         const folderId = await getFeedUploadFolder(oAuth2Client, roleRef, isImage ? "image" : "video");
 
+        // Emit progress start
+        if (io) io.to(adminId).emit("upload_progress", { filename: file.originalname, percent: 10 });
+
         const upload = await uploadToDrive(file.buffer, file.originalname, file.mimetype, folderId);
         if (!upload?.fileId) throw new Error("G-Drive upload failed");
+
         const driveFileId = upload.fileId;
+
+        // Emit progress mid
+        if (io) io.to(adminId).emit("upload_progress", { filename: file.originalname, percent: 80 });
+
         const mediaUrl = isImage
           ? `https://lh3.googleusercontent.com/d/${driveFileId}`
           : `${process.env.BACKEND_URL}/media/${driveFileId}`;
-        // Prepare feed document
+
+        // Parse Design Metadata for this specific file
+        let fileDesignMetadata = { isTemplate: false, uploadType: 'normal', overlayElements: [] };
+        try {
+          if (designData) {
+            const parsed = typeof designData === "string" ? JSON.parse(designData) : designData;
+            fileDesignMetadata = { ...fileDesignMetadata, ...parsed };
+          }
+        } catch (e) {
+          console.error(`Design parsing failed for ${file.originalname}`, e);
+        }
+
+        if (fileDesignMetadata.uploadType === 'template') {
+          fileDesignMetadata.isTemplate = true;
+        }
+
+        const currentUploadType = fileDesignMetadata.isTemplate ? 'template' : 'normal';
         const currentPostType = isImage ? (uploadedAudio ? 'image+audio' : 'image') : 'video';
-        const currentUploadType = baseDesignMetadata.isTemplate ? 'template' : 'normal';
 
         const feedDoc = {
           uploadType: currentUploadType,
@@ -119,17 +155,17 @@ exports.adminFeedUpload = async (req, res) => {
           postedBy: { userId: adminId, role: roleRef },
           roleRef,
           designMetadata: {
-            ...baseDesignMetadata,
-            isTemplate: baseDesignMetadata.isTemplate,
+            ...fileDesignMetadata,
+            isTemplate: fileDesignMetadata.isTemplate,
             uploadType: currentUploadType,
             postType: currentPostType,
             audioConfig: {
-              ...(baseDesignMetadata.audioConfig || {}),
+              ...(fileDesignMetadata.audioConfig || {}),
               enabled: !!uploadedAudio,
               audioFileId: uploadedAudio?.driveFileId
             }
           },
-          editMetadata: baseDesignMetadata.editMetadata || {
+          editMetadata: fileDesignMetadata.editMetadata || {
             crop: { ratio: "original", zoomLevel: 1, position: { x: 0, y: 0 } },
             filters: { preset: "original", adjustments: {} }
           },
@@ -142,13 +178,32 @@ exports.adminFeedUpload = async (req, res) => {
           isScheduled: !!scheduleTime,
           scheduleDate: scheduleTime ? new Date(scheduleTime) : null,
           status: scheduleTime ? 'scheduled' : 'published',
-          isApproved: true // Admin uploads are auto-approved
+          isApproved: true
         };
-        const savedFeed = await new Feed(feedDoc).save();
 
-        // Update Category
+        const savedFeed = await new Feed(feedDoc).save();
         await Category.findByIdAndUpdate(categoryId, { $addToSet: { feedIds: savedFeed._id } });
-        uploadedFeeds.push({ id: savedFeed._id, url: mediaUrl });
+
+        uploadedFeeds.push({ id: savedFeed._id, url: mediaUrl, filename: file.originalname });
+
+        // 🚀 Trigger Scalable Background Notification
+        if (savedFeed.status === "published") {
+          notificationQueue.add("BROADCAST_NEW_FEED", {
+            feedId: savedFeed._id,
+            senderId: adminId,
+            title: "New Fresh Content! 🔥",
+            message: `Hi \${username}, check out this new feed! Download it and share 🔥❤️`,
+            image: isImage ? mediaUrl : (file.dimensions?.thumbnail || "/default-video-thumbnail.png"), // Fallback for video
+          }, {
+            removeOnComplete: true,
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 5000 }
+          });
+        }
+
+        // Emit progress done
+        if (io) io.to(adminId).emit("upload_progress", { filename: file.originalname, percent: 100 });
+
         deleteLocalAdminFile(file.path);
       } catch (err) {
         uploadErrors.push({ file: file.originalname, error: err.message });

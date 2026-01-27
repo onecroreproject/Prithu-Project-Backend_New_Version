@@ -354,14 +354,7 @@ const {
   getHiddenPosts,
   removeHiddenPost,
 } = require("../controllers/userControllers/hiddenPostController");
-const { startAptitudeTest,
-  aptitudeCallback,
-  getLatestAptitudeResult,
-  addInterestedUser,
-  getInterestedUsers,
-  getAllUserTestSchedules,
-  getTopAptitudePerformers,
-} = require('../controllers/aptitudeController');
+
 const { getManiBoardStats } = require('../controllers/mainHomeControlle');
 const { getPostInterestStatus,
   requestPostInterest
@@ -500,14 +493,7 @@ router.post('/user/unfollow/creator', auth, unFollowAccount);
 router.get('/user/following/data', auth, getUserFollowersData);
 
 
-/*----------------------UserAptitude---------------------------*/
-router.post("/aptitude/start-test", auth, startAptitudeTest);
-router.post("/aptitude/callback", aptitudeCallback);
-router.get("/aptitude/latest/results", auth, getLatestAptitudeResult);
-router.get("/aptitude/schedule", auth, getAllUserTestSchedules);
-router.get("/aptitude/intrested/:scheduleId", getInterestedUsers);
-router.post("/aptitude/user/intrest", auth, addInterestedUser);
-router.get("/top/aptitude/performers", getTopAptitudePerformers);
+
 
 
 

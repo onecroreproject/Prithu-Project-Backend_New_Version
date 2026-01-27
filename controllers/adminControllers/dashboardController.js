@@ -2,7 +2,8 @@ const User = require("../../models/userModels/userModel");
 const Account = require("../../models/accountSchemaModel");
 const UserSubscription = require("../../models/subcriptionModels/userSubscreptionModel"); // stores user subscriptions with planId
 const SubscriptionPlan = require("../../models/subcriptionModels/subscriptionPlanModel");
-const Report =require("../../models/feedReportModel");
+const Report = require("../../models/feedReportModel");
+const ChildAdmin = require("../../models/childAdminModel");
 
 exports.getDashboardMetricCount = async (req, res) => {
   try {
@@ -18,6 +19,9 @@ exports.getDashboardMetricCount = async (req, res) => {
       newRegistrationsToday,
       suspendedUsers,
       totalReports,
+      // Child Admin Stats
+      totalChildAdmins,
+      onlineChildAdmins,
     ] = await Promise.all([
       // 1️⃣ Total Users
       User.countDocuments(),
@@ -39,6 +43,12 @@ exports.getDashboardMetricCount = async (req, res) => {
 
       // 5️⃣ Total reports
       Report.countDocuments(),
+
+      // 6️⃣ Total Child Admins
+      ChildAdmin.countDocuments(),
+
+      // 7️⃣ Online Child Admins
+      ChildAdmin.countDocuments({ isOnline: true }),
     ]);
 
     // -----------------------------------
@@ -51,6 +61,8 @@ exports.getDashboardMetricCount = async (req, res) => {
       newRegistrationsToday,
       suspendedUsers,
       totalReports,
+      totalChildAdmins,
+      onlineChildAdmins,
     });
   } catch (error) {
     console.error("Dashboard metric error:", error);
@@ -88,7 +100,7 @@ exports.getDashUserRegistrationRatio = async (req, res) => {
           month: { $month: "$createdAt" },
           isActiveToday: {
             $cond: [
-              { $gte: ["$lastActiveAt", new Date(new Date().setHours(0,0,0,0))] },
+              { $gte: ["$lastActiveAt", new Date(new Date().setHours(0, 0, 0, 0))] },
               1,
               0
             ]

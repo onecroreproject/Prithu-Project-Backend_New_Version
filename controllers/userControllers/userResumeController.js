@@ -1,8 +1,7 @@
-const Users=require("../../models/userModels/userModel");
-const ProfileSettings= require("../../models/profileSettingModel");
-const UserProfile =require("../../models/userModels/UserEductionSchema/userFullCuricluamSchema");
+const Users = require("../../models/userModels/userModel");
+const ProfileSettings = require("../../models/profileSettingModel");
+const UserProfile = require("../../models/userModels/UserEductionSchema/userFullCuricluamSchema");
 const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
-const AptitudeResult =require("../../models/userAptitudeResult.js");
 
 // ✅ controllers/profileController.js
 exports.togglePublish = async (req, res) => {
@@ -17,7 +16,7 @@ exports.togglePublish = async (req, res) => {
     if (publish) {
       shareableLink = `https://prithu.app/r/${user.userName}`;
     }
-console.log(shareableLink)
+    console.log(shareableLink)
     const profile = await ProfileSettings.findOneAndUpdate(
       { userId },
       { isPublished: publish, shareableLink },
@@ -37,7 +36,7 @@ console.log(shareableLink)
 
 exports.getPublicResume = async (req, res) => {
   try {
-    const { username } = req.params ;
+    const { username } = req.params;
     const user = await Users.findOne({ userName: username }).select("_id userName displayName");
     if (!user) return res.status(404).json({ message: "User not found" });
 
@@ -108,17 +107,14 @@ exports.getPublicPortfolio = async (req, res) => {
       resumeURL: ""
     };
 
-    // 🔹 Fetch Aptitude Test Results
-    const aptitudeResults = await AptitudeResult.find({ userId: user._id })
-      .sort({ receivedAt: -1 })
-      .lean();
+
 
     // 🔹 Merge all portfolio data
     const portfolioData = {
       user,
       profileSettings,     // now returned regardless of publish status
       curriculum: curriculumData,
-      aptitudeTests: aptitudeResults || []
+      aptitudeTests: []
     };
 
     // 🔹 Log user activity

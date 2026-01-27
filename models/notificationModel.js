@@ -38,6 +38,7 @@ const notificationSchema = new mongoose.Schema(
         "ADMIN_ANNOUNCEMENT",
         "SYSTEM_ALERT",
         "REMOVED_FROM_FOLLOWERS",
+        "NEW_FEED",
       ],
       required: true,
     },

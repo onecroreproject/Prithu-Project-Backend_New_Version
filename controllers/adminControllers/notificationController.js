@@ -91,6 +91,8 @@ exports.getNotifications = async (req, res) => {
   try {
     const receiverId = req.Id;
     const receiverRole = req.role;
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
 
     if (!receiverId || !receiverRole) {
       return res.status(400).json({
@@ -99,14 +101,18 @@ exports.getNotifications = async (req, res) => {
       });
     }
 
-    /* -----------------------------------------------------
-     * 1️⃣ Fetch notifications (PRITHU DB)
-     * --------------------------------------------------- */
+    const total = await Notification.countDocuments({
+      receiverId,
+      receiverRoleRef: receiverRole,
+    });
+
     const notifications = await Notification.find({
       receiverId,
       receiverRoleRef: receiverRole,
     })
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
       .populate(
         "senderUserProfile senderAdminProfile senderChildAdminProfile feedInfo"
       )
@@ -126,7 +132,7 @@ exports.getNotifications = async (req, res) => {
         message: n.message,
         isRead: n.isRead,
         createdAt: n.createdAt,
-
+        image: n.image, // Ensure image is included for thumbnails
         sender: senderProfile
           ? {
             userName: senderProfile.userName,
@@ -143,6 +149,12 @@ exports.getNotifications = async (req, res) => {
       success: true,
       role: receiverRole,
       notifications: formattedNotifications,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
     });
 
   } catch (error) {

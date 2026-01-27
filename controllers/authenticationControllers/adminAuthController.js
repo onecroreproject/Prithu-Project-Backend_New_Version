@@ -3,10 +3,10 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 const bcrypt = require('bcrypt');
-const otpStore=new Map();
-const ChildAdmin=require('../../models/childAdminModel');
-const ProfileSettings=require("../../models/profileSettingModel");
-const { sendTemplateEmail } = require("../../utils/templateMailer"); 
+const otpStore = new Map();
+const ChildAdmin = require('../../models/childAdminModel');
+const ProfileSettings = require("../../models/profileSettingModel");
+const { sendTemplateEmail } = require("../../utils/templateMailer");
 
 
 // Create nodemailer transporter
@@ -148,11 +148,17 @@ exports.adminLogin = async (req, res) => {
         role: "Child_Admin",
         userName: child.userName,
         userId: child._id.toString(),
-        adminCode:child.childAdminId,
+        adminCode: child.childAdminId,
       };
 
       // Get granted permissions from child admin
       grantedPermissions = child.grantedPermissions || [];
+
+      // ✅ Update Child Admin Status
+      await ChildAdmin.findByIdAndUpdate(child._id, {
+        isOnline: true,
+        lastLoginTime: new Date(),
+      });
     }
 
     // 3️⃣ Generate JWT
@@ -241,9 +247,9 @@ exports.adminSendOtp = async (req, res) => {
 
 
 exports.newAdminVerifyOtp = async (req, res) => {
-    const { otp,email } = req.body;
+  const { otp, email } = req.body;
 
-  if (!otp||!email) {
+  if (!otp || !email) {
     return res.status(400).json({ error: 'Email and OTP are required' });
   }
 
@@ -266,11 +272,11 @@ exports.newAdminVerifyOtp = async (req, res) => {
 // Verify OTP
 exports.existAdminVerifyOtp = async (req, res) => {
   try {
-    
+
     const { otp } = req.body;
     console.log(otp)
-   
-    const admin = await Admin.findOne({ otpCode:otp });
+
+    const admin = await Admin.findOne({ otpCode: otp });
     if (!admin) {
       return res.status(400).json({ error: 'Invalid email or OTP' });
     }
@@ -279,7 +285,7 @@ exports.existAdminVerifyOtp = async (req, res) => {
       return res.status(400).json({ error: 'Invalid or expired OTP' });
     }
 
-    res.json({ message: 'OTP verified successfully',email:admin.email });
+    res.json({ message: 'OTP verified successfully', email: admin.email });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -291,7 +297,7 @@ exports.existAdminVerifyOtp = async (req, res) => {
 exports.adminPasswordReset = async (req, res) => {
   try {
     const { email, newPassword } = req.body;
-    const admin = await Admin.findOne({ email:email });
+    const admin = await Admin.findOne({ email: email });
     if (!admin) {
       return res.status(400).json({ error: 'Invalid email' });
     }
@@ -412,3 +418,27 @@ exports.checkAvailability = async (req, res) => {
 };
 
 
+
+// Admin Logout
+exports.adminLogout = async (req, res) => {
+  try {
+    const adminId = req.Id;
+    const role = req.role;
+
+    if (role === 'Child_Admin') {
+      await ChildAdmin.findByIdAndUpdate(adminId, {
+        isOnline: false,
+        lastLogoutTime: new Date(),
+      });
+    }
+
+    // In a stateless JWT, we can't "invalidate" the token server-side without a blacklist.
+    // However, the client is responsible for discarding it.
+    // Steps here are mainly to update the online status.
+
+    return res.status(200).json({ success: true, message: "Logged out successfully" });
+  } catch (error) {
+    console.error("Logout error:", error);
+    return res.status(500).json({ error: "Logout failed" });
+  }
+};

@@ -8,7 +8,7 @@ const ProfileSettings = require("../../models/profileSettingModel");
 exports.broadcastNotification = (receiverId, payload) => {
   try {
     const io = getIO();
-    if (io) io.to(receiverId).emit("notification:new", payload);
+    if (io) io.to(receiverId).emit("newNotification", payload);
   } catch (err) {
     console.error("Socket broadcast error:", err.message);
   }
@@ -51,26 +51,26 @@ exports.createAndSendNotification = async ({
       .lean();
 
     const notification = await Notification.create({
-     senderId,
-  receiverId,
+      senderId,
+      receiverId,
 
-  // ✅ ROLE REFERENCES (VERY IMPORTANT)
-  senderRoleRef: "Admin",
-  receiverRoleRef: "User",
+      // ✅ ROLE REFERENCES (VERY IMPORTANT)
+      senderRoleRef: "Admin",
+      receiverRoleRef: "User",
 
-  type,
-  title,
-  message,
+      type,
+      title,
+      message,
 
-  entityId,
-  entityType,
-  image,
+      entityId,
+      entityType,
+      image,
 
-  jobId,
-  companyId,
-  status,
+      jobId,
+      companyId,
+      status,
 
-  isRead: false,
+      isRead: false,
     });
 
     // Get receiver (for FCM)
@@ -81,21 +81,21 @@ exports.createAndSendNotification = async ({
 
     // Real-time socket emit
     exports.broadcastNotification(receiverId.toString(), {
-    _id: notification._id,
-  senderId,
-  receiverId,
-  type,
-  title,
-  message,
-  image,
-  status,
-  jobId,
-  entityId,
-  createdAt: notification.createdAt,
-  senderProfile: {
-    userName: senderProfile?.userName || "Company",
-    avatar: senderProfile?.profileAvatar || "",
-  },
+      _id: notification._id,
+      senderId,
+      receiverId,
+      type,
+      title,
+      message,
+      image,
+      status,
+      jobId,
+      entityId,
+      createdAt: notification.createdAt,
+      senderProfile: {
+        userName: senderProfile?.userName || "Company",
+        avatar: senderProfile?.profileAvatar || "",
+      },
     });
 
   } catch (err) {

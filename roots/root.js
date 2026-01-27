@@ -41,6 +41,7 @@ const {
   adminPasswordReset,
   verifyToken,
   checkAvailability,
+  adminLogout,
 } = require('../controllers/authenticationControllers/adminAuthController');
 
 const {
@@ -291,20 +292,7 @@ const { getPostVolumeWeekly,
 
 
 
-const {
-  getDashboardStats,
-  getSystemStatus,
-  getRecentTests,
-  getUpcomingTests,
-  exportTestResults,
-  getTopPerformers,
-  createTestSchedule,
-  getAllTestSchedules,
-  getSingleTestSchedule,
-  updateTestSchedule,
-  deleteTestSchedule,
-  getUpcomingTestInterestedCandidates,
-} = require("../controllers/aptitudeController");
+
 const { getDriveDashboard, driveCommand } = require('../controllers/adminControllers/driverStatusController');
 
 const {
@@ -444,6 +432,7 @@ router.post('/auth/new/admin/verify-otp', newAdminVerifyOtp);
 router.post('/auth/admin/reset-password', adminPasswordReset);
 router.get('/api/admin/verify-token', auth, verifyToken);
 router.get("/auth/check-availability", checkAvailability);
+router.post('/auth/admin/logout', auth, adminLogout);
 
 
 /* --------------------- Admin Profile API --------------------- */
@@ -455,7 +444,7 @@ router.get("/auth/check-availability", checkAvailability);
 //   adminProfileDetailUpdate
 // );
 
-// router.get('/get/admin/profile',auth,getAdminProfileDetail);
+router.get('/get/admin/profile', auth, getAdminProfileDetail);
 
 /* --------------------- Admin Feed API --------------------- */
 // Admin feed upload with design metadata
@@ -599,19 +588,7 @@ router.delete("/delete/frame/:id", deleteFrame)
 
 
 
-/*--------------------Admin Aptitude--------------------------*/
-router.get("/aptitude/dashboard/stats", getDashboardStats);
-router.get("/aptitude/system/status", getSystemStatus);
-router.get("/aptitude/tests/recent", getRecentTests);
-router.get("/aptitude/tests/upcoming", getUpcomingTests);
-router.get("/aptitude/tests/:testId/export", exportTestResults);
-router.get("/aptitude/results/top-performers", getTopPerformers);
-router.post("/aptitude/create/test/schedule", createTestSchedule);
-router.get("/get/all/aptitude/test", getAllTestSchedules);
-router.put("/aptitude/test/update/:scheduleId", updateTestSchedule);
-router.delete("/delete/aptitude/test/:scheduleId", deleteTestSchedule);
-router.get("/get/single/schedule/:scheduleId", getSingleTestSchedule);
-router.get("/analitycal/detail/for/test/:scheduleId", getUpcomingTestInterestedCandidates);
+
 
 
 /*---------------------Admin Notification API-------------------*/

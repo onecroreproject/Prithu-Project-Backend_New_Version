@@ -1,10 +1,10 @@
-const ChildAdmin =require ('../../models/childAdminModel');
-const ProfileSettings=require("../../models/profileSettingModel");
+const ChildAdmin = require('../../models/childAdminModel');
+const ProfileSettings = require("../../models/profileSettingModel");
 
 
 exports.getChildAdmins = async (req, res) => {
   try {
-    const parentAdminId = req.Id;  
+    const parentAdminId = req.Id;
     if (!parentAdminId) {
       return res.status(400).json({ success: false, message: 'Admin ID not found' });
     }
@@ -35,18 +35,29 @@ exports.getChildAdminPermissions = async (req, res) => {
     }
 
     const ALL_PERMISSIONS = [
-      'canManageChildAdmins',
+      // Top Level
       'canManageUsers',
       'canManageCreators',
+      'canManageFeedInfo',
       'canManageFeeds',
+      'canManageReport',
       'canManageSettings',
-      'canManageBusinesses',
-      'canManageCategories',
-      'canManageReports',
-      "canManageSalesSettings",
-      "canManageJobInfo",
-      "canManageReport",
+      'canManageChildAdmins',
 
+      // Sub Level
+      'canManageUsersDetail',
+      'canTrendingCreators',
+      'canManageTrendingFeeds',
+      'canManageUserFeedRequest',
+      'canManageUpload',
+      'canManageCategories',
+      'canManageUsersFeedReports',
+      'canManageDrive',
+      'canManageChildAdminsCreation',
+      'canManageSettingsSubscriptions',
+      'canManageSalesDashboard',
+      'canFaqManagement',
+      'canManageUserFeedbacks'
     ];
 
     const childAdmin = await ChildAdmin.findById(childAdminId)
@@ -96,17 +107,29 @@ exports.updateChildAdminPermissions = async (req, res) => {
 
     // ✅ List of all defined system permissions
     const ALL_PERMISSIONS = [
-      'canManageChildAdmins',
+      // Top Level
       'canManageUsers',
       'canManageCreators',
+      'canManageFeedInfo',
       'canManageFeeds',
+      'canManageReport',
       'canManageSettings',
-      'canManageBusinesses',
+      'canManageChildAdmins',
+
+      // Sub Level
+      'canManageUsersDetail',
+      'canTrendingCreators',
+      'canManageTrendingFeeds',
+      'canManageUserFeedRequest',
+      'canManageUpload',
       'canManageCategories',
-      'canManageReports',
-      'canManageSalesSettings',
-      'canManageJobInfo',
-      "canManageReport"
+      'canManageUsersFeedReports',
+      'canManageDrive',
+      'canManageChildAdminsCreation',
+      'canManageSettingsSubscriptions',
+      'canManageSalesDashboard',
+      'canFaqManagement',
+      'canManageUserFeedbacks'
     ];
 
     // Compute ungranted permissions
@@ -114,16 +137,16 @@ exports.updateChildAdminPermissions = async (req, res) => {
 
     // ✅ Update efficiently using findOneAndUpdate
     const updatedAdmin = await ChildAdmin.findByIdAndUpdate(
-  id,
-  {
-    grantedPermissions,
-    ungrantedPermissions,
-    customPermissions,
-    menuPermissions,
-     
-  },
-  { new: true, lean: true }
-);
+      id,
+      {
+        grantedPermissions,
+        ungrantedPermissions,
+        customPermissions,
+        menuPermissions,
+
+      },
+      { new: true, lean: true }
+    );
 
 
     if (!updatedAdmin) {
@@ -158,17 +181,29 @@ exports.getChildAdminById = async (req, res) => {
 
     // ✅ All possible permissions
     const ALL_PERMISSIONS = [
-      'canManageChildAdmins',
+      // Top Level
       'canManageUsers',
       'canManageCreators',
+      'canManageFeedInfo',
       'canManageFeeds',
+      'canManageReport',
       'canManageSettings',
-      'canManageBusinesses',
+      'canManageChildAdmins',
+
+      // Sub Level
+      'canManageUsersDetail',
+      'canTrendingCreators',
+      'canManageTrendingFeeds',
+      'canManageUserFeedRequest',
+      'canManageUpload',
       'canManageCategories',
-      'canManageReports',
-      'canManageSalesSettings',
-      "canManageJobInfo",
-      "canManageReport"
+      'canManageUsersFeedReports',
+      'canManageDrive',
+      'canManageChildAdminsCreation',
+      'canManageSettingsSubscriptions',
+      'canManageSalesDashboard',
+      'canFaqManagement',
+      'canManageUserFeedbacks'
     ];
 
     // 1️⃣ Fetch ChildAdmin basic details (excluding password), populate parent
@@ -195,10 +230,10 @@ exports.getChildAdminById = async (req, res) => {
     let ungrantedPermissions = Array.isArray(childAdmin.ungrantedPermissions) && childAdmin.ungrantedPermissions.length > 0
       ? [...childAdmin.ungrantedPermissions]
       : ALL_PERMISSIONS.filter(
-          (perm) => !childAdmin.grantedPermissions.includes(perm)
-        );
+        (perm) => !childAdmin.grantedPermissions.includes(perm)
+      );
 
-  
+
 
     // 4️⃣ Combine both data sources
     const combinedData = {
@@ -255,9 +290,8 @@ exports.blockChildAdmin = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: `Child admin ${childAdmin.userName} is now ${
-        childAdmin.isActive ? "active" : "blocked"
-      }`,
+      message: `Child admin ${childAdmin.userName} is now ${childAdmin.isActive ? "active" : "blocked"
+        }`,
       data: childAdmin,
     });
   } catch (error) {
@@ -274,7 +308,7 @@ exports.deleteChildAdmin = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) return res.status(400).json({ success: false, message: "Child admin ID is required" });
-console.log(id)
+    console.log(id)
     const childAdmin = await ChildAdmin.findByIdAndDelete(id);
     if (!childAdmin) return res.status(404).json({ success: false, message: "Child admin not found" });
 

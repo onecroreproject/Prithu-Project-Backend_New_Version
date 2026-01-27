@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const {prithuDB}=require("../database");
+const { prithuDB } = require("../database");
 
 const userFeedbackSchema = new mongoose.Schema(
   {
@@ -17,8 +17,6 @@ const userFeedbackSchema = new mongoose.Schema(
       enum: [
         "post",
         "comment",
-        "job",
-        "aptitude_test",
         "portfolio",
         "profile",
         "help",
@@ -95,4 +93,4 @@ const userFeedbackSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = prithuDB.model("UserFeedback", userFeedbackSchema,"UserFeedback");
+module.exports = prithuDB.model("UserFeedback", userFeedbackSchema, "UserFeedback");

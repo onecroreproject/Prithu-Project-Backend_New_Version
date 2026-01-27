@@ -268,7 +268,7 @@ exports.globalSearch = async (req, res) => {
 
 
     /* -------------------------------------------
-       3️⃣ RUN JOB + PEOPLE + CATEGORY FETCHES
+       3️⃣ RUN HASHTAG + PEOPLE FETCHES
     --------------------------------------------*/
     const [categories, people] = await Promise.all([
       Hashtag.find({ tag: prefixRegex })

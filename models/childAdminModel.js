@@ -8,13 +8,6 @@ const subPermissionSchema = new mongoose.Schema(
     permission: {
       type: String,
       required: true,
-      enum: [
-        "canManageChildAdminsCreation",
-        "canManageChildAdminsPermissions",
-        "canManageUsersDetail",
-        "canManageUsersAnalytics",
-        "canManageUsersFeedReports",
-      ],
     },
   },
   { _id: false }
@@ -26,14 +19,6 @@ const menuPermissionSchema = new mongoose.Schema(
     mainMenu: { type: String, required: true },
     mainPermission: {
       type: String,
-      enum: [
-        null,
-        "canManageChildAdmins",
-        "canManageUsers",
-        "canManageCreators",
-        "canManageFeeds",
-        "canManageSettings",
-      ],
       default: null,
     },
     subPermissions: {
@@ -86,6 +71,9 @@ const childAdminSchema = new mongoose.Schema(
 
     isActive: { type: Boolean, default: true },
     isApprovedByParent: { type: Boolean, default: false },
+    isOnline: { type: Boolean, default: false },
+    lastLoginTime: { type: Date, default: null },
+    lastLogoutTime: { type: Date, default: null },
   },
   { timestamps: true }
 );

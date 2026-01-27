@@ -20,7 +20,7 @@ const Categories = require("../../models/categorySchema.js");
 const path = require("path");
 const { google } = require("googleapis");
 const { oAuth2Client } = require("../../middlewares/services/googleDriveMedia/googleDriverAuth");
-const ProfileVisibility=require("../../models/profileVisibilitySchema.js")
+const ProfileVisibility = require("../../models/profileVisibilitySchema.js")
 
 
 
@@ -39,7 +39,8 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const userId = new mongoose.Types.ObjectId(rawUserId);
     const page = Math.max(1, Number(req.query.page || 1));
     const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
-    
+    const { categoryId } = req.query;
+
     /* -----------------------------------------------------
        ✅ 1️⃣ FETCH VIEWER PROFILE (LOGGED-IN USER)
     ------------------------------------------------------*/
@@ -49,34 +50,32 @@ exports.getAllFeedsByUserId = async (req, res) => {
 
     let viewerVisibility = null;
 
-if (viewerProfile?.visibility) {
-  viewerVisibility = await ProfileVisibility.findById(viewerProfile.visibility).lean();
-}
+    if (viewerProfile?.visibility) {
+      viewerVisibility = await ProfileVisibility.findById(viewerProfile.visibility).lean();
+    }
 
     const viewerUser = await User.findById(userId).select("email").lean();
-console.log("viewerProfile.visibility =", viewerProfile?.visibility);
-console.log("viewerVisibility.socialLinks =", viewerVisibility?.socialLinks);
-console.log("viewerProfile.socialLinks =", viewerProfile?.socialLinks);
+
 
     // Format viewer social icons safely
-let viewerSocialIcons = [];
+    let viewerSocialIcons = [];
 
-if (viewerProfile?.socialLinks && typeof viewerProfile.socialLinks === "object") {
-  viewerSocialIcons = Object.entries(viewerProfile.socialLinks)
-    .map(([platform, url]) => ({
-      platform,
-      url: typeof url === "string" ? url.trim() : "",
-      visible: true,
-    }))
-    .filter((i) => i.url); // ✅ keep only valid links
-}
+    if (viewerProfile?.socialLinks && typeof viewerProfile.socialLinks === "object") {
+      viewerSocialIcons = Object.entries(viewerProfile.socialLinks)
+        .map(([platform, url]) => ({
+          platform,
+          url: typeof url === "string" ? url.trim() : "",
+          visible: true,
+        }))
+        .filter((i) => i.url); // ✅ keep only valid links
+    }
 
 
     // ✅ Social Icons Filter based on visibility rules
-   const safeSocialLinks = viewerSocialIcons.filter((icon) => {
-  const rule = viewerVisibility?.socialLinks || "private";
-  return canShow(rule) && icon.visible !== false && !!icon.url;
-});
+    const safeSocialLinks = viewerSocialIcons.filter((icon) => {
+      const rule = viewerVisibility?.socialLinks || "private";
+      return canShow(rule) && icon.visible !== false && !!icon.url;
+    });
 
 
     // ✅ Footer visibility config
@@ -95,8 +94,8 @@ if (viewerProfile?.socialLinks && typeof viewerProfile.socialLinks === "object")
     };
 
     console.log("viewerSocialIcons =", viewerSocialIcons);
-console.log("safeSocialLinks =", safeSocialLinks);
-console.log("safeSocialLinks length =", safeSocialLinks.length);
+    console.log("safeSocialLinks =", safeSocialLinks);
+    console.log("safeSocialLinks length =", safeSocialLinks.length);
 
 
     const viewer = {
@@ -104,12 +103,12 @@ console.log("safeSocialLinks length =", safeSocialLinks.length);
       name: viewerProfile?.name || "User",
       userName: viewerProfile?.userName || "user",
       email: canShow(viewerVisibility?.email || "private")
-  ? viewerUser?.email || null
-  : null,
+        ? viewerUser?.email || null
+        : null,
 
-     phoneNumber: canShow(viewerVisibility?.phoneNumber || "private")
-  ? viewerProfile?.phoneNumber || null
-  : null,
+      phoneNumber: canShow(viewerVisibility?.phoneNumber || "private")
+        ? viewerProfile?.phoneNumber || null
+        : null,
 
       profileAvatar: viewerProfile?.modifyAvatar || "https://via.placeholder.com/150",
       socialLinks: safeSocialLinks // Use filtered social links
@@ -130,7 +129,9 @@ console.log("safeSocialLinks length =", safeSocialLinks.length);
       {
         $match: {
           _id: { $nin: hiddenPostIds },
-          category: { $nin: notInterestedCategoryIds },
+          category: categoryId
+            ? new mongoose.Types.ObjectId(categoryId)
+            : { $nin: notInterestedCategoryIds },
           $or: [
             { isScheduled: { $ne: true } },
             { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] }
@@ -233,12 +234,6 @@ console.log("safeSocialLinks length =", safeSocialLinks.length);
       if (isTemplateMode && feed.designMetadata) {
         designState = {
           elements: feed.designMetadata.overlayElements || [],
-          footer: {
-  ...(feed.designMetadata.footerConfig || { enabled: true }),
-  ...footerVisibilityConfig,
-  colors: themeColor
-},
-
           mediaDimensions: feed.designMetadata.canvasSettings || { width: 1080, height: 1920 },
           audioConfig: feed.designMetadata.audioConfig || null,
           themeColors: themeColor
@@ -253,9 +248,10 @@ console.log("safeSocialLinks length =", safeSocialLinks.length);
         // ✅ Footer Configuration with Privacy-Aware Social Icons
         footerDisplay: isTemplateMode
           ? {
-              ...(feed.designMetadata?.footerConfig || {}),
-              ...footerVisibilityConfig
-            }
+            ...(feed.designMetadata?.footerConfig || {}),
+            ...footerVisibilityConfig,
+            colors: themeColor
+          }
           : { enabled: false },
 
         designState,
@@ -280,7 +276,10 @@ console.log("safeSocialLinks length =", safeSocialLinks.length);
           limit,
           total: await Feed.countDocuments({
             _id: { $nin: hiddenPostIds },
-            category: { $nin: notInterestedCategoryIds },
+            ...(categoryId
+              ? { category: new mongoose.Types.ObjectId(categoryId) }
+              : { category: { $nin: notInterestedCategoryIds } }
+            ),
             $or: [
               { isScheduled: { $ne: true } },
               { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] }

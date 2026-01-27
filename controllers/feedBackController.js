@@ -90,8 +90,6 @@ exports.getMyFeedbackAndReports = async (req, res) => {
       [
         "post",
         "comment",
-        "job",
-        "aptitude_test",
         "portfolio",
         "profile",
         "help",

@@ -126,7 +126,6 @@ const feedSchema = new mongoose.Schema(
         },
         type: {
           type: String,
-          // UPDATED: Added username as per frontend TemplateEditor
           enum: ["avatar", "logo", "text", "username", "shape", "watermark", "dynamicText"],
           required: true
         },
@@ -159,22 +158,35 @@ const feedSchema = new mongoose.Schema(
         avatarConfig: {
           shape: {
             type: String,
-            enum: ["circle", "square", "rounded"],
+            enum: ["circle", "square", "round"],
             default: "circle"
           },
           borderColor: { type: String, default: "#ffffff" },
           borderWidth: { type: Number, default: 2 },
-          shadow: { type: Boolean, default: true }
+          shadow: { type: Boolean, default: true },
+          softEdgeConfig: {
+            enabled: { type: Boolean, default: false },
+            brushSize: { type: Number, default: 20 },
+            blurStrength: { type: Number, default: 10 },
+            opacity: { type: Number, default: 1 },
+            strokes: [{
+              x: { type: Number },
+              y: { type: Number },
+              r: { type: Number },
+              blur: { type: Number },
+              opacity: { type: Number }
+            }]
+          }
         },
         textConfig: {
-          content: { type: String }, // This can store value for static or 'username' placeholder
+          content: { type: String },
           fontFamily: { type: String, default: "Arial" },
           fontSize: { type: Number, default: 16 },
           fontWeight: { type: String, default: "normal" },
           color: { type: String, default: "#ffffff" },
           backgroundColor: { type: String },
           padding: { type: Number, default: 5 },
-          lineHeight: { type: Number, default: 1.2 }, // Added for better typography control
+          lineHeight: { type: Number, default: 1.2 },
           align: {
             type: String,
             enum: ["left", "center", "right"],
