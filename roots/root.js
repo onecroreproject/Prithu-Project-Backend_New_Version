@@ -450,6 +450,7 @@ router.get('/get/admin/profile', auth, getAdminProfileDetail);
 // Admin feed upload with design metadata
 router.post(
   "/admin/feed-upload",
+  auth,
   adminUploadFeed.fields([
     { name: "files", maxCount: 20 },  // image/video
     { name: "audio", maxCount: 1 }    // optional audio
