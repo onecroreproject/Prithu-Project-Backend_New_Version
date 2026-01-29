@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const {prithuDB}=require("../../database");
+const { prithuDB } = require("../../../database");
 
 
 const UserEarningSchema = new mongoose.Schema({
@@ -14,4 +14,4 @@ const UserEarningSchema = new mongoose.Schema({
 
 UserEarningSchema.index({ userId: 1, level: 1, tier: 1 });
 
-module.exports = prithuDB.model("UserEarning", UserEarningSchema,"UserEarnings");
+module.exports = prithuDB.model("UserEarning", UserEarningSchema, "UserEarnings");

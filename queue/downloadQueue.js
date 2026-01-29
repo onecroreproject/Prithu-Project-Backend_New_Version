@@ -3,6 +3,7 @@ const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
+const sharp = require("sharp");
 const { getIO } = require("../middlewares/webSocket");
 const { v4: uuidv4 } = require('uuid');
 
@@ -32,8 +33,10 @@ const downloadFile = async (url, dest) => {
         });
 
         await pipeline(response.data, writer);
+        console.log(`[FS] File downloaded successfully: ${dest}`);
         return true;
     } catch (err) {
+        console.error(`[FS] Download failed for ${url}:`, err.message);
         if (writer) {
             writer.destroy();
             // Try to delete partial file if it exists and is not locked
@@ -52,11 +55,59 @@ const getVideoMetadata = (filePath) => {
             if (err) return reject(err);
             const stream = metadata.streams.find(s => s.codec_type === 'video');
             resolve({
-                width: stream.width,
-                height: stream.height,
+                width: stream?.width || 0,
+                height: stream?.height || 0,
                 duration: metadata.format.duration
             });
         });
+    });
+};
+
+// Helper: Extract dominant color using FFmpeg (scale to 1x1)
+const extractDominantColor = (filePath) => {
+    return new Promise((resolve) => {
+        const tempPath = filePath + "_1x1.png";
+        ffmpeg(filePath)
+            .frames(1)
+            .seekInput(0)
+            .videoFilters('scale=1:1')
+            .on('end', () => {
+                try {
+                    const data = fs.readFileSync(tempPath);
+                    // Simple PNG parsing for 1x1 pixel (RGBA)
+                    // Png signature (8) + IHDR (25) + IDAT ... 
+                    // For a 1x1 pixel, we can just use a simpler method or a small lib
+                    // But FFmpeg can also output raw data
+                    ffmpeg(filePath)
+                        .frames(1)
+                        .seekInput(0)
+                        .videoFilters('scale=1:1')
+                        .format('rawvideo')
+                        .pix_fmt('rgb24')
+                        .on('end', () => { /* done */ })
+                        .on('error', () => resolve("#1a1a1a"))
+                        .pipe(require('stream').Writable({
+                            write(chunk, enc, next) {
+                                if (chunk.length >= 3) {
+                                    const r = chunk[0].toString(16).padStart(2, '0');
+                                    const g = chunk[1].toString(16).padStart(2, '0');
+                                    const b = chunk[2].toString(16).padStart(2, '0');
+                                    resolve(`#${r}${g}${b}`);
+                                }
+                                next();
+                            }
+                        }));
+                    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+                } catch (e) {
+                    resolve("#1a1a1a");
+                }
+            })
+            .on('error', (err) => {
+                // Fallback to simpler method if pipe fails
+                console.warn(`[FFmpeg] Dominant color extraction failed, falling back to default:`, err.message);
+                resolve("#1a1a1a");
+            })
+            .save(tempPath);
     });
 };
 
@@ -98,8 +149,9 @@ const normalizeFfmpegColor = (c) => {
     const hexMatch = c.match(/^#?([A-Fa-f0-9]{6})([A-Fa-f0-9]{2})?$/);
     if (hexMatch) {
         const hex = hexMatch[1];
-        const alpha = hexMatch[2] ? (parseInt(hexMatch[2], 16) / 255).toFixed(2) : "1.0";
-        return `0x${hex}@${alpha}`;
+        const aVal = hexMatch[2] ? (parseInt(hexMatch[2], 16) / 255) : 1;
+        if (aVal >= 0.99) return `0x${hex}`;
+        return `0x${hex}@${aVal.toFixed(2)}`;
     }
 
     // Support named colors (white, red, etc.)
@@ -125,8 +177,8 @@ downloadQueue.process(async (job) => {
 
     const finalOutputName = `processed_${jobId}.mp4`;
     const finalOutputPath = path.join(__dirname, "../uploads", finalOutputName);
-
     const BACKEND_URL = process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com';
+    const FONT_PATH = path.join(__dirname, "../assets/arial.ttf").replace(/\\/g, "/").replace(":", "\\:");
 
     try {
         const io = getIO();
@@ -140,6 +192,7 @@ downloadQueue.process(async (job) => {
         if (!mediaUrl.startsWith("http")) {
             mediaUrl = `${BACKEND_URL}${mediaUrl.startsWith("/") ? "" : "/"}${mediaUrl}`;
         }
+        console.log(`[Job ${jobId}] Source Media URL: ${mediaUrl}`);
 
         // Determine post type - FIXED: Use only postType, not uploadType
         const postType = feed.postType || "image";
@@ -147,22 +200,40 @@ downloadQueue.process(async (job) => {
         const isImagePost = postType === "image" || postType === "image+audio";
 
         const tempSourcePath = path.join(tempDir, isVideoPost ? "source.mp4" : "source.jpg");
+        console.log(`[Job ${jobId}] Downloading source media to: ${tempSourcePath}`);
         await downloadFile(mediaUrl, tempSourcePath);
 
         const sourcePath = tempSourcePath;
         const isSourceImage = isImagePost;
 
         job.progress(30);
+        if (io) io.to(userId).emit("download-progress", { jobId, progress: 30, status: "processing" });
 
         // 2. GET MEDIA METADATA & CALCULATE DIMENSIONS
+        console.log(`[Job ${jobId}] Fetching metadata for source: ${sourcePath}`);
         const sourceMeta = await getVideoMetadata(sourcePath);
-        const sourceW = sourceMeta.width;
-        const sourceH = sourceMeta.height;
+        console.log(`[Job ${jobId}] Source Metadata:`, sourceMeta);
+
+
+
 
         const footerConfig = designMetadata?.footerConfig;
         const footerEnabled = !!footerConfig?.enabled;
         const footerH = footerEnabled ? Math.round((footerConfig.heightPercent / 100) * OUT_H) : 0;
         const mediaH = OUT_H - footerH;
+
+        if (isSourceImage) {
+            sourceMeta.width = sourceMeta.width || OUT_W;
+            sourceMeta.height = sourceMeta.height || mediaH;
+        }
+
+        const sourceW = sourceMeta.width;
+        const sourceH = sourceMeta.height;
+
+        // 🔒 safety
+        if (!sourceW || !sourceH) {
+            throw new Error("Invalid source dimensions (width/height is zero)");
+        }
 
         // Calculate actual scaled dimensions of media
         const scaleFactor = Math.min(OUT_W / sourceW, mediaH / sourceH);
@@ -170,13 +241,48 @@ downloadQueue.process(async (job) => {
         const actualMediaH = Math.round(sourceH * scaleFactor);
         const paddingX = (OUT_W - actualMediaW) / 2;
         const paddingY = (mediaH - actualMediaH) / 2;
+        console.log(`[Job ${jobId}] Calculated Dimensions - MediaH: ${mediaH}, FooterH: ${footerH}, ActualW: ${actualMediaW}, ActualH: ${actualMediaH}, PaddingX: ${paddingX}, PaddingY: ${paddingY}`);
+
+        // Auto extract dominant color if requested
+        let dominantColor = footerConfig?.backgroundColor || "#1a1a1a";
+        if (footerConfig?.useDominantColor) {
+            dominantColor = await extractDominantColor(sourcePath);
+            console.log(`[Job ${jobId}] Extracted dominant color: ${dominantColor}`);
+        }
 
         // Normalize footer background color
-        const footerBgColor = normalizeFfmpegColor(footerConfig?.backgroundColor);
+        const footerBgColor = normalizeFfmpegColor(dominantColor);
 
-        // 3. BUILD BASE CANVAS
+        // 3. INITIALIZE FFMPEG COMMAND
+        const ffmpegCommand = ffmpeg();
+        ffmpegCommand.input(sourcePath);
+
+        // Handle image duration
+        const duration = sourceMeta.duration && sourceMeta.duration !== 'N/A' ? sourceMeta.duration : 8; // Default 8s for images
+        if (isSourceImage) {
+            ffmpegCommand.inputOptions(["-loop 1", `-t ${duration}`]);
+        }
+
+        console.log(`[Job ${jobId}] Building base canvas filters...`);
         let currentBase = "base";
         const combinedFilters = [];
+        let overlayInputIndex = 1; // Tracks extra inputs (overlays, audio)
+
+        // Handle audio input for image+audio
+        let audioInputIndex = null;
+        if (postType === "image+audio") {
+            const audioUrl = feed.audioFile?.url || designMetadata?.audioConfig?.url;
+            if (audioUrl) {
+                const audioDest = path.join(tempDir, "audio.mp3");
+                try {
+                    await downloadFile(audioUrl, audioDest);
+                    ffmpegCommand.input(audioDest);
+                    audioInputIndex = overlayInputIndex++;
+                } catch (e) {
+                    console.warn(`[Job ${jobId}] Failed to download audio, proceeding without it:`, e.message);
+                }
+            }
+        }
 
         // Scale and pad media to fit media area
         combinedFilters.push({
@@ -202,13 +308,15 @@ downloadQueue.process(async (job) => {
         });
 
         // 4. PREPARE OVERLAYS
-        const overlayInputs = [];
-        let inputIndex = 1; // 0 is source video
+        // const overlayInputs = []; // No longer needed as inputs are added directly to ffmpegCommand
+        // let inputIndex = 1; // 0 is source video
         let filterIndex = 1; // For unique filter output labels
 
         // Sort overlays by z-index
         const overlayElements = [...(designMetadata?.overlayElements || []).filter(el => el.visible !== false)]
             .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+
+        console.log(`[Job ${jobId}] Processing ${overlayElements.length} overlay elements...`);
 
         // Animation helper
         const getStartXY = (direction, endX, endY) => {
@@ -222,26 +330,27 @@ downloadQueue.process(async (job) => {
             return { startX, startY };
         };
 
-        const buildFreezeExpr = (start, end, dur) => {
+        const buildEaseExpr = (start, end, dur) => {
             const s = Number(start).toFixed(2);
             const e = Number(end).toFixed(2);
             const d = Number(dur).toFixed(2);
-            // Wrap values in parens to avoid negative sign issues like --
-            return `if(lt(t,${d}),(${s})+(${e}-(${s}))*(t/${d}),(${e}))`;
+            // Cubic-bezier approximation: t/d is linear, but we can use t*t*(3-2*t) for smoothstep or just linear for now
+            // To match CSS: cubic-bezier(0.2, 0.8, 0.2, 1) is roughly (t/d)^0.5 for fast start
+            return `if(lt(t,${d}),(${s})+(${e}-(${s}))*(sqrt(t/${d})),(${e}))`;
         };
 
         for (const el of overlayElements) {
+            console.log(`[Job ${jobId}] Processing overlay element: ${el.type} at ${el.xPercent}%, ${el.yPercent}%`);
             let overlayMediaUrl = null;
-            if (el.type === 'avatar') overlayMediaUrl = viewer?.profileAvatar || el.mediaConfig?.url;
+            if (el.type === 'avatar') overlayMediaUrl = viewer?.modifyAvatar || viewer?.profileAvatar || el.mediaConfig?.url;
             else if (el.type === "logo") overlayMediaUrl = el.mediaConfig?.url || `${BACKEND_URL}/logo/prithulogo.png`;
 
             if (overlayMediaUrl) {
                 if (!overlayMediaUrl.startsWith('http')) overlayMediaUrl = `${BACKEND_URL}/${overlayMediaUrl}`;
-                const imgPath = path.join(tempDir, `overlay_${inputIndex}.png`);
+                const overlayDest = path.join(tempDir, `overlay_${overlayInputIndex}.png`);
 
                 try {
-                    await downloadFile(overlayMediaUrl, imgPath);
-                    overlayInputs.push(imgPath);
+                    await downloadFile(overlayMediaUrl, overlayDest);
 
                     const xRaw = (el.xPercent / 100) * OUT_W;
                     const yRaw = (el.yPercent / 100) * mediaH;
@@ -249,83 +358,88 @@ downloadQueue.process(async (job) => {
                     const scaleW = Math.max(10, Math.round((wPercentValue / 100) * OUT_W));
 
                     let xExpr = `${xRaw}`, yExpr = `${yRaw}`;
+
                     if (el.animation?.enabled && el.animation.direction !== "none") {
                         const dur = Number(el.animation.speed || 1);
-                        const { startX, startY } = getStartXY(el.animation.direction, xRaw, yRaw);
-                        xExpr = buildFreezeExpr(startX, xRaw, dur);
-                        yExpr = buildFreezeExpr(startY, yRaw, dur);
+                        const delay = Number(el.animation.delay || 0);
+                        const start_t = delay;
+                        const end_t = start_t + dur;
+
+                        if (el.animation.direction === 'left') {
+                            xExpr = `if(lt(t,${start_t}),${OUT_W},if(lt(t,${end_t}),${OUT_W}+(${xRaw}-${OUT_W})*(t-${start_t})/${dur},${xRaw}))`;
+                        } else if (el.animation.direction === 'right') {
+                            xExpr = `if(lt(t,${start_t}),-${scaleW},if(lt(t,${end_t}),-${scaleW}+(${xRaw}-(-${scaleW}))*(t-${start_t})/${dur},${xRaw}))`;
+                        } else if (el.animation.direction === 'top') {
+                            yExpr = `if(lt(t,${start_t}),-${scaleW},if(lt(t,${end_t}),-${scaleW}+(${yRaw}-(-${scaleW}))*(t-${start_t})/${dur},${yRaw}))`;
+                        } else if (el.animation.direction === 'bottom') {
+                            yExpr = `if(lt(t,${start_t}),${mediaH},if(lt(t,${end_t}),${mediaH}+(${yRaw}-${mediaH})*(t-${start_t})/${dur},${yRaw}))`;
+                        }
                     }
 
                     const rawLabel = `raw${filterIndex}`;
                     const fmtLabel = `fmt${filterIndex}`;
                     const maskedLabel = `masked${filterIndex}`;
                     const overlayLabel = `over${filterIndex}`;
+                    let currentOverlayInput = `${overlayInputIndex}:v`;
 
-                    // Masking logic for avatar
                     if (el.type === 'avatar') {
                         const shape = el.avatarConfig?.shape || el.shape || 'circle';
                         const isRound = shape === 'circle' || shape === 'round';
 
-                        // 1. Scale and Crop to square
-                        const scaledLabel = `scaled_sq${filterIndex}`;
-                        combinedFilters.push({
-                            filter: 'scale',
-                            options: `${scaleW}:${scaleW}:force_original_aspect_ratio=increase`,
-                            inputs: `${inputIndex}:v`,
-                            outputs: scaledLabel
-                        });
+                        if (isRound) {
+                            const maskedAvatarPath = path.join(tempDir, `masked_${overlayInputIndex}.png`);
+                            console.log(`[Job ${jobId}] Creating sharp circular mask for ${overlayDest}`);
+                            const circleSvg = Buffer.from(`<svg><circle cx="${scaleW / 2}" cy="${scaleW / 2}" r="${scaleW / 2}" fill="white"/></svg>`);
 
-                        combinedFilters.push({
-                            filter: 'crop',
-                            options: `${scaleW}:${scaleW}`,
-                            inputs: scaledLabel,
-                            outputs: rawLabel
-                        });
+                            await sharp(overlayDest)
+                                .resize(scaleW, scaleW, { fit: 'cover' })
+                                .composite([{ input: circleSvg, blend: 'dest-in' }])
+                                .png()
+                                .toFile(maskedAvatarPath);
 
-                        // 2. Format to RGBA
-                        combinedFilters.push({
-                            filter: 'format',
-                            options: 'rgba',
-                            inputs: rawLabel,
-                            outputs: fmtLabel
-                        });
-
-                        // 3. Apply Alpha Mask (Circle + Soft Bottom Fade)
-                        const alphaExpr = isRound
-                            ? `if(lt(sqrt(pow(x-w/2,2)+pow(y-h/2,2)),w/2),if(gt(y,h*0.75),255*(1-(y-h*0.75)/(h*0.25)),255),0)`
-                            : `if(gt(y,h*0.8),255*(1-(y-h*0.8)/(h*0.2)),255)`;
-
-                        combinedFilters.push({
-                            filter: 'geq',
-                            options: {
-                                r: 'r(x,y)',
-                                g: 'g(x,y)',
-                                b: 'b(x,y)',
-                                a: alphaExpr
-                            },
-                            inputs: fmtLabel,
-                            outputs: maskedLabel
-                        });
+                            ffmpegCommand.input(maskedAvatarPath);
+                            currentOverlayInput = `${overlayInputIndex}:v`;
+                        } else {
+                            ffmpegCommand.input(overlayDest);
+                        }
                     } else {
+                        ffmpegCommand.input(overlayDest);
+                    }
+                    overlayInputIndex++;
+
+                    // Shared processing (Scaling if not already done by Sharp, and Fade animation)
+                    const animationDuration = (el.animationConfig?.duration || 1000) / 1000; // Renamed to avoid conflict with image duration
+
+                    if (el.type !== 'avatar') {
                         combinedFilters.push({
-                            filter: 'scale',
-                            options: { w: scaleW, h: -1 },
-                            inputs: `${inputIndex}:v`,
-                            outputs: maskedLabel
+                            filter: 'scale', options: { w: scaleW, h: -1 },
+                            inputs: currentOverlayInput, outputs: rawLabel
                         });
+                        currentOverlayInput = rawLabel;
+                    }
+
+                    if (el.animation?.enabled) {
+                        const animationDur = Number(el.animation.speed || 1);
+                        combinedFilters.push({
+                            filter: 'fade',
+                            options: { t: 'in', st: 0, d: animationDur, alpha: 1 },
+                            inputs: currentOverlayInput, outputs: maskedLabel
+                        });
+                        currentOverlayInput = maskedLabel;
                     }
 
                     combinedFilters.push({
                         filter: 'overlay',
-                        options: `x='${xExpr}':y='${yExpr}'`,
-                        inputs: [currentBase, maskedLabel],
+                        options: { x: xExpr, y: yExpr, eval: 'frame' },
+                        inputs: [currentBase, currentOverlayInput],
                         outputs: overlayLabel
                     });
 
                     currentBase = overlayLabel;
-                    inputIndex++;
                     filterIndex++;
-                } catch (e) { console.error(`Failed overlay: ${overlayMediaUrl}`, e.message); }
+                } catch (e) {
+                    console.error(`[Job ${jobId}] Failed overlay processing:`, e.message);
+                }
             }
 
             if (el.type === 'username' || el.type === 'text') {
@@ -342,7 +456,9 @@ downloadQueue.process(async (job) => {
                             text: escapeDrawText(content),
                             x: Math.round(x), y: Math.round(y),
                             fontsize: fontSize, fontcolor: normalizeFfmpegColor(el.textConfig?.color || "white"),
-                            fontfile: process.platform === 'win32' ? 'C\\\\:/Windows/Fonts/arial.ttf' : '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+                            fontfile: FONT_PATH,
+                            shadowcolor: 'black@0.8',
+                            shadowx: 2, shadowy: 2
                         },
                         inputs: currentBase,
                         outputs: textLabel
@@ -369,29 +485,38 @@ downloadQueue.process(async (job) => {
                 inputs: currentBase,
                 outputs: "footer_bg"
             });
+            console.log(`[Job ${jobId}] Footer background added - Color: ${footerBgColor}, Area: ${Math.round(footerW)}x${footerH}`);
             currentBase = "footer_bg";
 
             const showElements = footerConfig?.showElements || {};
             const socialIcons = footerConfig?.socialIcons || [];
             const visibleSocialIcons = socialIcons.filter(i => i.visible);
 
-            const FONT_SIZE_USER = 32;
-            const FONT_SIZE_INFO = 36;
-            const PADDING_INNER = 40;
-            const ROW_1_Y = Math.round(footerY + (footerH * 0.33) - (FONT_SIZE_USER / 2));
-            const ROW_2_Y = Math.round(footerY + (footerH * 0.66) - (FONT_SIZE_INFO / 2));
-            const fontPath = process.platform === "win32" ? "C\\\\:/Windows/Fonts/arial.ttf" : "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+            // Refactored Footer Layout: 2 Rows
+            const PADDING_X_INNER = 60;
+            const ROW_1_Y_CENTER = Math.round(footerY + (footerH * 0.35));
+            const ROW_2_Y_CENTER = Math.round(footerY + (footerH * 0.75));
 
+            const FONT_SIZE_USER = 42;
+            const FONT_SIZE_INFO = 32;
+            const iconSize = 48;
+            const iconGap = 24;
+            console.log(`[Job ${jobId}] Using FONT_PATH: ${FONT_PATH}`);
+            const textColor = normalizeFfmpegColor(footerConfig?.textColor || "white");
+            // --- ROW 1: Name & Socials ---
             if (showElements.name) {
-                const centerName = visibleSocialIcons.length === 0;
                 const nameLabel = `footer_name`;
+                const centerName = !showElements.socialIcons || visibleSocialIcons.length === 0;
+
                 combinedFilters.push({
                     filter: "drawtext",
                     options: {
                         text: escapeDrawText(viewer.userName || "User"),
-                        x: centerName ? `(w-text_w)/2` : Math.round(footerX + PADDING_INNER),
-                        y: ROW_1_Y, fontsize: FONT_SIZE_USER,
-                        fontcolor: normalizeFfmpegColor(footerConfig?.textColor || "white"), fontfile: fontPath
+                        x: centerName ? '(w-text_w)/2' : Math.round(footerX + PADDING_X_INNER),
+                        y: Math.round(ROW_1_Y_CENTER - FONT_SIZE_USER / 2),
+                        fontsize: FONT_SIZE_USER,
+                        fontcolor: textColor,
+                        fontfile: FONT_PATH
                     },
                     inputs: currentBase,
                     outputs: nameLabel
@@ -399,10 +524,8 @@ downloadQueue.process(async (job) => {
                 currentBase = nameLabel;
             }
 
-            if (visibleSocialIcons.length > 0) {
-                const iconSize = 40;
-                const iconGap = 20;
-                let currentIconX = footerX + footerW - PADDING_INNER - iconSize;
+            if (showElements.socialIcons && visibleSocialIcons.length > 0) {
+                let currentIconX = footerX + footerW - PADDING_X_INNER - iconSize;
 
                 for (let i = 0; i < visibleSocialIcons.length; i++) {
                     const icon = visibleSocialIcons[i];
@@ -412,17 +535,25 @@ downloadQueue.process(async (job) => {
 
                     try {
                         await downloadFile(iconUrl, iconPath);
-                        overlayInputs.push(iconPath);
+                        ffmpegCommand.input(iconPath); // Add social icon as an input
+                        const iconInputIndex = overlayInputIndex++; // Use overlayInputIndex for tracking
 
-                        const iconInputIndex = inputIndex;
+                        const iconFormated = `social_fmt${i}`;
                         const iconNegatedLabel = `social_neg${i}`;
                         const iconScaledLabel = `social_scaled_${i}`;
                         const iconOverlayLabel = `social_overlay_${i}`;
 
+                        combinedFilters.push({
+                            filter: 'format',
+                            options: 'rgba',
+                            inputs: `${iconInputIndex}:v`,
+                            outputs: iconFormated
+                        });
+
                         // Invert color (SimpleIcons are black by default, we need white)
                         combinedFilters.push({
                             filter: 'negate',
-                            inputs: `${iconInputIndex}:v`,
+                            inputs: iconFormated,
                             outputs: iconNegatedLabel
                         });
 
@@ -435,42 +566,47 @@ downloadQueue.process(async (job) => {
 
                         combinedFilters.push({
                             filter: 'overlay',
-                            options: `x=${Math.round(currentIconX)}:y=${ROW_1_Y - 5}`,
+                            options: `x=${Math.round(currentIconX)}:y=${Math.round(ROW_1_Y_CENTER - iconSize / 2)}`,
                             inputs: [currentBase, iconScaledLabel],
                             outputs: iconOverlayLabel
                         });
 
                         currentBase = iconOverlayLabel;
                         currentIconX -= (iconSize + iconGap);
-                        inputIndex++;
                     } catch (e) { console.error(`Social icon failed: ${iconUrl}`, e.message); }
                 }
             }
 
+            // --- ROW 2: Email & Phone ---
             if (showElements.email || showElements.phone) {
-                if (showElements.email) {
+                if (showElements.email && viewer.email) {
                     const emailLabel = `footer_email`;
                     combinedFilters.push({
                         filter: "drawtext",
                         options: {
-                            text: escapeDrawText(viewer.email || ""),
-                            x: Math.round(footerX + PADDING_INNER), y: ROW_2_Y,
-                            fontsize: FONT_SIZE_INFO, fontcolor: normalizeFfmpegColor(footerConfig?.textColor || "white"), fontfile: fontPath
+                            text: escapeDrawText(viewer.email),
+                            x: Math.round(footerX + PADDING_X_INNER),
+                            y: Math.round(ROW_2_Y_CENTER - FONT_SIZE_INFO / 2),
+                            fontsize: FONT_SIZE_INFO,
+                            fontcolor: textColor,
+                            fontfile: FONT_PATH
                         },
                         inputs: currentBase,
                         outputs: emailLabel
                     });
                     currentBase = emailLabel;
                 }
-                if (showElements.phone) {
+                if (showElements.phone && (viewer.phone || viewer.phoneNumber)) {
                     const phoneLabel = `footer_phone`;
                     combinedFilters.push({
                         filter: "drawtext",
                         options: {
-                            text: escapeDrawText(viewer.phone || viewer.phoneNumber || ""),
-                            x: `${Math.round(footerX + footerW - PADDING_INNER)} - text_w`,
-                            y: ROW_2_Y, fontsize: FONT_SIZE_INFO,
-                            fontcolor: normalizeFfmpegColor(footerConfig?.textColor || "white"), fontfile: fontPath
+                            text: escapeDrawText(viewer.phone || viewer.phoneNumber),
+                            x: `${Math.round(footerX + footerW - PADDING_X_INNER)}-text_w`,
+                            y: Math.round(ROW_2_Y_CENTER - FONT_SIZE_INFO / 2),
+                            fontsize: FONT_SIZE_INFO,
+                            fontcolor: textColor,
+                            fontfile: FONT_PATH
                         },
                         inputs: currentBase,
                         outputs: phoneLabel
@@ -480,63 +616,61 @@ downloadQueue.process(async (job) => {
             }
         }
 
-        job.progress(50);
+        job.progress(60);
+        if (io) io.to(userId).emit("download-progress", { jobId, progress: 60, status: "processing" });
 
         // 6. BUILD FFMPEG COMMAND
-        let command = ffmpeg();
-
-        if (isSourceImage) {
-            // Make image into video (8 seconds default)
-            command = command
-                .input(sourcePath)
-                .inputOptions(["-loop 1"])
-                .outputOptions(["-t 8"]);
-        } else {
-            command = command.input(sourcePath);
-        }
-
-        // Add overlay inputs
-        overlayInputs.forEach(input => command.input(input));
+        // ffmpegCommand is already initialized and source/audio inputs added
 
         // Set up complex filters
-        console.log(`[Job ${jobId}] Combined Filters:`, JSON.stringify(combinedFilters, null, 2));
-        command.complexFilter(combinedFilters, currentBase);
+        ffmpegCommand.complexFilter(combinedFilters);
 
-        // Configure output - FIXED: Always map audio from source
+
+
+        // let audioInputIndex = null; // This is now determined earlier
+
+        // if (postType === "image+audio" && feed.audioFile?.url) {
+        //     audioInputIndex = 1 + overlayInputs.length;
+        // }
+
+
+
+
+
+
+        // Configure output
         const outputOptions = [
-            "-map", "0:a?",  // FIXED: Map audio from source (if exists)
+            "-map", `[${currentBase}]`,
             "-c:v", "libx264",
-            "-c:a", "aac",   // FIXED: Always use AAC for audio
-            "-b:a", "128k",
             "-pix_fmt", "yuv420p",
             "-preset", "veryfast",
             "-movflags", "+faststart"
         ];
 
-        // Handle audio for image+audio posts
-        if (postType === "image+audio" && feed.audioFile?.url) {
-            let audioUrl = feed.audioFile.url;
-            if (!audioUrl.startsWith("http")) {
-                audioUrl = `${BACKEND_URL}${audioUrl.startsWith("/") ? "" : "/"}${audioUrl}`;
-            }
-
-            const tempAudioPath = path.join(tempDir, "audio.mp3");
-            await downloadFile(audioUrl, tempAudioPath);
-
-            command.input(tempAudioPath);
-
-            const audioInputIndex = 1 + overlayInputs.length;
-
-            // Remove the default "0:a?" mapping and replace it cleanly
-            outputOptions[2] = "-map";
-            outputOptions[3] = `${audioInputIndex}:a`;
+        // Determine final duration (match audio for image+audio posts)
+        if (postType === "image+audio" && audioInputIndex !== null) {
+            outputOptions.push("-shortest");
         }
 
-        command.outputOptions(outputOptions);
+        // Handle audio mapping
+        if (postType === "image+audio" && audioInputIndex !== null) {
+            outputOptions.push(
+                "-map", `${audioInputIndex}:a`,
+                "-c:a", "aac",
+                "-b:a", "128k"
+            );
+        } else if (postType === "video") {
+            // Keep original audio from video if present
+            outputOptions.push("-map", "0:a?");
+            outputOptions.push("-c:a", "copy");
+        }
+
+        ffmpegCommand.outputOptions(outputOptions);
+        console.log(`[Job ${jobId}] Output options configured:`, outputOptions);
 
         // 7. RUN FFMPEG
         await new Promise((resolve, reject) => {
-            command
+            ffmpegCommand
                 .output(finalOutputPath)
                 .on('start', (cmdLine) => {
                     console.log(`[Job ${jobId}] FFmpeg command: ${cmdLine}`);
@@ -564,15 +698,17 @@ downloadQueue.process(async (job) => {
         }
 
         const downloadUrl = `${BACKEND_URL}/uploads/${finalOutputName}`;
+        console.log(`[Job ${jobId}] Processing complete. Download URL: ${downloadUrl}`);
         if (io) io.to(userId).emit("download-complete", { jobId, progress: 100, status: "ready", downloadUrl });
 
         return { downloadUrl, processedFilePath: finalOutputPath };
 
     } catch (err) {
-        console.error(`[Job ${jobId}] Failed:`, err);
+        console.error(`[Job ${jobId}] Critical Failure:`, err.stack || err);
         const io = getIO();
         if (io) io.to(userId).emit("download-failed", { jobId, error: err.message });
         try {
+            console.log(`[Job ${jobId}] Emergency cleanup of temp directory: ${tempDir}`);
             if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
         } catch (cleanupErr) {
             console.warn(`[Job ${jobId}] Failed-state cleanup warning:`, cleanupErr.message);

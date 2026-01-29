@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const {prithuDB}=require("../../database");
+const { prithuDB } = require("../../../database");
 
 
 const WithdrawalSchema = new mongoose.Schema({

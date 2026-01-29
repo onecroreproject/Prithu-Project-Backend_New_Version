@@ -74,31 +74,31 @@ exports.likeFeed = async (req, res) => {
     // 🔹 Create notification only if liked
     if (isLike) {
       const feed = await Feeds.findById(feedId)
-  .select("postedBy.userId mediaUrl files roleRef")
-  .lean();
+        .select("postedBy.userId mediaUrl files roleRef")
+        .lean();
 
-const ownerId = feed?.postedBy?.userId;
+      const ownerId = feed?.postedBy?.userId;
 
-if (feed && ownerId && ownerId.toString() !== userId.toString()) {
-  // ✅ pick thumbnail/image for notification
-  const previewImage =
-    feed.files?.[0]?.thumbnail ||
-    feed.files?.[0]?.url ||
-    feed.mediaUrl ||
-    "";
+      if (feed && ownerId && ownerId.toString() !== userId.toString()) {
+        // ✅ pick thumbnail/image for notification
+        const previewImage =
+          feed.files?.[0]?.thumbnail ||
+          feed.files?.[0]?.url ||
+          feed.mediaUrl ||
+          "";
 
-  await createAndSendNotification({
-    senderId: userId,
-    receiverId: ownerId,
-    type: "LIKE_POST",
-    title: "New Like ❤️",
-    message: "Someone liked your feed 🔥",
-    entityId: feed._id,
-    entityType: "Feed",
-    image: previewImage,
-    roleRef: feed.roleRef || "User",
-  });
-}
+        await createAndSendNotification({
+          senderId: userId,
+          receiverId: ownerId,
+          type: "LIKE_POST",
+          title: "New Like ❤️",
+          message: "Someone liked your feed 🔥",
+          entityId: feed._id,
+          entityType: "Feed",
+          image: previewImage,
+          roleRef: feed.roleRef || "User",
+        });
+      }
     }
 
 
@@ -286,7 +286,7 @@ exports.requestDownloadFeed = async (req, res) => {
       userId,
       viewer: {
         userName: viewerProfile?.userName || userRecord?.userName || viewerProfile?.name || "User",
-        profileAvatar: viewerProfile?.modifyAvatar || null,
+        profileAvatar: viewerProfile?.modifyAvatar || viewerProfile?.profileAvatar || null,
         name: viewerProfile?.name || "",
         email: userRecord?.email || "",
         phone: viewerProfile?.phoneNumber || ""

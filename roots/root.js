@@ -124,16 +124,16 @@ const {
   updatePlan,
   deletePlan,
   getAllPlans
-} = require('../controllers/adminControllers/adminSubcriptionController');
+} = require('../controllers/adminControllers/adminSubscriptionController');
 
 const {
   subscribePlan,
   cancelSubscription,
   getAllSubscriptionPlans,
   getUserSubscriptionPlanWithId,
-  userTrailPlanActive,
+  userTrialPlanActive,
   checkUserActiveSubscription,
-} = require('../controllers/userControllers/userSubcriptionController');
+} = require('../controllers/userControllers/userSubscriptionController');
 
 const {
   adminFeedUpload,
@@ -337,12 +337,12 @@ router.get("/user/notintrested/category", auth, getUserCategory);
 router.get("/get/user/detail/at/feed/icon", auth, getUserdetailWithinTheFeed);
 
 // /* --------------------- User Subscription --------------------- */
-router.post('/user/plan/subscription', auth, subscribePlan);
-router.put('/user/cancel/subscription', auth, cancelSubscription);
-router.get('/user/getall/subscriptions', getAllPlans);
-router.get('/user/user/subscriptions', auth, getUserSubscriptionPlanWithId);
-router.post('/user/activate/trial/plan', auth, userTrailPlanActive);
-router.get('/user/check/active/subcription', auth, checkUserActiveSubscription);
+router.post('/user/subscription/subscribe', auth, subscribePlan);
+router.put('/user/subscription/cancel', auth, cancelSubscription);
+router.get('/user/subscription/plans', getAllSubscriptionPlans);
+router.get('/user/subscription/active', auth, getUserSubscriptionPlanWithId);
+router.post('/user/subscription/activate-trial', auth, userTrialPlanActive);
+router.get('/user/subscription/check-active', auth, checkUserActiveSubscription);
 
 /*----------------------User Report -----------------------------*/
 router.get("/report-questions/start", getStartQuestion);
@@ -356,8 +356,7 @@ router.get("/report-logs/:reportId", getReportLogs);
 router.post("/refresh-token", refreshAccessToken);
 router.post("/heartbeat", auth, heartbeat);
 
-/* --------------------- User Subscription --------------------- */
-router.get('/user/user/subscriptions', auth, getUserSubscriptionPlanWithId);
+
 
 /*---------------------- User Feed API -------------------------*/
 
@@ -440,7 +439,7 @@ router.post('/auth/admin/logout', auth, adminLogout);
 //   "/admin/profile/detail/update",
 //   auth,
 //   adminUploadProfile.single("file"),
-//   attachAdminProfileFile,
+// attachAdminProfileFile,
 //   adminProfileDetailUpdate
 // );
 
@@ -498,10 +497,10 @@ router.get('/admin/get/feed/category', getAllCategories);
 router.put('/admin/update/category', updateCategory);
 
 /* --------------------- Admin Subscription API --------------------- */
-router.post('/admin/create/subscription', createPlan);
-router.put('/admin/update/subscription/:id', updatePlan);
-router.delete('/admin/delete/subscription/:id', deletePlan);
-router.get('/admin/getall/subscriptions', getAllPlans);
+router.post('/admin/subscription/create', createPlan);
+router.put('/admin/subscription/update/:id', updatePlan);
+router.delete('/admin/subscription/delete/:id', deletePlan);
+router.get('/admin/subscription/all', getAllPlans);
 
 /* --------------------- Admin User API --------------------- */
 router.get('/admin/getall/users', getAllUserDetails);
@@ -602,10 +601,10 @@ router.put("/admin/childadmin/permissions/:id", updateChildAdminPermissions);
 // router.put(
 //   "/child/admin/profile/detail/update",
 //   auth,
-//   adminUploadProfile.single("file"),
+//    adminUploadProfile.single("file"),
 //   attachAdminProfileFile,
-//   childAdminProfileDetailUpdate
-// );
+//    childAdminProfileDetailUpdate
+//  );
 
 router.get("/child/admin/:id", getChildAdminById);
 router.patch("/block/child/admin/:id", blockChildAdmin);
@@ -668,52 +667,6 @@ router.get("/user/profile/completion", auth, getProfileCompletion);
 
 
 
-// const Users=require("../models/userModels/userModel")
-
-
-
-// // Set all users isOnline = false
-// const setAllUsersOffline = async () => {
-//   try {
-//     const result = await Users.updateMany(
-//       {},                     // match ALL documents
-//       { $set: { isOnline: false } } // update field
-//     );
-
-
-
-//   } catch (error) {
-//     console.error("Error updating users:", error);
-//     return res.status(500).json({
-//       success: false,
-//       message: "Failed to update users",
-//       error: error.message,
-//     });
-//   }
-// };
-
-
-
-// setAllUsersOffline()
-
-
-
-// const computeTrendingCreators = require("../middlewares/computeTreandingCreators");
-
-// computeTrendingCreators()
-
-
-
-
-
-
-// // encode.js
-// const fs = require("fs");
-
-// const json = fs.readFileSync("../be/token.json", "utf8");
-// const encoded = Buffer.from(json).toString("base64");
-
-// console.log(encoded);
 
 
 

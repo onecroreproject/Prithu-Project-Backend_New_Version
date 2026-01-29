@@ -1,13 +1,14 @@
 // services/subscriptionService.js
 const User = require("../../models/userModels/userModel");
-const UserSubscription = require("../../models/subcriptionModels/userSubscreptionModel");
-const SubscriptionPlan = require("../../models/subcriptionModels/subscriptionPlanModel");
+const UserSubscription = require("../../models/subscriptionModels/userSubscriptionModel");
+const SubscriptionPlan = require("../../models/subscriptionModels/subscriptionPlanModel");
 const { processReferral } = require("../../middlewares/referralMiddleware/referralCount");
 const mongoose = require("mongoose");
+const { prithuDB } = require("../../database");
 
 
 exports.activateSubscription = async (userId, planId, paymentResult) => {
-  const session = await mongoose.startSession();
+  const session = await prithuDB.startSession();
   session.startTransaction();
 
   try {

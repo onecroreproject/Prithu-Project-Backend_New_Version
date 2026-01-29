@@ -1,44 +1,44 @@
 
 const UserDeleteLog = require("../../models/userDeleteLog");
 const Users = require("../../models/userModels/userModel.js");
-const {userTimeAgo}=require('../../middlewares/userStatusTimeAgo.js');
-const UserFeedActions=require('../../models/userFeedInterSectionModel');
-const ProfileSettings=require('../../models/profileSettingModel.js');
-const mongoose=require("mongoose");
+const { userTimeAgo } = require('../../middlewares/userStatusTimeAgo.js');
+const UserFeedActions = require('../../models/userFeedInterSectionModel');
+const ProfileSettings = require('../../models/profileSettingModel.js');
+const mongoose = require("mongoose");
+const { prithuDB } = require("../../database");
 const UserDevices = require("../../models/userModels/userSession-Device/deviceModel");
-const Subscriptions=require('../../models/subcriptionModels/userSubscreptionModel.js');
-const UserLanguage=require('../../models/userModels/userLanguageModel.js');
-const Follower=require("../../models/userFollowingModel.js");
-const UserCategory=require('../../models/userModels/userCategotyModel.js');
-const ImageView=require('../../models/userModels/MediaSchema/userImageViewsModel.js');
-const VideoView=require('../../models/userModels/MediaSchema/userVideoViewModel.js');
-const Feed =require('../../models/feedModel.js');
-const UserLevel =require('../../models/userModels/userRefferalModels/userReferralLevelModel');
-const Withdrawal=require('../../models/userModels/withdrawal.js');
-const UserEarning=require('../../models/userModels/referralEarnings.js');
-const Session=require('../../models/userModels/userSession-Device/sessionModel.js');
-const UserSubscription=require("../../models/subcriptionModels/userSubscreptionModel.js");
-const Account=require("../../models/accountSchemaModel.js");
-const Report=require('../../models/feedReportModel.js');
-const ReportType=require('../../models/userModels/Report/reportTypeModel');
-const Followers =require("../../models/creatorFollowerModel.js");
-const HeldReferrals=require("../../models/userModels/userRefferalModels/heldUsers.js");
-const HiddenPost=require("../../models/userModels/hiddenPostSchema.js");
-const UserComments=require("../../models/userCommentModel.js");
-const UserEarnings =require('../../models/userModels/referralEarnings.js');
-const UserFeedCategories=require('../../models/userModels/userCategotyModel.js');
-const UserFollowings=require("../../models/userFollowingModel.js");
-const UserLevels=require("../../models/userModels/userRefferalModels/userReferralLevelModel");
-const UserNotification=require("../../models/notificationModel.js");
-const UserViews=require("../../models/userModels/MediaSchema/userImageViewsModel.js");
-const {extractPublicId}=require("../../middlewares/helper/cloudnaryDetete.js");
-const {deleteCloudinaryBatch}=require("../../middlewares/helper/geatherPubliceIds.js");
-const {gatherFeedPublicIds}=require("../../middlewares/helper/geatherPubliceIds");
-const UserSubscriptions=require("../../models/subcriptionModels/userSubscreptionModel.js");
-const CommentLikes=require("../../models/commentsLikeModel.js");
-const CreatorFollowers=require('../../models/creatorFollowerModel.js');
-const Devices=require("../../models/userModels/userSession-Device/deviceModel.js");
-const UserReferral =require("../../models/userModels/userReferralModel");
+const Subscriptions = require('../../models/subscriptionModels/userSubscriptionModel.js');
+const UserLanguage = require('../../models/userModels/userLanguageModel.js');
+const Follower = require("../../models/userFollowingModel.js");
+const UserCategory = require('../../models/userModels/userCategotyModel.js');
+const ImageView = require('../../models/userModels/MediaSchema/userImageViewsModel.js');
+const VideoView = require('../../models/userModels/MediaSchema/userVideoViewModel.js');
+const Feed = require('../../models/feedModel.js');
+const UserLevel = require('../../models/userModels/userRefferalModels/userReferralLevelModel');
+const Withdrawal = require('../../models/userModels/userRefferalModels/withdrawal.js');
+const UserEarning = require('../../models/userModels/userRefferalModels/referralEarnings.js');
+const Session = require('../../models/userModels/userSession-Device/sessionModel.js');
+const UserSubscription = require("../../models/subscriptionModels/userSubscriptionModel.js");
+const Account = require("../../models/accountSchemaModel.js");
+const Report = require('../../models/feedReportModel.js');
+const ReportType = require('../../models/userModels/Report/reportTypeModel');
+const Followers = require("../../models/creatorFollowerModel.js");
+const HiddenPost = require("../../models/userModels/hiddenPostSchema.js");
+const UserComments = require("../../models/userCommentModel.js");
+const UserEarnings = require('../../models/userModels/userRefferalModels/referralEarnings.js');
+const UserFeedCategories = require('../../models/userModels/userCategotyModel.js');
+const UserFollowings = require("../../models/userFollowingModel.js");
+const UserLevels = require("../../models/userModels/userRefferalModels/userReferralLevelModel");
+const UserNotification = require("../../models/notificationModel.js");
+const UserViews = require("../../models/userModels/MediaSchema/userImageViewsModel.js");
+const { extractPublicId } = require("../../middlewares/helper/cloudnaryDetete.js");
+const { deleteCloudinaryBatch } = require("../../middlewares/helper/geatherPubliceIds.js");
+const { gatherFeedPublicIds } = require("../../middlewares/helper/geatherPubliceIds");
+const UserSubscriptions = require("../../models/subscriptionModels/userSubscriptionModel.js");
+const CommentLikes = require("../../models/commentsLikeModel.js");
+const CreatorFollowers = require('../../models/creatorFollowerModel.js');
+const Devices = require("../../models/userModels/userSession-Device/deviceModel.js");
+const UserReferral = require("../../models/userModels/userRefferalModels/userReferralModel.js");
 
 
 
@@ -47,7 +47,7 @@ const UserReferral =require("../../models/userModels/userReferralModel");
 // ===================================================
 exports.deactivateUser = async (req, res) => {
   try {
-    const  userId  = req.Id;
+    const userId = req.Id;
     const { reason } = req.body;
 
     const user = await Users.findById(userId);
@@ -133,7 +133,7 @@ exports.deleteUserNow = async (req, res) => {
     // -----------------------------------------
     // STEP 4: Delete everything using transaction
     // -----------------------------------------
-    const session = await mongoose.startSession();
+    const session = await prithuDB.startSession();
     session.startTransaction();
 
     const accounts = await Account.find({ userId }).lean();

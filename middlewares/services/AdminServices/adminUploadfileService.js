@@ -3,6 +3,7 @@ const Categories = require("../../../models/categorySchema");
 const Admin = require("../../../models/adminModels/adminModel");
 const ChildAdmin = require("../../../models/childAdminModel");
 const mongoose = require("mongoose");
+const { prithuDB } = require("../../../database");
 const sharp = require("sharp");
 const crypto = require("crypto");
 
@@ -11,11 +12,11 @@ class FeedService {
    * Upload feed with design metadata
    */
   static async uploadFeed(feedData, file, userId, roleRef) {
-    const session = await mongoose.startSession();
-    
+    const session = await prithuDB.startSession();
+
     try {
       await session.startTransaction();
-      
+
       const {
         language,
         categoryId,
@@ -40,7 +41,7 @@ class FeedService {
 
       // Extract dominant color if not provided
       let extractedTheme = themeColors || await this.extractThemeFromFile(file);
-      
+
       // Create feed document
       const feedDoc = {
         type,
@@ -51,7 +52,7 @@ class FeedService {
         contentUrl,
         storageType,
         driveFileId,
-        
+
         // Files array
         files: [{
           url: contentUrl,
@@ -68,7 +69,7 @@ class FeedService {
 
         dec: dec || "",
         fileHash: file.fileHash,
-        
+
         // Theme colors
         themeColor: {
           primary: extractedTheme.primary,
@@ -94,7 +95,7 @@ class FeedService {
       await this.updateCategoryFeed(categoryId, newFeed._id, session);
 
       await session.commitTransaction();
-      
+
       return {
         success: true,
         feed: newFeed,
@@ -139,7 +140,7 @@ class FeedService {
 
         const primary = this.rgbToHex(dominant.r, dominant.g, dominant.b);
         const secondary = this.darkenHex(primary, 40);
-        
+
         return {
           primary,
           secondary,
@@ -176,7 +177,7 @@ class FeedService {
     if (c.length === 3) {
       c = c.split('').map(char => char + char).join('');
     }
-    
+
     let r = parseInt(c.slice(0, 2), 16);
     let g = parseInt(c.slice(2, 4), 16);
     let b = parseInt(c.slice(4, 6), 16);
@@ -208,7 +209,7 @@ class FeedService {
    * Bulk upload feeds
    */
   static async bulkUploadFeeds(feedDataArray, userId, roleRef) {
-    const session = await mongoose.startSession();
+    const session = await prithuDB.startSession();
     const results = [];
 
     try {
@@ -256,10 +257,10 @@ class FeedService {
           { allowedUsers: userId }
         ]
       })
-      .select('-__v -previousVersions')
-      .populate('category', 'name icon color')
-      .populate('createdByAccount', 'username name profilePic')
-      .lean();
+        .select('-__v -previousVersions')
+        .populate('category', 'name icon color')
+        .populate('createdByAccount', 'username name profilePic')
+        .lean();
 
       if (!feed) {
         throw new Error("Feed not found or access denied");
@@ -267,8 +268,8 @@ class FeedService {
 
       // Add virtuals manually
       feed.formattedUrl = feed.contentUrl || (feed.files && feed.files[0]?.url);
-      feed.thumbnailUrl = feed.type === 'video' && feed.files && feed.files[0]?.thumbnail 
-        ? feed.files[0].thumbnail 
+      feed.thumbnailUrl = feed.type === 'video' && feed.files && feed.files[0]?.thumbnail
+        ? feed.files[0].thumbnail
         : feed.formattedUrl;
 
       return feed;
@@ -282,8 +283,8 @@ class FeedService {
    * Update feed design metadata
    */
   static async updateDesignMetadata(feedId, userId, designData) {
-    const session = await mongoose.startSession();
-    
+    const session = await prithuDB.startSession();
+
     try {
       await session.startTransaction();
 

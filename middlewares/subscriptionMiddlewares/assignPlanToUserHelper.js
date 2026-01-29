@@ -1,5 +1,5 @@
-const UserSubscription = require('../../models/subcriptionModels/userSubscreptionModel');
-const SubscriptionPlan = require('../../models/subcriptionModels/subscriptionPlanModel');
+const UserSubscription = require('../../models/subscriptionModels/userSubscriptionModel');
+const SubscriptionPlan = require('../../models/subscriptionModels/subscriptionPlanModel');
 
 exports.assignPlanToUser = async (userId, planId) => {
   const plan = await SubscriptionPlan.findById(planId);

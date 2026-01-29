@@ -1,10 +1,10 @@
 // controllers/analyticsController.js
-const UserSubscription = require("../../models/subcriptionModels/userSubscreptionModel.js");
+const UserSubscription = require("../../models/subscriptionModels/userSubscriptionModel.js");
 const SubscriptionInvoice = require("../../models/InvoiceModel/subscriptionInvoice.js");
 const WithdrawalInvoice = require("../../models/InvoiceModel/withdrawelInvoice.js");
 const AnalyticsMetric = require("../../models/adminModels/salesDashboardMetricks.js");
-const User =require("../../models/userModels/userModel.js");
-const Subscriptions=require("../../models/subcriptionModels/subscriptionPlanModel.js");
+const User = require("../../models/userModels/userModel.js");
+const Subscriptions = require("../../models/subscriptionModels/subscriptionPlanModel.js");
 
 
 

@@ -55,13 +55,6 @@ const UserSchema = new mongoose.Schema(
       default: ["User"],
     },
 
-    accountType: {
-      type: String,
-      enum: ["personal", "company"],
-      default: "personal",
-      required: true,
-    },
-
     activeAccount: { type: mongoose.Schema.Types.ObjectId, ref: "Account" },
 
     accounts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Account" }],
@@ -133,7 +126,6 @@ const UserSchema = new mongoose.Schema(
 // Note: email, userName, and referralCode already have unique: true in their field definitions
 // which automatically creates unique indexes, so we don't need explicit index() calls for them
 UserSchema.index({ referralCodeIsValid: 1 });
-UserSchema.index({ accountType: 1 });
 UserSchema.index({ "subscription.isActive": 1 });
 UserSchema.index({ isOnline: 1 });
 

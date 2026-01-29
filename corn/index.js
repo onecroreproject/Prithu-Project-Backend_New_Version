@@ -2,7 +2,7 @@
 const cron = require("node-cron");
 
 // Queues
-const deactivateQueue = require("../queue/deactivateSubcriptionQueue");
+const deactivateQueue = require("../queue/deactivateSubscriptionQueue");
 const deleteQueue = require("../queue/deleteReportQueue");
 const feedQueue = require("../queue/feedPostQueue");
 const trendingQueue = require("../queue/treandingQueue");

@@ -1,10 +1,10 @@
 const mongoose = require("mongoose");
 
-const UserEarning = require("../../models/userModels/referralEarnings");
+const UserEarning = require("../../models/userModels/userRefferalModels/referralEarnings.js");
 const ProfileSettings = require("../../models/profileSettingModel");
-const Withdrawal = require("../../models/userModels/withdrawal");
-const UserSubscription=require("../../models/subcriptionModels/userSubscreptionModel");
-const SubscriptionPlan=require("../../models/subcriptionModels/subscriptionPlanModel.js");
+const Withdrawal = require("../../models/userModels/userRefferalModels/withdrawal.js");
+const UserSubscription = require("../../models/subscriptionModels/userSubscriptionModel");
+const SubscriptionPlan = require("../../models/subscriptionModels/subscriptionPlanModel.js");
 
 
 
@@ -14,118 +14,117 @@ const SubscriptionPlan=require("../../models/subcriptionModels/subscriptionPlanM
 exports.getUserEarnings = async (req, res) => {
   try {
     const userId = req.Id;
+    const { fromDate, toDate } = req.query;
 
-    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    if (!userId || !userId) {
       return res.status(400).json({ message: "Valid userId is required" });
     }
 
-    // Optimized: Check user's active basic subscription
-    const basicPlan = await SubscriptionPlan.findOne({ planType: "basic" }).select("_id").lean();
-    if (!basicPlan) return res.status(500).json({ message: "Basic plan not found" });
-
-    const activeSubscription = await UserSubscription.findOne({
-      userId,
-      planId: basicPlan._id,
-      isActive: true,
-      paymentStatus: "success",
-      endDate: { $gte: new Date() },
-    }).lean();
-
-    if (!activeSubscription) {
-      return res.status(403).json({ message: "Please subscribe to the basic plan first" });
+    // Date range filter
+    const matchQuery = { userId: new mongoose.Types.ObjectId(userId) };
+    if (fromDate || toDate) {
+      matchQuery.createdAt = {};
+      if (fromDate) matchQuery.createdAt.$gte = new Date(fromDate);
+      if (toDate) matchQuery.createdAt.$lte = new Date(toDate);
     }
 
-    // Optimized: Single aggregation pipeline to combine earnings, profiles, subscriptions, and withdrawals
-    const result = await UserEarning.aggregate([
-      { $match: { userId: mongoose.Types.ObjectId(userId) } },
+    // 1️⃣ Total Earnings and Breakdown
+    const earningsPipeline = [
+      { $match: matchQuery },
       { $sort: { createdAt: -1 } },
       {
-        $lookup: {
-          from: "profilesettings",
-          localField: "fromUserId",
-          foreignField: "userId",
-          as: "fromUserProfile",
-          pipeline: [{ $project: { userName: 1, profileAvatar: 1, modifyAvatarPublicId: 1 } }]
-        }
-      },
-      { $unwind: { path: "$fromUserProfile", preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: "usersubscriptions",
-          localField: "fromUserId",
-          foreignField: "userId",
-          as: "fromUserSubscription",
-          pipeline: [
-            { $match: { isActive: true, paymentStatus: "success", endDate: { $gte: new Date() } } },
-            { $project: { _id: 1 } }
+        $facet: {
+          total: [{ $group: { _id: null, total: { $sum: "$amount" } } }],
+          breakdown: [
+            {
+              $group: {
+                _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                amount: { $sum: "$amount" }
+              }
+            },
+            { $sort: { _id: -1 } }
+          ],
+          details: [
+            {
+              $lookup: {
+                from: "profilesettings",
+                localField: "fromUserId",
+                foreignField: "userId",
+                as: "profile",
+                pipeline: [{ $project: { userName: 1, profileAvatar: 1, modifyAvatarPublicId: 1 } }]
+              }
+            },
+            { $unwind: "$profile" },
+            {
+              $project: {
+                fromUserName: "$profile.userName",
+                fromUserAvatar: { $ifNull: ["$profile.modifyAvatarPublicId", "$profile.profileAvatar"] },
+                amount: 1,
+                createdAt: 1
+              }
+            }
           ]
         }
-      },
-      {
-        $addFields: {
-          fromUserName: { $ifNull: ["$fromUserProfile.userName", "Unknown"] },
-          fromUserAvatar: {
-            $ifNull: [
-              { $ifNull: ["$fromUserProfile.modifyAvatarPublicId", "$fromUserProfile.profileAvatar"] },
-              null
-            ]
-          },
-          fromUserSubscribed: { $gt: [{ $size: "$fromUserSubscription" }, 0] }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          earnings: {
-            $push: {
-              earningId: "$_id",
-              fromUserId: "$fromUserId",
-              fromUserName: "$fromUserName",
-              fromUserAvatar: "$fromUserAvatar",
-              fromUserSubscribed: "$fromUserSubscribed",
-              amount: "$amount",
-              createdAt: "$createdAt"
-            }
-          },
-          totalEarnings: { $sum: "$amount" }
-        }
       }
-    ]);
+    ];
 
-    if (!result || result.length === 0) {
-      return res.status(404).json({
-        message: "No earnings found for this user",
-        totalEarnings: 0,
-        totalWithdrawn: 0,
-        balance: 0,
-        earnings: [],
-      });
-    }
+    const [result] = await UserEarning.aggregate(earningsPipeline);
 
-    const { earnings, totalEarnings } = result[0];
+    const totalEarnings = result.total[0]?.total || 0;
+    const breakdown = result.breakdown;
+    const earningsDetails = result.details;
 
-    // Optimized: Fetch total withdrawn amount using aggregation
+    // 2️⃣ Total Withdrawn
     const withdrawalResult = await Withdrawal.aggregate([
-      { $match: { userId: mongoose.Types.ObjectId(userId), status: "completed" } },
+      { $match: { userId: new mongoose.Types.ObjectId(userId), status: "completed" } },
       { $group: { _id: null, totalWithdrawn: { $sum: "$withdrawalAmount" } } }
     ]);
 
-    const totalWithdrawn = withdrawalResult.length > 0 ? withdrawalResult[0].totalWithdrawn : 0;
+    const totalWithdrawn = withdrawalResult[0]?.totalWithdrawn || 0;
     const balance = totalEarnings - totalWithdrawn;
 
-    // Return final structured response
-    res.status(200).json({
-      message: "User earnings fetched successfully",
-      userSubscription: activeSubscription,
+    return res.status(200).json({
+      success: true,
       totalEarnings,
       totalWithdrawn,
       balance,
-      earnings,
+      breakdown,
+      earnings: earningsDetails
     });
 
   } catch (error) {
     console.error("Error fetching user earnings:", error);
     res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// 6️⃣ Get User Balance Amount
+exports.getUserBalance = async (req, res) => {
+  try {
+    const userId = req.Id;
+
+    const earningsResult = await UserEarning.aggregate([
+      { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+      { $group: { _id: null, total: { $sum: "$amount" } } }
+    ]);
+
+    const withdrawalResult = await Withdrawal.aggregate([
+      { $match: { userId: new mongoose.Types.ObjectId(userId), status: "completed" } },
+      { $group: { _id: null, totalWithdrawn: { $sum: "$withdrawalAmount" } } }
+    ]);
+
+    const totalEarnings = earningsResult[0]?.total || 0;
+    const totalWithdrawn = withdrawalResult[0]?.totalWithdrawn || 0;
+
+    return res.status(200).json({
+      success: true,
+      totalEarnings,
+      totalWithdrawn,
+      balance: totalEarnings - totalWithdrawn
+    });
+  } catch (error) {
+    console.error("Error getting user balance:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 

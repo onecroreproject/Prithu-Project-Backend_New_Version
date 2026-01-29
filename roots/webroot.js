@@ -17,6 +17,7 @@ const {
   existUserVerifyOtp,
   newUserVerifyOtp,
   userLogOut,
+  validateReferralCode,
 } = require('../controllers/authenticationControllers/userAuthController');
 
 
@@ -146,16 +147,19 @@ const {
   updatePlan,
   deletePlan,
   getAllPlans
-} = require('../controllers/adminControllers/adminSubcriptionController');
+} = require('../controllers/adminControllers/adminSubscriptionController');
 
 const {
   subscribePlan,
   cancelSubscription,
   getAllSubscriptionPlans,
   getUserSubscriptionPlanWithId,
-  userTrailPlanActive,
+  userTrialPlanActive,
   checkUserActiveSubscription,
-} = require('../controllers/userControllers/userSubcriptionController');
+  checkTrialEligibility,
+  createSubscriptionOrder,
+  verifySubscriptionPayment,
+} = require('../controllers/userControllers/userSubscriptionController');
 
 const {
   adminFeedUpload,
@@ -282,7 +286,20 @@ const {
 
 
 
-const { getUserEarnings } = require("../controllers/userControllers/userEarningsController");
+const {
+  getUserEarnings,
+  getUserBalance
+} = require("../controllers/userControllers/userEarningsController");
+
+const {
+  logReferralActivity,
+  getReferredPeople,
+  getRecentActivities
+} = require("../controllers/userControllers/userReferralActivityController");
+
+const {
+  getWithdrawalHistory
+} = require("../controllers/userControllers/userWithdrawalController");
 
 const { saveUserLocation,
   getUserLocation,
@@ -373,9 +390,16 @@ router.post('/auth/exist/user/verify-otp', existUserVerifyOtp);
 router.post('/auth/new/user/verify-otp', newUserVerifyOtp);
 router.post('/auth/user/reset-password', userPasswordReset);
 router.post('/auth/user/logout', auth, userLogOut);
+router.get('/auth/user/referral/validate/:code', validateReferralCode);
 
 // /* --------------------- User Referral API Actions --------------------- */
 router.get('/user/referal/code', auth, getUserReferalCode);
+router.get('/user/earnings/total', auth, getUserEarnings);
+router.get('/user/referred/people', auth, getReferredPeople);
+router.post('/user/referral/activity/log', auth, logReferralActivity);
+router.get('/user/referral/recent-activities', auth, getRecentActivities);
+router.get('/user/balance/amount', auth, getUserBalance);
+router.get('/user/withdrawal/details', auth, getWithdrawalHistory);
 
 
 // /* --------------------- Fresh Users API --------------------- */
@@ -433,11 +457,14 @@ router.post('/get/nested/replies', auth, getNestedReplies);
 
 // /* --------------------- User Subscription --------------------- */
 router.post('/user/plan/subscription', auth, subscribePlan);
-router.put('/user/cancel/subscription', auth, cancelSubscription);
-router.get('/user/getall/subscriptions', getAllPlans);
-router.get('/user/user/subscriptions', auth, getUserSubscriptionPlanWithId);
-router.post('/user/activate/trial/plan', auth, userTrailPlanActive);
-router.get('/user/check/active/subcription', auth, checkUserActiveSubscription);
+router.put('/user/subscription/cancel', auth, cancelSubscription);
+router.get('/user/subscription/plans', getAllSubscriptionPlans);
+router.get('/user/subscription/active', auth, getUserSubscriptionPlanWithId);
+router.post('/user/subscription/activate-trial', auth, userTrialPlanActive);
+router.get('/user/subscription/check-active', auth, checkUserActiveSubscription);
+router.get('/user/subscription/trial-eligibility', auth, checkTrialEligibility);
+router.post('/user/subscription/create-order', auth, createSubscriptionOrder);
+router.post('/user/subscription/verify-payment', auth, verifySubscriptionPayment);
 
 /*----------------------User Report -----------------------------*/
 router.get("/report-questions/start", getStartQuestion);
@@ -451,8 +478,7 @@ router.post("/refresh-token", refreshAccessToken);
 router.post("/heartbeat", auth, heartbeat);
 router.post("/user/session/presence", auth, userPresence);
 
-/* --------------------- User Subscription --------------------- */
-router.get('/user/user/subscriptions', auth, getUserSubscriptionPlanWithId);
+
 
 /*---------------------- User Feed API -------------------------*/
 router.post(
@@ -545,7 +571,6 @@ router.get('/get/single/profile/detail', getUserProfileDetail);
 
 /* --------------------- User Earnings API --------------------- */
 
-router.get('/get/userearnigs/referrals', getUserEarnings);
 
 /*-----------------------User Location API ---------------------*/
 router.post("/save/user/location", auth, saveUserLocation);
@@ -588,10 +613,10 @@ router.get('/admin/get/feed/category', getAllCategories);
 router.put('/admin/update/category', updateCategory);
 
 /* --------------------- Admin Subscription API --------------------- */
-router.post('/admin/create/subscription', createPlan);
-router.put('/admin/update/subscription/:id', updatePlan);
-router.delete('/admin/delete/subscription/:id', deletePlan);
-router.get('/admin/getall/subscriptions', getAllPlans);
+router.post('/admin/subscription/create', createPlan);
+router.put('/admin/subscription/update/:id', updatePlan);
+router.delete('/admin/subscription/delete/:id', deletePlan);
+router.get('/admin/subscription/all', getAllPlans);
 
 /* --------------------- Admin User API --------------------- */
 router.get('/admin/getall/users', getAllUserDetails);

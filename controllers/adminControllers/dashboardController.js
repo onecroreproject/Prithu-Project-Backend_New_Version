@@ -1,7 +1,7 @@
 const User = require("../../models/userModels/userModel");
 const Account = require("../../models/accountSchemaModel");
-const UserSubscription = require("../../models/subcriptionModels/userSubscreptionModel"); // stores user subscriptions with planId
-const SubscriptionPlan = require("../../models/subcriptionModels/subscriptionPlanModel");
+const UserSubscription = require("../../models/subscriptionModels/userSubscriptionModel"); // stores user subscriptions with planId
+const SubscriptionPlan = require("../../models/subscriptionModels/subscriptionPlanModel");
 const Report = require("../../models/feedReportModel");
 const ChildAdmin = require("../../models/childAdminModel");
 

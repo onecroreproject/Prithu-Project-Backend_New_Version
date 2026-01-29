@@ -1,10 +1,10 @@
 const AnalyticsMetric = require("../../../models/adminModels/salesDashboardMetricks");
-const UserSubscription = require("../../../models/subcriptionModels/userSubscreptionModel");
+const UserSubscription = require("../../../models/subscriptionModels/userSubscriptionModel");
 const ProfileSettings = require("../../../models/profileSettingModel");
-const SubscriptionPlan = require("../../../models/subcriptionModels/subscriptionPlanModel");
-const UserReferral =require("../../../models/userModels/userReferralModel");
-const UserEarning =require("../../../models/userModels/referralEarnings");
-const User =require("../../../models/userModels/userModel")
+const SubscriptionPlan = require("../../../models/subscriptionModels/subscriptionPlanModel");
+const UserReferral = require("../../../models/userModels/userRefferalModels/userReferralModel");
+const UserEarning = require("../../../models/userModels/userRefferalModels/referralEarnings");
+const User = require("../../../models/userModels/userModel")
 
 
 exports.getAnalytics = async (req, res) => {
@@ -37,7 +37,7 @@ exports.getAnalytics = async (req, res) => {
         acc.totalWithdrawalInvoices += curr.totalWithdrawalInvoices || 0;
         acc.totalSubscribers += curr.totalSubscribers || 0;
         acc.totalTrialUsers += curr.totalTrialUsers || 0;
-        acc.byReferralUsers +=curr.byReferralUsers || 0;
+        acc.byReferralUsers += curr.byReferralUsers || 0;
         return acc;
       },
       {
@@ -48,7 +48,7 @@ exports.getAnalytics = async (req, res) => {
         totalWithdrawalInvoices: 0,
         totalSubscribers: 0,
         totalTrialUsers: 0,
-        byReferralUsers:0,
+        byReferralUsers: 0,
       }
     );
 
@@ -173,8 +173,8 @@ exports.getTopReferralUsers = async (req, res) => {
     }, {});
 
 
-    
-    const userData= await User.findById(parentIds)
+
+    const userData = await User.findById(parentIds)
 
     // 3️⃣ Fetch total earnings for all parentIds
     const earningsData = await UserEarning.aggregate([
@@ -203,7 +203,7 @@ exports.getTopReferralUsers = async (req, res) => {
         avatar: profile.profileAvatar || null,
         referralCount: ref.referralCount,
         totalEarnings,
-        email:userData.email || "Unknown"
+        email: userData.email || "Unknown"
       };
     });
 

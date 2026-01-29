@@ -1,8 +1,9 @@
 const mongoose = require("mongoose");
+const { prithuDB } = require("../../database");
 
 const User = require("../../models/userModels/userModel");
 const UserLevel = require("../../models/userModels/userRefferalModels/userReferralLevelModel");
-const UserEarning = require("../../models/userModels/referralEarnings");
+const UserEarning = require("../../models/userModels/userRefferalModels/referralEarnings");
 
 const LEVEL_AMOUNT = 250;
 const MAX_LEVEL = 10;
@@ -41,7 +42,7 @@ async function processReferral(childId) {
     while (!success && attempt < MAX_RETRIES) {
       attempt++;
 
-      const session = await mongoose.startSession();
+      const session = await prithuDB.startSession();
       session.startTransaction();
 
       try {
@@ -100,7 +101,7 @@ async function processReferral(childId) {
 
         // Promotion only when left/right full
         if (leftCount + (field === "leftUsers" ? 1 : 0) === threshold &&
-            rightCount + (field === "rightUsers" ? 1 : 0) === threshold) {
+          rightCount + (field === "rightUsers" ? 1 : 0) === threshold) {
 
           // Move total to withdrawn
           const updatedAncestor = await User.findById(ancestorId).session(session);

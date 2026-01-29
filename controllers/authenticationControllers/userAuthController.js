@@ -3,30 +3,27 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const bcrypt = require('bcrypt');
 if (!global.otpStore) global.otpStore = new Map();
-const {startUpProcessCheck}=require('../../middlewares/services/User Services/userStartUpProcessHelper');
+const { startUpProcessCheck } = require('../../middlewares/services/User Services/userStartUpProcessHelper');
 const Device = require("../../models/userModels/userSession-Device/deviceModel");
 const Session = require("../../models/userModels/userSession-Device/sessionModel");
-const UserReferral=require('../../models/userModels/userReferralModel');
-const ProfileSettings=require("../../models/profileSettingModel");
+const UserReferral = require('../../models/userModels/userRefferalModels/userReferralModel');
+const ProfileSettings = require("../../models/profileSettingModel");
 const fs = require("fs");
 const path = require("path");
-const { sendTemplateEmail } = require("../../utils/templateMailer"); 
-const {checkAndClearDeactivatedUser}=require("../../controllers/userControllers/userDeleteController");
-
-
-
+const { sendTemplateEmail } = require("../../utils/templateMailer");
+const { checkAndClearDeactivatedUser } = require("../../controllers/userControllers/userDeleteController");
 
 
 exports.createNewUser = async (req, res) => {
   try {
-    const { username, email, password, referralCode, phone, whatsapp, accountType } = req.body;
+    const { username, email, password, referralCode, phone, whatsapp } = req.body;
 
     // ✅ Validate inputs
-    if (!username || !email || !password || !accountType) {
+    if (!username || !email || !password) {
       return res.status(400).json({ message: "All required fields must be provided" });
     }
 
-   
+
 
     // ✅ Check for existing user
     const existingUser = await User.findOne({
@@ -57,7 +54,6 @@ exports.createNewUser = async (req, res) => {
       passwordHash,
       referralCode: generatedCode,
       referralCodeIsValid: true,
-      accountType, // ✅ store account type (Personal / Company)
     });
 
     // ✅ If referral code provided
@@ -92,7 +88,6 @@ exports.createNewUser = async (req, res) => {
       displayName: username,
       phoneNumber: phone,
       whatsAppNumber: whatsapp,
-      accountType, // ✅ also store here if you want to show in user profile
     }).catch((err) => console.error("❌ Failed to create ProfileSettings:", err));
 
     // ✅ Send welcome email
@@ -105,7 +100,6 @@ exports.createNewUser = async (req, res) => {
         email,
         password,
         referralCode: generatedCode,
-        accountType, // optional, if template includes account type
       },
       embedLogo: false,
     }).catch((err) => console.error("❌ Email sending failed:", err));
@@ -115,7 +109,6 @@ exports.createNewUser = async (req, res) => {
       success: true,
       message: "User registered successfully",
       referralCode: generatedCode,
-      accountType,
     });
   } catch (err) {
     console.error("❌ Error creating user:", err);
@@ -290,8 +283,8 @@ exports.userLogin = async (req, res) => {
 
 
 
- 
- 
+
+
 
 
 
@@ -350,7 +343,7 @@ exports.userSendOtp = async (req, res) => {
 
 
 // Verify OTP for new (unregistered) users
- 
+
 exports.newUserVerifyOtp = async (req, res) => {
   try {
     const { otp, email } = req.body;
@@ -537,3 +530,29 @@ exports.userLogOut = async (req, res) => {
 
 
 
+exports.validateReferralCode = async (req, res) => {
+  try {
+    const { code } = req.params;
+
+    if (!code) {
+      return res.status(400).json({ success: false, message: "Referral code is required" });
+    }
+
+    const user = await User.findOne({
+      referralCode: code.toUpperCase(),
+      referralCodeIsValid: true,
+    }).select("userName").lean();
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Invalid or inactive referral code" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      referrerName: user.userName,
+    });
+  } catch (err) {
+    console.error("❌ Error validating referral code:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};

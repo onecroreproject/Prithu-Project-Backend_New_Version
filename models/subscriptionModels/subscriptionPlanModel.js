@@ -1,11 +1,13 @@
-const mongoose =require("mongoose");
-const {prithuDB}=require("../../database");
+const mongoose = require("mongoose");
+const { prithuDB } = require("../../database");
 
 const subscriptionPlanSchema = new mongoose.Schema({
-  name: { type: String, required: true }, 
+  name: { type: String, required: true },
   price: { type: Number, required: true },
   durationDays: { type: Number, required: true },
-  
+
+  razorpayPlanId: { type: String }, // Required for paid plans
+
   limits: {
     deviceLimit: { type: Number, default: 1 },
   },
@@ -23,7 +25,7 @@ const subscriptionPlanSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-module.exports=prithuDB.model("SubscriptionPlan", subscriptionPlanSchema,"SubscriptionPlan");
+module.exports = prithuDB.model("SubscriptionPlan", subscriptionPlanSchema, "SubscriptionPlan");
 // module.exports= mongoose.models.SubscriptionPlan || prithuDB.model("SubscriptionPlan", subscriptionPlanSchema,"SubscriptionPlan");
 
 

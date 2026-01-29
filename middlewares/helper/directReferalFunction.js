@@ -1,9 +1,9 @@
 const User = require("../../models/userModels/userModel");
-const UserSubscription = require("../../models/subcriptionModels/userSubscreptionModel");
-const UserEarning = require("../../models/userModels/referralEarnings");
-const UserReferral = require("../../models/userModels/userReferralModel");
-const {sendTemplateEmail} = require("../../utils/templateMailer");
-const Withdrawal =require("../../models/userModels/withdrawal");
+const UserSubscription = require("../../models/subscriptionModels/userSubscriptionModel");
+const UserEarning = require("../../models/userModels/userRefferalModels/referralEarnings");
+const UserReferral = require("../../models/userModels/userRefferalModels/userReferralModel");
+const { sendTemplateEmail } = require("../../utils/templateMailer");
+const Withdrawal = require("../../models/userModels/userRefferalModels/withdrawal");
 
 
 exports.handleReferralReward = async (req, res) => {

@@ -737,7 +737,6 @@ exports.getUsersWillingToPost = async (req, res) => {
           userName: 1,
           email: 1,
           roles: 1,
-          accountType: 1,
           allowToPost: 1,
           isActive: 1,
           createdAt: 1,
