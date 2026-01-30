@@ -11,6 +11,7 @@ const mongoose = require("mongoose");
 const ffmpeg = require('fluent-ffmpeg');
 const ProfileSettings = require('../../models/profileSettingModel');
 const { feedTimeCalculator } = require("../../middlewares/feedTimeCalculator");
+const jwt = require("jsonwebtoken");
 const UserCategory = require('../../models/userModels/userCategotyModel.js');
 const Category = require('../../models/categorySchema.js');
 const HiddenPost = require("../../models/userModels/hiddenPostSchema.js");
@@ -20,11 +21,8 @@ const { createAndSendNotification } = require("../../middlewares/helper/socketNo
 const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
 const idToString = (id) => (id ? id.toString() : null);
 const downloadQueue = require("../../queue/downloadQueue");
-
-
-
-
-
+const { processFeedMedia } = require("../../utils/feedMediaProcessor");
+const Template = require("../../models/templateModel");
 
 
 
@@ -253,8 +251,165 @@ exports.toggleSaveFeed = async (req, res) => {
 
 
 // Request a Video Download Job
+/**
+ * Direct Download: Processes and streams video directly to browser
+ */
+exports.directDownloadFeed = async (req, res) => {
+  const { feedId } = req.params;
+  let userId = req.user?.id || req.query.userId || req.query.uuserId;
+  const queryToken = req.query.token;
+
+  // Manual JWT verification for query-based tokens (since browser navigations can't send headers easily)
+  if (!req.user && queryToken) {
+    try {
+      const decoded = jwt.verify(queryToken, process.env.JWT_SECRET || "your_secret_key");
+      userId = decoded.userId;
+    } catch (err) {
+      return res.status(401).json({ message: "Invalid or expired download session token" });
+    }
+  }
+
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(401).json({ message: "Invalid user session" });
+  }
+
+  const tempDir = path.join(__dirname, "../../uploads/temp_direct", `dl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+  console.log(`[DirectDL] Initializing temp directory: ${tempDir}`);
+
+  try {
+    console.log(`[DirectDL] Processing feedId: ${feedId} for userId: ${userId}`);
+    const feed = await Feed.findById(feedId);
+    if (!feed) return res.status(404).json({ message: "Feed not found" });
+
+    const [user, profile] = await Promise.all([
+      User.findById(userId).lean(),
+      ProfileSettings.findOne({ userId }).populate('visibility').lean()
+    ]);
+
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    // Resolve design metadata: Priority to feed's own metadata, fallback to template lookup
+    let designMetadata = feed.designMetadata || {};
+    if ((!designMetadata.overlayElements || designMetadata.overlayElements.length === 0) && feed.category) {
+      // Try to find template by category (might be name or ID depending on usage)
+      const template = await Template.findOne({
+        $or: [{ name: feed.category }, { _id: mongoose.Types.ObjectId.isValid(feed.category) ? feed.category : null }]
+      });
+      if (template) designMetadata = template.config || template.designMetadata || {};
+    }
+
+    // deep copy metadata to avoid modifying original or shared object
+    designMetadata = JSON.parse(JSON.stringify(designMetadata));
+
+    const visibility = profile?.visibility || {};
+    console.log(`[DirectDL] User privacy/visibility:`, JSON.stringify({
+      userId,
+      profileId: profile?._id,
+      visibility,
+      privacy: profile?.privacy
+    }, null, 2));
+
+    const viewer = {
+      id: user._id,
+      userName: profile?.userName || user.userName || profile?.name || "User",
+      email: visibility.email === 'public' ? (user.email || profile?.email) : null,
+      phoneNumber: visibility.phoneNumber === 'public' ? (profile?.phoneNumber || user.phoneNumber || user.phone) : null,
+      profileAvatar: profile?.modifyAvatar || profile?.profileAvatar || null,
+    };
+
+    // Filter social icons based on availability and privacy
+    if (designMetadata.footerConfig && profile?.socialLinks) {
+      const socialLinks = profile.socialLinks;
+      const isSocialPublic = visibility.socialLinks === 'public';
+
+      // If template has socialIcons defined, filter them
+      if (designMetadata.footerConfig.socialIcons && designMetadata.footerConfig.socialIcons.length > 0) {
+        designMetadata.footerConfig.socialIcons = (designMetadata.footerConfig.socialIcons || []).filter(icon => {
+          if (!isSocialPublic) return false;
+          const platform = icon.platform?.toLowerCase();
+          return socialLinks[platform] && socialLinks[platform].length > 0;
+        });
+      }
+      // Fallback: If template wants social icons but hasn't specified which ones, show all available from profile
+      else if (designMetadata.footerConfig.showElements?.socialIcons && isSocialPublic) {
+        console.log(`[DirectDL] Profiling social links for fallback population:`, JSON.stringify(socialLinks, null, 2));
+        designMetadata.footerConfig.socialIcons = Object.keys(socialLinks)
+          .filter(platform => socialLinks[platform] && String(socialLinks[platform]).trim().length > 0)
+          .map(platform => ({
+            platform: platform.charAt(0).toUpperCase() + platform.slice(1),
+            visible: true,
+            url: socialLinks[platform]
+          }));
+        console.log(`[DirectDL] Populated ${designMetadata.footerConfig.socialIcons.length} icons from profile.`);
+      }
+    }
+
+    console.log(`[DirectDL] Starting media processing...`);
+    const { ffmpegCommand, tempSourcePath } = await processFeedMedia({
+      feed,
+      viewer,
+      designMetadata,
+      tempDir,
+      isStreaming: true
+    });
+    console.log(`[DirectDL] Media processing initialized. Source: ${tempSourcePath}`);
+
+    // Set headers for direct download
+    const filename = feed.caption ? `${feed.caption.slice(0, 30).replace(/[^a-z0-9]/gi, '_')}.mp4` : `video_${feedId.slice(-4)}.mp4`;
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // Monitor for client disconnects
+    req.on('close', () => {
+      console.warn(`[DirectDL] Client connection closed prematurely for jobId: ${feedId}`);
+    });
+
+    req.on('error', (err) => {
+      console.error(`[DirectDL] Request error: ${err.message}`);
+    });
+
+    // Pipe FFmpeg output directly to response
+    ffmpegCommand
+      .on('start', (cmdLine) => console.log(`[DirectDL] Started: ${cmdLine}`))
+      .on('stderr', (line) => {
+        // Only log significant stderr output to avoid flooding
+        if (line.includes('Error') || line.includes('error') || line.includes('Invalid') || line.includes('failed')) {
+          console.error(`[DirectDL] FFmpeg STDERR: ${line}`);
+        }
+      })
+      .on('progress', (p) => {
+        if (p.percent) {
+          console.log(`[DirectDL] Progress: ${p.percent.toFixed(1)}%`);
+        }
+      })
+      .on('error', (err) => {
+        console.error("[DirectDL] FFmpeg Error:", err.message, err.stack);
+        if (!res.headersSent) {
+          res.status(500).send("Processing failed");
+        }
+        cleanup();
+      })
+      .on('end', () => {
+        console.log("[DirectDL] Finished successfully");
+        cleanup();
+      })
+      .pipe(res, { end: true });
+
+    function cleanup() {
+      try {
+        if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch (e) { }
+    }
+
+  } catch (err) {
+    console.error("[DirectDL] System Error:", err);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+    try { if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true }); } catch (e) { }
+  }
+};
+
 exports.requestDownloadFeed = async (req, res) => {
-  const userId = req.Id || req.body.userId;
+  const userId = req.Id || req.body.userId || req.query.userId;
   const feedId = req.params.feedId;
 
   if (!userId) return res.status(400).json({ message: "userId is required" });
@@ -274,7 +429,7 @@ exports.requestDownloadFeed = async (req, res) => {
     ]);
 
     if (!viewerProfile) {
-      console.warn(`[DownloadRequest] Profile not found for userId: ${userId}`);
+      console.warn(`[DownloadRequest] Profile not found for userId: ${userId} `);
     }
 
     // Combine metadata: Use provided override or feed's own metadata
@@ -299,7 +454,7 @@ exports.requestDownloadFeed = async (req, res) => {
       removeOnFail: false
     });
 
-    console.log(`[DownloadRequest] Job ${job.id} created for user ${userId}, feed ${feedId}`);
+    console.log(`[DownloadRequest] Job ${job.id} created for user ${userId}, feed ${feedId} `);
 
     // Record Activity
     await logUserActivity({
@@ -337,7 +492,7 @@ exports.getDownloadJobStatus = async (req, res) => {
 
     const state = await job.getState();
     const progress = job.progress();
-    console.log(`[JobStatus] Job ${jobId} state: ${state}, progress: ${progress}%`);
+    console.log(`[JobStatus] Job ${jobId} state: ${state}, progress: ${progress}% `);
 
     let result = null;
     if (state === 'completed') {
@@ -470,22 +625,22 @@ exports.generateShareLink = async (req, res) => {
       if (feed.type === 'video') {
         // Try to get thumbnail from files array
         if (feed.files && feed.files.length > 0 && feed.files[0].thumbnail) {
-          ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${feed.files[0].thumbnail}`;
+          ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'} /media/${feed.files[0].thumbnail} `;
         }
         // Try to find _thumb.jpg file
         else if (feed.files && feed.files.length > 0 && feed.files[0].localPath) {
           const videoPath = feed.files[0].localPath;
           const baseName = path.basename(videoPath, path.extname(videoPath));
-          const thumbPath = path.join(path.dirname(videoPath), `${baseName}_thumb.jpg`);
+          const thumbPath = path.join(path.dirname(videoPath), `${baseName} _thumb.jpg`);
 
           if (fs.existsSync(thumbPath)) {
             const relativePath = thumbPath.split('/uploads/').pop();
             if (relativePath) {
-              ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/uploads/${relativePath}`;
+              ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'} /uploads/${relativePath} `;
             }
           } else {
             // Use video thumbnail endpoint as fallback
-            ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/api/feed/video-thumbnail/${feedId}`;
+            ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'} /api/feed / video - thumbnail / ${feedId} `;
           }
         }
       }
@@ -500,7 +655,7 @@ exports.generateShareLink = async (req, res) => {
       }
       // For video thumbnails
       if (feed.type === 'video' && firstFile.thumbnail) {
-        ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${firstFile.thumbnail}`;
+        ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'} /media/${firstFile.thumbnail} `;
       }
     }
 
@@ -508,7 +663,7 @@ exports.generateShareLink = async (req, res) => {
     if (!ogImageUrl && feed.localPath) {
       const pathPart = feed.localPath.split('/media/').pop();
       if (pathPart) {
-        ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${pathPart}`;
+        ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'} /media/${pathPart} `;
         directMediaUrl = ogImageUrl;
       }
     }

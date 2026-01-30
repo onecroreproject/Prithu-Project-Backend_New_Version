@@ -137,6 +137,7 @@ const {
   getVideoThumbnail,
   sharePostOG,
   getDownloadJobStatus,
+  directDownloadFeed,
 } = require('../controllers/feedControllers/userActionsFeedController');
 
 
@@ -433,6 +434,7 @@ router.get('/user/download/feeds', auth, getUserDownloadedFeeds);
 
 // Download Process
 router.post('/feeds/:feedId/download-request', auth, requestDownloadFeed);
+router.get('/feeds/:feedId/direct-download', directDownloadFeed); // Public access for browser native download trigger
 router.get('/downloads/status/:jobId', auth, getDownloadJobStatus);
 
 
