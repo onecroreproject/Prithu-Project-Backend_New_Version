@@ -139,10 +139,8 @@ exports.userProfileDetailUpdate = async (req, res) => {
         // Find the absolute path to delete old original
         const oldPath = path.join(
           __dirname,
-          "../../media/users",
+          "../../media/user",
           userId.toString(),
-          "avatar",
-          "original",
           profile.profileAvatarFilename
         );
         deleteLocalFile(oldPath);
@@ -156,7 +154,9 @@ exports.userProfileDetailUpdate = async (req, res) => {
       if (profile?.modifyAvatarFilename) {
         const oldModifyPath = path.join(
           __dirname,
-          "../../media/user/modifyAvatar",
+          "../../media/user",
+          userId.toString(),
+          "modify",
           profile.modifyAvatarFilename
         );
         deleteLocalFile(oldModifyPath);
@@ -166,7 +166,7 @@ exports.userProfileDetailUpdate = async (req, res) => {
       try {
         const localFilePath = req.localFile.path;
 
-        const removedBg = await removeImageBackground(localFilePath);
+        const removedBg = await removeImageBackground(localFilePath, userId);
 
         if (removedBg?.secure_url) {
           updateData.modifyAvatar = removedBg.secure_url;
@@ -276,7 +276,7 @@ exports.adminProfileDetailUpdate = async (req, res) => {
 
       // 🎨 background removal + fallback for admin
       try {
-        const removedBg = await removeImageBackground(req.localFile.path);
+        const removedBg = await removeImageBackground(req.localFile.path, adminId);
         if (removedBg?.secure_url) {
           updateData.modifyAvatar = removedBg.secure_url;
         } else {
@@ -373,7 +373,7 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
 
       // 🎨 background removal + fallback for child admin
       try {
-        const removedBg = await removeImageBackground(req.localFile.path);
+        const removedBg = await removeImageBackground(req.localFile.path, childAdminId);
         if (removedBg?.secure_url) {
           updateData.modifyAvatar = removedBg.secure_url;
         } else {

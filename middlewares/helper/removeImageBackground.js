@@ -2,9 +2,12 @@ const fs = require("fs");
 const path = require("path");
 const { removeBackground } = require("@imgly/background-removal-node");
 
-async function removeImageBackground(imageSource) {
+async function removeImageBackground(imageSource, userId) {
   try {
-    const targetDir = path.join(__dirname, "../../media/user/modifyAvatar");
+    const targetDir = userId
+      ? path.join(__dirname, "../../media/user", userId.toString(), "modify")
+      : path.join(__dirname, "../../media/user/modify");
+
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
     }
@@ -26,8 +29,12 @@ async function removeImageBackground(imageSource) {
     fs.writeFileSync(targetPath, outputBuffer);
 
     const backendUrl = (process.env.BACKEND_URL || "").replace(/\/$/, "");
+    const relativeUrl = userId
+      ? `/media/user/${userId}/modify/${filename}`
+      : `/media/user/modify/${filename}`;
+
     return {
-      secure_url: `${backendUrl}/media/user/modifyAvatar/${filename}`,
+      secure_url: `${backendUrl}${relativeUrl}`,
       public_id: filename,
       localPath: targetPath,
     };

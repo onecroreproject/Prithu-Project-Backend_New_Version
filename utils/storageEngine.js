@@ -40,7 +40,7 @@ exports.saveFile = async (file, options = {}) => {
 
     switch (type) {
         case 'user':
-            targetDir = path.join(BASE_MEDIA_DIR, 'users', id, 'avatar', isModify ? 'modifyavatar' : 'original');
+            targetDir = path.join(BASE_MEDIA_DIR, 'user', id, isModify ? 'modify' : '');
             break;
         case 'admin':
             targetDir = path.join(BASE_MEDIA_DIR, 'admins', id, 'avatar');
