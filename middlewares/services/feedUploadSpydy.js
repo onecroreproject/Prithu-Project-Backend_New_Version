@@ -123,17 +123,17 @@ const userProcessFeedFile = async (req, res, next) => {
 const attachFeedFile = (req, res, next) => {
   if (!req.file) return next();
 
-  const host = `https://${req.get("host")}`;
+  const backendUrl = (process.env.BACKEND_URL || '').replace(/\/$/, "");
 
   req.localFile = {
-    url: `${host}/media/feed/user/${req.Id || req.body.userId}/${req.feedFolderType}/${req.feedSavedName}`,
+    url: `${backendUrl}/media/feed/user/${req.Id || req.body.userId}/${req.feedFolderType}/${req.feedSavedName}`,
     filename: req.feedSavedName,
     folder: req.feedFolderType,
     path: req.feedSavedPath,     // full local path
     uploadedAt: new Date(),
     fileHash: req.fileHash,
     videoDuration: req.videoDuration || null,
-    
+
   };
 
   next();

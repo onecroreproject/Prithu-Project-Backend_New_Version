@@ -95,9 +95,11 @@ exports.saveFile = async (file, options = {}) => {
 exports.getMediaUrl = (path) => {
     if (!path) return '';
     if (path.startsWith('http')) return path;
-    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
     const backendUrl = process.env.BACKEND_URL || '';
     const cleanBaseUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
     return `${cleanBaseUrl}${normalizedPath}`;
 };
 

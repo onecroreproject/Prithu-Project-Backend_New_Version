@@ -75,7 +75,7 @@ exports.creatorFeedUpload = async (req, res) => {
       subType: type
     });
 
-    const url = fileSave.dbPath; // Store relative path in DB
+    const url = fileSave.url; // Store full absolute URL in DB
 
     // 🔁 Duplicate check by hash
     if (fileHash) {

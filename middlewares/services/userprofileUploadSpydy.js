@@ -30,7 +30,7 @@ const attachUserFile = async (req, res, next) => {
     });
 
     req.localFile = {
-      url: savedFile.dbPath, // Relative path for DB
+      url: savedFile.url, // Full absolute URL
       filename: savedFile.filename,
       path: savedFile.path,
       uploadedAt: new Date(),

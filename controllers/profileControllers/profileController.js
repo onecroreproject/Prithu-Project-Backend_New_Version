@@ -136,6 +136,7 @@ exports.userProfileDetailUpdate = async (req, res) => {
     if (req.localFile) {
       // 🧹 delete old profile avatar (local)
       if (profile?.profileAvatarFilename) {
+        // Find the absolute path to delete old original
         const oldPath = path.join(
           __dirname,
           "../../media/users",
@@ -272,6 +273,19 @@ exports.adminProfileDetailUpdate = async (req, res) => {
       updateData.profileAvatar = req.localFile.url;
       updateData.localAvatarPath = req.localFile.path;
       updateData.profileAvatarId = req.localFile.filename;
+
+      // 🎨 background removal + fallback for admin
+      try {
+        const removedBg = await removeImageBackground(req.localFile.path);
+        if (removedBg?.secure_url) {
+          updateData.modifyAvatar = removedBg.secure_url;
+        } else {
+          updateData.modifyAvatar = req.localFile.url;
+        }
+      } catch (err) {
+        console.error("⚠️ Admin Background removal failed:", err.message);
+        updateData.modifyAvatar = req.localFile.url;
+      }
     }
 
     // Handle username update
@@ -356,6 +370,19 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
       updateData.profileAvatar = req.localFile.url;
       updateData.localAvatarPath = req.localFile.path;
       updateData.profileAvatarId = req.localFile.filename;
+
+      // 🎨 background removal + fallback for child admin
+      try {
+        const removedBg = await removeImageBackground(req.localFile.path);
+        if (removedBg?.secure_url) {
+          updateData.modifyAvatar = removedBg.secure_url;
+        } else {
+          updateData.modifyAvatar = req.localFile.url;
+        }
+      } catch (err) {
+        console.error("⚠️ Child Admin Background removal failed:", err.message);
+        updateData.modifyAvatar = req.localFile.url;
+      }
     }
 
     const userName = req.body.userName?.replace(/\s+/g, "").trim();

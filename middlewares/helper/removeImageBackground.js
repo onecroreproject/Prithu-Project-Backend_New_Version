@@ -9,7 +9,8 @@ async function removeImageBackground(imageSource) {
       fs.mkdirSync(targetDir, { recursive: true });
     }
 
-    const filename = `avatar_${Date.now()}.png`;
+    const ext = ".png"; // background removal usually returns PNG
+    const filename = `modify_${Date.now()}${ext}`;
     const targetPath = path.join(targetDir, filename);
 
     const imageBuffer = fs.readFileSync(imageSource);
@@ -24,8 +25,9 @@ async function removeImageBackground(imageSource) {
 
     fs.writeFileSync(targetPath, outputBuffer);
 
+    const backendUrl = (process.env.BACKEND_URL || "").replace(/\/$/, "");
     return {
-      secure_url: `${process.env.BACKEND_URL}/media/user/modifyAvatar/${filename}`,
+      secure_url: `${backendUrl}/media/user/modifyAvatar/${filename}`,
       public_id: filename,
       localPath: targetPath,
     };

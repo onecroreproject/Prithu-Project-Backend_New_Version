@@ -101,7 +101,7 @@ exports.adminFeedUpload = async (req, res) => {
 
         if (io) io.to(adminId).emit("upload_progress", { filename: file.originalname, percent: 80 });
 
-        const mediaUrl = fileSave.dbPath; // Relative path for DB
+        const mediaUrl = fileSave.url; // Full absolute URL for DB
 
         let fileDesignMetadata = { isTemplate: false, uploadType: 'normal', overlayElements: [] };
         try {
