@@ -5,20 +5,13 @@ const Feed = require("../../models/feedModel");
 const ProfileSettings = require("../../models/profileSettingModel");
 const Account = require("../../models/accountSchemaModel");
 const User = require("../../models/userModels/userModel");
-const { uploadToDrive } = require("../../middlewares/services/googleDriveMedia/googleDriveUploader");
-const { getFeedUploadFolder } = require("../../middlewares/services/googleDriveMedia/googleDriveFolderStructure");
-const { oAuth2Client } = require("../../middlewares/services/googleDriveMedia/googleDriverAuth");
+const { saveFile } = require("../../utils/storageEngine");
 const mongoose = require("mongoose");
 const { prithuDB } = require("../../database");
 const notificationQueue = require("../../queue/notificationQueue");
-
-
-
-
-
-// Helper to check database connection
-// ✅ Helper delete local file
 const fs = require("fs");
+
+// ✅ Helper delete local file
 const deleteLocalAdminFile = (filePath) => {
   try {
     if (filePath && fs.existsSync(filePath)) {
@@ -45,7 +38,7 @@ exports.adminFeedUpload = async (req, res) => {
     if (!mediaFiles.length) {
       return res.status(400).json({ success: false, message: "No media files provided" });
     }
-    // Parse per-file metadata if provided
+
     let fileMetadataMap = {};
     if (perFileMetadata) {
       try {
@@ -59,62 +52,57 @@ exports.adminFeedUpload = async (req, res) => {
     const io = getIO();
 
     // 1. Upload Shared Audio (if any)
-
     let uploadedAudio = null;
     if (audioFile) {
+      console.log("Processing audio file locally...");
+      const audioSave = await saveFile(audioFile, {
+        type: 'feed',
+        categorySlug: 'shared-audio',
+        subType: 'audio'
+      });
 
-      const audioFolder = await getFeedUploadFolder(oAuth2Client, roleRef, "audio");
-      console.log("working in controller")
-      const upload = await uploadToDrive(audioFile.buffer, audioFile.originalname, audioFile.mimetype, audioFolder);
-      if (upload?.fileId) {
+      if (audioSave?.dbPath) {
         uploadedAudio = {
-          url: `${process.env.BACKEND_URL}/media/${upload.fileId}`,
-          driveFileId: upload.fileId,
+          url: audioSave.dbPath, // Relative path for DB
+          path: audioSave.path,
           mimeType: audioFile.mimetype
         };
-        deleteLocalAdminFile(audioFile.path);
       }
     }
+
     const uploadedFeeds = [];
     const uploadErrors = [];
 
     // 2. Process Media Files
     for (const file of mediaFiles) {
       try {
-        // Get specific metadata for this file or fallback to globals
         const specificMetadata = fileMetadataMap[file.originalname] || {};
         const categoryId = specificMetadata.categoryId || globalCategoryId;
         const caption = specificMetadata.caption || globalCaption || "";
         const scheduleTime = specificMetadata.scheduleTime || globalScheduleTime;
         const designData = specificMetadata.designData || globalDesignData;
 
-        // Validation for categoryId (either global or specific must exist)
-        if (!categoryId) {
-          throw new Error("Category ID is required");
-        }
+        if (!categoryId) throw new Error("Category ID is required");
 
         const category = await Category.findById(categoryId).lean();
         if (!category) throw new Error("Category not found");
 
+        const categorySlug = category.name.toLowerCase().replace(/\s+/g, '-');
         const isImage = file.mimetype.startsWith("image/");
-        const folderId = await getFeedUploadFolder(oAuth2Client, roleRef, isImage ? "image" : "video");
 
-        // Emit progress start
         if (io) io.to(adminId).emit("upload_progress", { filename: file.originalname, percent: 10 });
 
-        const upload = await uploadToDrive(file.buffer, file.originalname, file.mimetype, folderId);
-        if (!upload?.fileId) throw new Error("G-Drive upload failed");
+        // Save file locally using storageEngine
+        const fileSave = await saveFile(file, {
+          type: 'feed',
+          categorySlug: categorySlug,
+          subType: isImage ? 'image' : 'video'
+        });
 
-        const driveFileId = upload.fileId;
-
-        // Emit progress mid
         if (io) io.to(adminId).emit("upload_progress", { filename: file.originalname, percent: 80 });
 
-        const mediaUrl = isImage
-          ? `https://lh3.googleusercontent.com/d/${driveFileId}`
-          : `${process.env.BACKEND_URL}/media/${driveFileId}`;
+        const mediaUrl = fileSave.dbPath; // Relative path for DB
 
-        // Parse Design Metadata for this specific file
         let fileDesignMetadata = { isTemplate: false, uploadType: 'normal', overlayElements: [] };
         try {
           if (designData) {
@@ -141,9 +129,9 @@ exports.adminFeedUpload = async (req, res) => {
           mediaUrl,
           files: [{
             url: mediaUrl,
+            path: fileSave.path,
             type: isImage ? 'image' : 'video',
             uploadMode: currentUploadType,
-            driveFileId,
             mimeType: file.mimetype,
             size: file.size,
             dimensions: file.dimensions,
@@ -162,7 +150,7 @@ exports.adminFeedUpload = async (req, res) => {
             audioConfig: {
               ...(fileDesignMetadata.audioConfig || {}),
               enabled: !!uploadedAudio,
-              audioFileId: uploadedAudio?.driveFileId
+              audioUrl: uploadedAudio?.url
             }
           },
           editMetadata: fileDesignMetadata.editMetadata || {
@@ -171,9 +159,9 @@ exports.adminFeedUpload = async (req, res) => {
           },
           audience,
           storage: {
-            type: 'gdrive',
-            drive: { fileId: driveFileId, audioFileId: uploadedAudio?.driveFileId },
-            urls: { media: mediaUrl, audio: uploadedAudio?.url }
+            type: 'local',
+            urls: { media: mediaUrl, audio: uploadedAudio?.url },
+            paths: { media: fileSave.path, audio: uploadedAudio?.path }
           },
           isScheduled: !!scheduleTime,
           scheduleDate: scheduleTime ? new Date(scheduleTime) : null,
@@ -186,14 +174,13 @@ exports.adminFeedUpload = async (req, res) => {
 
         uploadedFeeds.push({ id: savedFeed._id, url: mediaUrl, filename: file.originalname });
 
-        // 🚀 Trigger Scalable Background Notification
         if (savedFeed.status === "published") {
           notificationQueue.add("BROADCAST_NEW_FEED", {
             feedId: savedFeed._id,
             senderId: adminId,
             title: "New Fresh Content! 🔥",
             message: `Hi \${username}, check out this new feed! Download it and share 🔥❤️`,
-            image: isImage ? mediaUrl : (file.dimensions?.thumbnail || "/default-video-thumbnail.png"), // Fallback for video
+            image: isImage ? mediaUrl : (file.dimensions?.thumbnail || "/default-video-thumbnail.png"),
           }, {
             removeOnComplete: true,
             attempts: 3,
@@ -201,10 +188,8 @@ exports.adminFeedUpload = async (req, res) => {
           });
         }
 
-        // Emit progress done
         if (io) io.to(adminId).emit("upload_progress", { filename: file.originalname, percent: 100 });
 
-        deleteLocalAdminFile(file.path);
       } catch (err) {
         uploadErrors.push({ file: file.originalname, error: err.message });
       }
@@ -215,7 +200,98 @@ exports.adminFeedUpload = async (req, res) => {
   }
 };
 
-// Get single feed with design metadata
+exports.bulkFeedUpload = async (req, res) => {
+  try {
+    const adminId = req.Id;
+    const files = req.localFiles || [];
+
+    if (files.length === 0) {
+      return res.status(400).json({ success: false, message: "No files to process" });
+    }
+
+    const results = {
+      total: files.length,
+      successful: 0,
+      failed: 0,
+      details: []
+    };
+
+    for (const [index, file] of files.entries()) {
+      try {
+        const feedType = file.mimetype.startsWith('image/') ? 'image' :
+          file.mimetype.startsWith('video/') ? 'video' : 'audio';
+
+        let categorySlug = 'bulk-upload';
+        if (req.body.categoryId) {
+          const category = await Category.findById(req.body.categoryId).lean();
+          if (category) categorySlug = category.name.toLowerCase().replace(/\s+/g, '-');
+        }
+
+        const fileSave = await saveFile(file, {
+          type: 'feed',
+          categorySlug: categorySlug,
+          subType: feedType
+        });
+
+        const feedData = {
+          type: feedType,
+          language: "en",
+          category: req.body.categoryId || null,
+          contentUrl: fileSave.url,
+          files: [{
+            url: fileSave.url,
+            path: fileSave.path,
+            type: feedType,
+            mimeType: file.mimetype,
+            size: file.size || 0,
+            order: 0,
+            storageType: "local"
+          }],
+          dec: req.body.caption || "",
+          fileHash: file.fileHash,
+          createdByAccount: adminId,
+          roleRef: req.role,
+          storageType: "local",
+          status: "Published"
+        };
+
+        const feed = new Feed(feedData);
+        await feed.save();
+
+        results.details.push({
+          success: true,
+          feedId: feed._id,
+          filename: file.filename,
+          type: feedType,
+          storageType: "local"
+        });
+        results.successful++;
+      } catch (error) {
+        results.details.push({
+          success: false,
+          filename: file.filename,
+          error: error.message
+        });
+        results.failed++;
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Bulk upload to local storage completed",
+      data: results
+    });
+
+  } catch (error) {
+    console.error("Bulk upload error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Bulk upload failed",
+      error: error.message
+    });
+  }
+};
+
 exports.getFeedWithDesign = async (req, res) => {
   try {
     const { feedId } = req.params;
@@ -235,23 +311,18 @@ exports.getFeedWithDesign = async (req, res) => {
       .lean();
 
     if (!feed) {
-      return res.status(404).json({
-        success: false,
-        message: "Feed not found or access denied"
-      });
+      return res.status(404).json({ success: false, message: "Feed not found or access denied" });
     }
 
-    // Add virtuals manually
     feed.formattedUrl = feed.contentUrl || (feed.files && feed.files[0]?.url);
     feed.thumbnailUrl = feed.type === 'video' && feed.files && feed.files[0]?.thumbnail
       ? feed.files[0].thumbnail
       : feed.formattedUrl;
 
-    if (feed.designMetadata?.audioConfig?.audioFile) {
-      feed.audioUrl = feed.designMetadata.audioConfig.audioFile;
+    if (feed.designMetadata?.audioConfig?.audioUrl) {
+      feed.audioUrl = feed.designMetadata.audioConfig.audioUrl;
     }
 
-    // Get design state
     feed.designState = feed.designMetadata ? {
       elements: feed.designMetadata.overlayElements || [],
       footer: feed.designMetadata.footerConfig || { visible: true, colors: { primary: '#1e5a78', secondary: '#0f3a4d' } },
@@ -260,29 +331,18 @@ exports.getFeedWithDesign = async (req, res) => {
       themeColors: feed.themeColor
     } : null;
 
-    // Add Google Drive info
     feed.storageInfo = {
-      type: feed.storageType || "gdrive",
-      driveFileId: feed.driveFileId,
-      cloudMetadata: feed.cloudMetadata
+      type: feed.storageType || "local",
+      paths: feed.storage?.paths
     };
 
-    return res.status(200).json({
-      success: true,
-      data: feed
-    });
-
+    return res.status(200).json({ success: true, data: feed });
   } catch (error) {
     console.error("Get feed with design error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch feed",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    return res.status(500).json({ success: false, message: "Failed to fetch feed" });
   }
 };
 
-// Update feed design metadata
 exports.updateFeedDesign = async (req, res) => {
   try {
     const { feedId } = req.params;
@@ -290,31 +350,16 @@ exports.updateFeedDesign = async (req, res) => {
     const { designMetadata } = req.body;
 
     if (!designMetadata) {
-      return res.status(400).json({
-        success: false,
-        message: "Design metadata is required"
-      });
+      return res.status(400).json({ success: false, message: "Design metadata is required" });
     }
 
-    const feed = await Feed.findOne({
-      _id: feedId,
-      createdByAccount: userId
-    });
+    const feed = await Feed.findOne({ _id: feedId, createdByAccount: userId });
 
     if (!feed) {
-      return res.status(404).json({
-        success: false,
-        message: "Feed not found or access denied"
-      });
+      return res.status(404).json({ success: false, message: "Feed not found or access denied" });
     }
 
-    // Update design metadata
-    feed.designMetadata = {
-      ...feed.designMetadata,
-      ...designMetadata
-    };
-
-    // Save to edit history
+    feed.designMetadata = { ...feed.designMetadata, ...designMetadata };
     await feed.saveEditHistory(userId, 'Design metadata updated');
     await feed.save();
 
@@ -323,29 +368,15 @@ exports.updateFeedDesign = async (req, res) => {
       message: "Design updated successfully",
       data: {
         feedId: feed._id,
-        designPreview: {
-          hasOverlays: feed.designMetadata?.overlayElements?.length > 0,
-          overlayCount: feed.designMetadata?.overlayElements?.length || 0,
-          hasAudio: !!feed.designMetadata?.audioConfig?.audioFile,
-          hasFooter: feed.designMetadata?.footerConfig?.visible || false,
-          themeColors: feed.themeColor
-        },
         storageType: feed.storageType
       }
     });
-
   } catch (error) {
     console.error("Update feed design error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to update design",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    return res.status(500).json({ success: false, message: "Failed to update design" });
   }
 };
 
-// Get feeds with design elements
 exports.getFeedsWithDesign = async (req, res) => {
   try {
     const userId = req.Id;
@@ -363,18 +394,13 @@ exports.getFeedsWithDesign = async (req, res) => {
       status: { $in: ["Published", "Scheduled"] }
     };
 
-    if (categoryId) {
-      query.category = categoryId;
-    }
-
-    if (type) {
-      query.type = type;
-    }
+    if (categoryId) query.category = categoryId;
+    if (type) query.type = type;
 
     if (hasDesign === 'true') {
       query.$or = [
         { 'designMetadata.overlayElements.0': { $exists: true } },
-        { 'designMetadata.audioConfig.audioFile': { $exists: true } }
+        { 'designMetadata.audioConfig.audioUrl': { $exists: true } }
       ];
     }
 
@@ -386,23 +412,11 @@ exports.getFeedsWithDesign = async (req, res) => {
       .populate('createdByAccount', 'username name profilePic')
       .lean();
 
-    // Add virtuals
     const enrichedFeeds = feeds.map(feed => ({
       ...feed,
       formattedUrl: feed.contentUrl || (feed.files && feed.files[0]?.url),
-      thumbnailUrl: feed.type === 'video' && feed.files && feed.files[0]?.thumbnail
-        ? feed.files[0].thumbnail
-        : feed.contentUrl || (feed.files && feed.files[0]?.url),
-      designPreview: {
-        hasOverlays: feed.designMetadata?.overlayElements?.length > 0,
-        overlayCount: feed.designMetadata?.overlayElements?.length || 0,
-        hasAudio: !!feed.designMetadata?.audioConfig?.audioFile,
-        hasFooter: feed.designMetadata?.footerConfig?.visible || false,
-        themeColors: feed.themeColor
-      },
       storageInfo: {
-        type: feed.storageType || "gdrive",
-        driveFileId: feed.driveFileId
+        type: feed.storageType || "local"
       }
     }));
 
@@ -420,272 +434,83 @@ exports.getFeedsWithDesign = async (req, res) => {
         }
       }
     });
-
   } catch (error) {
     console.error("Get feeds with design error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch feeds",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    return res.status(500).json({ success: false, message: "Failed to fetch feeds" });
   }
 };
 
-// Bulk feed upload (simplified - Google Drive only)
-exports.bulkFeedUpload = async (req, res) => {
-  try {
-    const adminId = req.Id;
-    const files = req.localFiles || [];
-
-    if (files.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "No files to process"
-      });
-    }
-
-    const results = {
-      total: files.length,
-      successful: 0,
-      failed: 0,
-      details: []
-    };
-
-    // Process sequentially to avoid connection issues
-    for (const [index, file] of files.entries()) {
-      try {
-        const feedType = file.mimetype.startsWith('image/') ? 'image' :
-          file.mimetype.startsWith('video/') ? 'video' : 'audio';
-
-        // Upload to Google Drive first
-        const folderId = await getFeedUploadFolder(oAuth2Client, req.role, feedType);
-        const uploadResult = await uploadToDrive(
-          file.buffer,
-          file.originalname || file.filename,
-          file.mimetype,
-          folderId
-        );
-
-        if (!uploadResult?.fileId) {
-          throw new Error("Google Drive upload failed");
-        }
-
-        const driveFileId = uploadResult.fileId;
-        let contentUrl;
-
-        if (feedType === 'image') {
-          contentUrl = `https://lh3.googleusercontent.com/d/${driveFileId}`;
-        } else {
-          contentUrl = `https://drive.google.com/uc?id=${driveFileId}&export=download`;
-        }
-
-        const feedData = {
-          type: feedType,
-          language: "en",
-          category: req.body.categoryId || null,
-          contentUrl: contentUrl,
-          files: [{
-            url: contentUrl,
-            type: feedType,
-            mimeType: file.mimetype,
-            size: file.size || 0,
-            order: 0,
-            storageType: "gdrive",
-            driveFileId: driveFileId
-          }],
-          dec: req.body.caption || "",
-          fileHash: file.fileHash,
-          createdByAccount: adminId,
-          roleRef: req.role,
-          storageType: "gdrive",
-          driveFileId: driveFileId,
-          status: "Published"
-        };
-
-        const feed = new Feed(feedData);
-        await feed.save();
-
-        results.details.push({
-          success: true,
-          feedId: feed._id,
-          filename: file.filename,
-          type: feedType,
-          driveFileId: driveFileId,
-          storageType: "gdrive"
-        });
-        results.successful++;
-
-        console.log(`✅ Bulk upload: File ${index + 1}/${files.length} uploaded to Google Drive`);
-      } catch (error) {
-        results.details.push({
-          success: false,
-          filename: file.filename,
-          error: error.message
-        });
-        results.failed++;
-        console.error(`❌ Bulk upload: Failed to process ${file.filename}:`, error.message);
-      }
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Bulk upload to Google Drive completed",
-      data: results
-    });
-
-  } catch (error) {
-    console.error("Bulk upload error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Bulk upload failed",
-      error: error.message
-    });
-  }
-};
-
-// Duplicate feed with design
 exports.duplicateFeedWithDesign = async (req, res) => {
   try {
     const { feedId } = req.params;
     const userId = req.Id;
 
-    // Find original feed
     const originalFeed = await Feed.findOne({
       _id: feedId,
-      $or: [
-        { createdByAccount: userId },
-        { audience: "public" }
-      ]
+      $or: [{ createdByAccount: userId }, { audience: "public" }]
     });
 
     if (!originalFeed) {
-      return res.status(404).json({
-        success: false,
-        message: "Feed not found or access denied"
-      });
+      return res.status(404).json({ success: false, message: "Feed not found or access denied" });
     }
 
-    // Create duplicate with new ID
     const duplicateData = originalFeed.toObject();
     delete duplicateData._id;
     delete duplicateData.createdAt;
     delete duplicateData.updatedAt;
     delete duplicateData.statsId;
 
-    // Update metadata for duplicate
     duplicateData.createdByAccount = userId;
     duplicateData.status = "Published";
     duplicateData.isScheduled = false;
     duplicateData.scheduleDate = null;
     duplicateData.version = 1;
     duplicateData.previousVersions = [];
-
-    // Add duplication note to description
     duplicateData.dec = `[Duplicate] ${duplicateData.dec}`;
 
     const duplicateFeed = new Feed(duplicateData);
     await duplicateFeed.save();
 
-    // Update category
     if (duplicateFeed.category) {
-      await Category.findByIdAndUpdate(
-        duplicateFeed.category,
-        { $addToSet: { feedIds: duplicateFeed._id } }
-      );
+      await Category.findByIdAndUpdate(duplicateFeed.category, { $addToSet: { feedIds: duplicateFeed._id } });
     }
 
     return res.status(201).json({
       success: true,
       message: "Feed duplicated successfully",
-      data: {
-        feedId: duplicateFeed._id,
-        designPreview: {
-          hasOverlays: duplicateFeed.designMetadata?.overlayElements?.length > 0,
-          overlayCount: duplicateFeed.designMetadata?.overlayElements?.length || 0,
-          hasAudio: !!duplicateFeed.designMetadata?.audioConfig?.audioFile,
-          hasFooter: duplicateFeed.designMetadata?.footerConfig?.visible || false,
-          themeColors: duplicateFeed.themeColor
-        },
-        storageType: duplicateFeed.storageType
-      }
+      data: { feedId: duplicateFeed._id }
     });
-
   } catch (error) {
     console.error("Duplicate feed error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to duplicate feed",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    return res.status(500).json({ success: false, message: "Failed to duplicate feed" });
   }
 };
 
-// Get upload progress (for large uploads)
 exports.getUploadProgress = (req, res) => {
   const uploadId = req.params.uploadId;
-  // In a real app, you'd track upload progress in Redis or similar
-  res.json({
-    uploadId,
-    progress: 100,
-    status: 'completed'
-  });
+  res.json({ uploadId, progress: 100, status: 'completed' });
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 exports.getAllFeedAdmin = async (req, res) => {
   try {
-    // Get all feeds
     const feeds = await Feed.find().sort({ createdAt: -1 }).lean();
-
     const results = await Promise.all(
       feeds.map(async (feed) => {
         let profile = null;
-
         if (feed.roleRef === "Admin") {
-          profile = await ProfileSettings.findOne({ adminId: feed.createdByAccount })
-            .select("userName profileAvatar")
-            .lean();
+          profile = await ProfileSettings.findOne({ adminId: feed.createdByAccount }).select("userName profileAvatar").lean();
         } else if (feed.roleRef === "Child_Admin") {
-          profile = await ProfileSettings.findOne({ childAdminId: feed.createdByAccount })
-            .select("userName profileAvatar")
-            .lean();
-        } else if (feed.roleRef === "Account") {
-          profile = await ProfileSettings.findOne({ accountId: feed.createdByAccount })
-            .select("userName profileAvatar")
-            .lean();
+          profile = await ProfileSettings.findOne({ childAdminId: feed.createdByAccount }).select("userName profileAvatar").lean();
         } else if (feed.roleRef === "User") {
-          profile = await ProfileSettings.findOne({ userId: feed.createdByAccount })
-            .select("userName profileAvatar")
-            .lean();
+          profile = await ProfileSettings.findOne({ userId: feed.createdByAccount }).select("userName profileAvatar").lean();
         }
 
         return {
           ...feed,
-          creator: profile
-            ? {
-              userName: profile.userName || "Unknown",
-              profileAvatar: profile.profileAvatar || null,
-            }
-            : { userName: "Unknown", profileAvatar: null },
+          creator: profile ? { userName: profile.userName || "Unknown", profileAvatar: profile.profileAvatar || null } : { userName: "Unknown", profileAvatar: null },
         };
       })
     );
-
     res.status(200).json({ success: true, feeds: results });
   } catch (err) {
     console.error("Error in getAllFeedAdmin:", err);
@@ -693,44 +518,12 @@ exports.getAllFeedAdmin = async (req, res) => {
   }
 };
 
-
-
-
 exports.getUsersWillingToPost = async (req, res) => {
   try {
     const users = await User.aggregate([
-      /* -------------------------------------------
-       * 1️⃣ FILTER USERS WILLING TO POST
-       * ----------------------------------------- */
-      {
-        $match: {
-          allowToPost: { $in: ["interest", "allow"] },
-          isActive: true,
-          isBlocked: false,
-        },
-      },
-
-      /* -------------------------------------------
-       * 2️⃣ JOIN PROFILE SETTINGS
-       * ----------------------------------------- */
-      {
-        $lookup: {
-          from: "ProfileSettings",
-          localField: "_id",
-          foreignField: "userId",
-          as: "profileSettings",
-        },
-      },
-      {
-        $unwind: {
-          path: "$profileSettings",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-
-      /* -------------------------------------------
-       * 3️⃣ FINAL PROJECTION
-       * ----------------------------------------- */
+      { $match: { allowToPost: { $in: ["interest", "allow"] }, isActive: true, isBlocked: false } },
+      { $lookup: { from: "ProfileSettings", localField: "_id", foreignField: "userId", as: "profileSettings" } },
+      { $unwind: { path: "$profileSettings", preserveNullAndEmptyArrays: true } },
       {
         $project: {
           _id: 1,
@@ -741,105 +534,30 @@ exports.getUsersWillingToPost = async (req, res) => {
           isActive: 1,
           createdAt: 1,
           lastActiveAt: 1,
-
-          /* ---- SUBSCRIPTION ---- */
-          subscription: {
-            isActive: "$subscription.isActive",
-          },
-
-          /* ---- PROFILE DETAILS ---- */
+          subscription: { isActive: "$subscription.isActive" },
           profile: {
             name: "$profileSettings.name",
-            lastName: "$profileSettings.lastName",
-            gender: "$profileSettings.gender",
-            bio: "$profileSettings.bio",
-            profileSummary: "$profileSettings.profileSummary",
-
-            phoneNumber: "$profileSettings.phoneNumber",
-            whatsAppNumber: "$profileSettings.whatsAppNumber",
-
-            city: "$profileSettings.city",
-            country: "$profileSettings.country",
-
             profileAvatar: "$profileSettings.profileAvatar",
-            coverPhoto: "$profileSettings.coverPhoto",
-
-            socialLinks: "$profileSettings.socialLinks",
-
-            isPublished: "$profileSettings.isPublished",
+            isPublished: "$profileSettings.isPublished"
           },
         },
       },
-
-      /* -------------------------------------------
-       * 4️⃣ SORT LATEST FIRST
-       * ----------------------------------------- */
-      {
-        $sort: { createdAt: -1 },
-      },
+      { $sort: { createdAt: -1 } },
     ]);
-
-    return res.status(200).json({
-      success: true,
-      total: users.length,
-      users,
-    });
+    return res.status(200).json({ success: true, total: users.length, users });
   } catch (error) {
     console.error("❌ GET USERS WILLING TO POST ERROR:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch users",
-    });
+    return res.status(500).json({ success: false, message: "Failed to fetch users" });
   }
 };
-
-
 
 exports.updateUserPostPermission = async (req, res) => {
   try {
     const { userId } = req.params;
     const { allowToPost } = req.body;
-
-    if (!userId || !allowToPost) {
-      return res.status(400).json({
-        success: false,
-        message: "userId and allowToPost are required"
-      });
-    }
-
-    if (!["allow", "interest", "notallow"].includes(allowToPost)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid allowToPost value"
-      });
-    }
-
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      { allowToPost },
-      { new: true }
-    ).select("userName email allowToPost");
-
-    if (!updatedUser) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found"
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "User post permission updated",
-      user: updatedUser
-    });
-
+    await User.findByIdAndUpdate(userId, { allowToPost });
+    res.status(200).json({ success: true, message: "User post permission updated" });
   } catch (error) {
-    console.error("❌ UPDATE USER POST STATUS ERROR:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to update user status"
-    });
+    res.status(500).json({ success: false, message: "Failed to update user post permission" });
   }
 };
-
-

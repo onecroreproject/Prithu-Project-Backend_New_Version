@@ -45,7 +45,7 @@ const TrendingCreators = require("../../models/treandingCreators.js")
 
 
 // Get single user detail
-exports.getUserProfileDetail = async (req, res) => {
+exports.getUserProfileDetailforAdmin = async (req, res) => {
   try {
     const { userId } = req.body; // from auth middleware
 

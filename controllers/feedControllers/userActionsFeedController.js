@@ -22,7 +22,7 @@ const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js
 const idToString = (id) => (id ? id.toString() : null);
 const downloadQueue = require("../../queue/downloadQueue");
 const { processFeedMedia } = require("../../utils/feedMediaProcessor");
-const Template = require("../../models/templateModel");
+
 
 
 
@@ -288,15 +288,8 @@ exports.directDownloadFeed = async (req, res) => {
 
     if (!user) return res.status(401).json({ message: "User not found" });
 
-    // Resolve design metadata: Priority to feed's own metadata, fallback to template lookup
+    // Resolve design metadata: Priority to feed's own metadata
     let designMetadata = feed.designMetadata || {};
-    if ((!designMetadata.overlayElements || designMetadata.overlayElements.length === 0) && feed.category) {
-      // Try to find template by category (might be name or ID depending on usage)
-      const template = await Template.findOne({
-        $or: [{ name: feed.category }, { _id: mongoose.Types.ObjectId.isValid(feed.category) ? feed.category : null }]
-      });
-      if (template) designMetadata = template.config || template.designMetadata || {};
-    }
 
     // deep copy metadata to avoid modifying original or shared object
     designMetadata = JSON.parse(JSON.stringify(designMetadata));

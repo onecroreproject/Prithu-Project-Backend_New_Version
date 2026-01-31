@@ -1,18 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middlewares/jwtAuthentication');
-const { adminUploadProfile,
-  attachAdminProfileFile,
-
-
-  // Feed Uploada
-  adminUploadFeed,
-  adminProcessFeedFile,
-  attachAdminFeedFiles,
-
-
-
-} = require('../middlewares/services/googleDriveMedia/adminGooleDriveUpload');
+const {
+  upload: adminUploadFeed,
+  processUploadedFiles: attachAdminFeedFiles
+} = require('../middlewares/uploadMiddleware');
 
 
 const {
@@ -453,9 +445,7 @@ router.post(
   adminUploadFeed.fields([
     { name: "files", maxCount: 20 },  // image/video
     { name: "audio", maxCount: 1 }    // optional audio
-  ])
-  , // Accept multiple files
-  adminProcessFeedFile,
+  ]),
   attachAdminFeedFiles,
   adminFeedUpload
 );

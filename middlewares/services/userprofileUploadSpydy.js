@@ -1,56 +1,8 @@
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
-const { v4: uuidv4 } = require("uuid");
+const { saveFile } = require("../../utils/storageEngine");
 
-// Base folder
-const BASE_DIR = path.join(__dirname, "../../media");
-
-// Auto-create base folder
-if (!fs.existsSync(BASE_DIR)) {
-  fs.mkdirSync(BASE_DIR, { recursive: true });
-}
-
-// Create timestamp format
-const timestamp = () => {
-  const now = new Date();
-  const date = now.toISOString().split("T")[0];
-  const time = now.toTimeString().split(" ")[0].replace(/:/g, "-");
-  return `${date}_${time}`;
-};
-
-// Multer disk storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const userId = req.Id; // from auth middleware
-
-    let folderType = "profilepic";
-
-    // 🔥 FIXED: correct detection for cover route
-    if (req.baseUrl.includes("/cover")) {
-      folderType = "coverpic";
-    }
-
-    const uploadPath = path.join(BASE_DIR, "user", userId.toString(), folderType);
-    fs.mkdirSync(uploadPath, { recursive: true });
-
-    req.finalFolderType = folderType;
-    req.finalFolderPath = uploadPath;
-
-    cb(null, uploadPath);
-  },
-
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const userId = req.Id;
-
-    const filename = `${userId}_${timestamp()}_${uuidv4()}${ext}`;
-
-    req.savedFileName = filename;
-    cb(null, filename);
-  },
-});
-
+// Use memory storage as storageEngine will handle saving to disk
+const storage = multer.memoryStorage();
 
 // Multer handler
 const userUpload = multer({
@@ -59,33 +11,47 @@ const userUpload = multer({
 });
 
 // Attach final file info
-const attachUserFile = (req, res, next) => {
+const attachUserFile = async (req, res, next) => {
   if (!req.file) return next();
 
-  // Auto-detect host (http/https + domain)
-  const host = `https://${req.get("host")}`;
+  try {
+    const userId = req.Id;
+    if (!userId) throw new Error("User ID is required for upload");
 
-  req.localFile = {
-    url: `${host}/media/user/${req.Id}/${req.finalFolderType}/${req.savedFileName}`,
-    filename: req.savedFileName,
-    folder: req.finalFolderType,
-    path: req.finalFolderPath,
-    uploadedAt: new Date(),
-  };
+    const isCover = req.baseUrl.includes("/cover") || req.path.includes("/cover");
 
-  next();
+    // users/{userId}/avatar/{original|modifyavatar}
+    // We use isModify: true for 'modifyavatar' (e.g. background removed)
+    // Here we use isCover to possibly distinguish, but let's stick to 'original' for standard uploads
+    const savedFile = await saveFile(req.file, {
+      type: 'user',
+      id: userId.toString(),
+      isModify: false
+    });
+
+    req.localFile = {
+      url: savedFile.dbPath, // Relative path for DB
+      filename: savedFile.filename,
+      path: savedFile.path,
+      uploadedAt: new Date(),
+    };
+
+    next();
+  } catch (err) {
+    console.error("❌ Profile upload failed:", err.message);
+    res.status(500).json({ success: false, message: "Upload failed", error: err.message });
+  }
 };
 
-
-// ❗ MUST BE OUTSIDE so controllers can use it
+const fs = require('fs');
 function deleteLocalFile(filePath) {
   try {
-    if (fs.existsSync(filePath)) {
+    if (filePath && fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
-      console.log("🗑 Deleted old image:", filePath);
+      console.log("🗑 Deleted local file:", filePath);
     }
   } catch (err) {
-    console.error("❌ Failed to delete old image:", err.message);
+    console.error("❌ Failed to delete local file:", err.message);
   }
 }
 

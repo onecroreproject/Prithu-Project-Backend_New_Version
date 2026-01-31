@@ -573,12 +573,19 @@ exports.getSingleFeedById = async (req, res) => {
   try {
     const rawUserId = req.Id || req.body.userId;
     const feedId = req.params.feedId;
-
+    console.log("userid", rawUserId)
+    console.log("feedid", feedId)
     if (!rawUserId)
       return res.status(404).json({ message: "User ID Required" });
 
     if (!feedId)
       return res.status(400).json({ message: "Feed ID is required" });
+
+    if (!mongoose.Types.ObjectId.isValid(rawUserId))
+      return res.status(400).json({ message: "Invalid User ID format" });
+
+    if (!mongoose.Types.ObjectId.isValid(feedId))
+      return res.status(400).json({ message: "Invalid Feed ID format" });
 
     const userId = new mongoose.Types.ObjectId(rawUserId);
     const feedObjectId = new mongoose.Types.ObjectId(feedId);

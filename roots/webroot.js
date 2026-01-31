@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middlewares/jwtAuthentication');
-const { feedUpload,
-  userProcessFeedFile,
-  attachFeedFile, } = require("../middlewares/services/googleDriveMedia/feedgoogleConfig");
+const {
+  upload: feedUpload,
+  processUploadedFiles: attachFeedFile
+} = require("../middlewares/uploadMiddleware");
 const { userUpload, attachUserFile } = require("../middlewares/services/userprofileUploadSpydy");
 
 
@@ -487,7 +488,6 @@ router.post(
   "/creator/feed/upload",
   auth,
   feedUpload.single("file"),
-  userProcessFeedFile,
   attachFeedFile,
   creatorFeedUpload
 );
@@ -496,7 +496,6 @@ router.post(
   "/creator/feed/ScheduleUpload",
   auth,
   feedUpload.single("file"),
-  userProcessFeedFile,
   attachFeedFile,
   creatorFeedScheduleUpload
 );

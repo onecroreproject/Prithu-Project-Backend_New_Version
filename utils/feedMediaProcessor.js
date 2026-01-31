@@ -173,7 +173,7 @@ exports.processFeedMedia = async ({
 }) => {
     const OUT_W = 1080;
     const OUT_H = 1920;
-    const BACKEND_URL = process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com';
+    const BACKEND_URL = process.env.BACKEND_URL || '';
     // Helper matching Postcard.jsx
     const extractColorFromURL = (url) => {
         if (!url) return "#1a1a1a";
@@ -193,16 +193,23 @@ exports.processFeedMedia = async ({
     ensureDir(tempDir);
 
     const mediaUrl = feed.mediaUrl;
-    console.log(`[Processor] Resolved media URL: ${mediaUrl}`);
+    const localPath = feed.storage?.paths?.media || feed.files?.[0]?.path;
+
+    console.log(`[Processor] Resolved media source: ${localPath || mediaUrl}`);
 
     const postType = feed.postType || "image";
     const isVideoPost = postType === "video";
     const isImagePost = postType === "image" || postType === "image+audio";
     const tempSourcePath = path.join(tempDir, isVideoPost ? "source.mp4" : "source.jpg");
 
-    console.log(`[Processor] Downloading source media to: ${tempSourcePath}`);
-    await downloadFile(mediaUrl, tempSourcePath);
-    console.log(`[Processor] Download complete.`);
+    if (localPath && fs.existsSync(localPath)) {
+        console.log(`[Processor] Copying local file instead of downloading: ${localPath}`);
+        fs.copyFileSync(localPath, tempSourcePath);
+    } else {
+        console.log(`[Processor] Downloading source media to: ${tempSourcePath}`);
+        await downloadFile(mediaUrl, tempSourcePath);
+    }
+    console.log(`[Processor] Source media ready.`);
     if (onProgress) onProgress(30);
 
     // 2. METADATA & DIMENSIONS
@@ -276,10 +283,10 @@ exports.processFeedMedia = async ({
     for (const el of overlayElements) {
         let overlayMediaUrl = null;
         if (el.type === 'avatar') overlayMediaUrl = viewer?.profileAvatar || el.mediaConfig?.url;
-        else if (el.type === "logo") overlayMediaUrl = el.mediaConfig?.url || `${BACKEND_URL}/logo/prithulogo.png`;
+        else if (el.type === "logo") overlayMediaUrl = el.mediaConfig?.url || "/logo/prithulogo.png";
 
         if (overlayMediaUrl) {
-            if (!overlayMediaUrl.startsWith('http')) overlayMediaUrl = `${BACKEND_URL}/${overlayMediaUrl}`;
+            overlayMediaUrl = getMediaUrl(overlayMediaUrl);
             const overlayDest = path.join(tempDir, `overlay_${overlayInputIndex}.png`);
 
             try {

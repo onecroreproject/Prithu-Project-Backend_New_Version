@@ -133,57 +133,54 @@ exports.userProfileDetailUpdate = async (req, res) => {
     // -----------------------------------------
     // ✅ NEW LOCAL STORAGE HANDLING
     // -----------------------------------------
- if (req.localFile) {
-  // 🧹 delete old profile avatar (local)
-  if (profile?.profileAvatarFilename) {
-    const oldPath = path.join(
-      __dirname,
-      "../../media/user",
-      userId.toString(),
-      "profilepic",
-      profile.profileAvatarFilename
-    );
-    deleteLocalFile(oldPath);
-  }
+    if (req.localFile) {
+      // 🧹 delete old profile avatar (local)
+      if (profile?.profileAvatarFilename) {
+        const oldPath = path.join(
+          __dirname,
+          "../../media/user",
+          userId.toString(),
+          "profilepic",
+          profile.profileAvatarFilename
+        );
+        deleteLocalFile(oldPath);
+      }
 
-  updateData.profileAvatar = req.localFile.url;
-  updateData.profileAvatarFilename = req.localFile.filename;
-  updateData.avatarUpdatedAt = req.localFile.uploadedAt;
+      updateData.profileAvatar = req.localFile.url;
+      updateData.profileAvatarFilename = req.localFile.filename;
+      updateData.avatarUpdatedAt = req.localFile.uploadedAt;
 
-  // 🧹 delete old modify avatar (cloud)
-  if (profile?.modifyAvatarFilename) {
-    try {
-      await deleteCloudFile(profile.modifyAvatarFilename);
-    } catch (err) {
-      console.warn(
-        "⚠️ Failed to delete old modifyAvatar:",
-        profile.modifyAvatarFilename
-      );
-    }
-  }
+      // 🧹 delete old modify avatar (cloud)
+      if (profile?.modifyAvatarFilename) {
+        try {
+          await deleteCloudFile(profile.modifyAvatarFilename);
+        } catch (err) {
+          console.warn(
+            "⚠️ Failed to delete old modifyAvatar:",
+            profile.modifyAvatarFilename
+          );
+        }
+      }
 
-  // 🎨 background removal + fallback
-  try {
-    const localFilePath = path.join(
-      req.localFile.path,
-      req.localFile.filename
-    );
+      // 🎨 background removal + fallback
+      try {
+        const localFilePath = req.localFile.path;
 
-    const removedBg = await removeImageBackground(localFilePath);
+        const removedBg = await removeImageBackground(localFilePath);
 
-    if (removedBg?.secure_url) {
-      updateData.modifyAvatar = removedBg.secure_url;
-      updateData.modifyAvatarFilename = removedBg.public_id;
-    } else {
-      updateData.modifyAvatar = req.localFile.url;
-      updateData.modifyAvatarFilename = req.localFile.filename;
-    }
-  } catch (err) {
-    console.error("⚠️ Background removal failed:", err.message);
-    updateData.modifyAvatar = req.localFile.url;
-    updateData.modifyAvatarFilename = req.localFile.filename;
-  }
-} // ✅ IMPORTANT: block closed here
+        if (removedBg?.secure_url) {
+          updateData.modifyAvatar = removedBg.secure_url;
+          updateData.modifyAvatarFilename = removedBg.public_id;
+        } else {
+          updateData.modifyAvatar = req.localFile.url;
+          updateData.modifyAvatarFilename = req.localFile.filename;
+        }
+      } catch (err) {
+        console.error("⚠️ Background removal failed:", err.message);
+        updateData.modifyAvatar = req.localFile.url;
+        updateData.modifyAvatarFilename = req.localFile.filename;
+      }
+    } // ✅ IMPORTANT: block closed here
 
 
     // Handle username
@@ -270,12 +267,12 @@ exports.adminProfileDetailUpdate = async (req, res) => {
 
     if (req.localFile) {
       if (oldProfile?.profileAvatar && oldProfile.profileAvatar !== req.localFile.url) {
-        deleteLocalFile(oldProfile.localAvatarPath);
+        // deleteLocalFile(oldProfile.localAvatarPath);
       }
 
       updateData.profileAvatar = req.localFile.url;
       updateData.localAvatarPath = req.localFile.path;
-      updateData.profileAvatarId = req.localFile.filename; // optional
+      updateData.profileAvatarId = req.localFile.filename;
     }
 
     // Handle username update
@@ -354,7 +351,7 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
 
     if (req.localFile) {
       if (oldProfile?.profileAvatar && oldProfile.profileAvatar !== req.localFile.url) {
-        deleteLocalFile(oldProfile.localAvatarPath);
+        // deleteLocalFile(oldProfile.localAvatarPath);
       }
 
       updateData.profileAvatar = req.localFile.url;

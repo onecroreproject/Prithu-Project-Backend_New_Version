@@ -31,7 +31,6 @@
     "fs": "^0.0.1-security",
     "geoip-lite": "^1.4.10",
     "get-video-duration": "^4.1.0",
-    "googleapis": "^169.0.0",
     "ioredis": "^5.7.0",
     "jimp": "^1.6.0",
     "jsonwebtoken": "^9.0.2",
