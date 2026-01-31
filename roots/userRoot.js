@@ -244,19 +244,46 @@ const { submitUserFeedback, getMyFeedbackAndReports } = require('../controllers/
 const { getUpcomingBirthdays } = require('../controllers/adminControllers/adminUserControllers');
 
 /* --------------------- User Authentication --------------------- */
-router.post('/register', createNewUser);
-router.post('/login', userLogin);
-router.post('/sent-otp', userSendOtp);
-router.post('/exist/verify-otp', existUserVerifyOtp);
-router.post('/new/verify-otp', newUserVerifyOtp);
-router.post('/reset-password', userPasswordReset);
-router.post('/logout', auth, userLogOut);
-router.get('/referral/validate/:code', validateReferralCode);
+router.post('/auth/user/register', createNewUser);
+router.post('/register', createNewUser); // Alias
+
+router.post('/auth/user/login', userLogin);
+router.post('/login', userLogin); // Alias
+
+router.post('/auth/user/otp-send', userSendOtp);
+router.post('/sent-otp', userSendOtp); // Alias
+
+router.post('/auth/exist/user/verify-otp', existUserVerifyOtp);
+router.post('/auth/new/user/verify-otp', newUserVerifyOtp);
+
+router.post('/auth/user/password-reset', userPasswordReset);
+router.post('/auth/user/reset-password', userPasswordReset); // Alias
+
+router.post('/auth/user/logout', auth, userLogOut);
+router.get('/auth/user/referral/validate/:code', validateReferralCode);
+
+/* --------------------- Session & Tokens --------------------- */
+router.post("/refresh-token", refreshAccessToken);
+router.post("/auth/refresh-token", refreshAccessToken); // Alias
+router.get("/api/admin/verify-token", auth, refreshAccessToken); // Alias for token verification
+
+
+/* --------------------- User Referral & Earnings --------------------- */
+router.get('/user/referal/code', auth, getUserReferalCode);
+router.get('/user/earnings/total', auth, getUserEarnings);
+router.get('/user/referred/people', auth, getReferredPeople);
+router.post('/user/referral/activity/log', auth, logReferralActivity);
+router.get('/user/balance/amount', auth, getUserBalance);
+router.get('/user/withdrawal/details', auth, getWithdrawalHistory);
+router.get('/user/referral/recent-activities', auth, getRecentActivities);
 
 /* --------------------- User Profile --------------------- */
-router.get('/get/profile/detail', auth, getUserProfileDetail);
-router.get('/get/single/profile/detail', getUserProfileDetail);
-router.post('/post/profile/detail/update', auth, userUpload.single("file"), (req, res, next) => { req.baseUrl = "/profile"; next(); }, attachUserFile, userProfileDetailUpdate);
+router.get('/user/profile/detail', auth, getUserProfileDetail);
+router.get('/get/profile/detail', auth, getUserProfileDetail); // Alias
+router.get('/user/single/profile/detail', getUserProfileDetail);
+router.get('/get/single/profile/detail', getUserProfileDetail); // Alias
+
+router.post('/user/profile/detail/update', auth, userUpload.single("file"), (req, res, next) => { req.baseUrl = "/profile"; next(); }, attachUserFile, userProfileDetailUpdate);
 router.post('/user/profile/cover/update', auth, userUpload.single("coverPhoto"), (req, res, next) => { req.baseUrl = "/cover"; next(); }, attachUserFile, updateCoverPhoto);
 router.delete('/user/profile/cover/delete', auth, deleteCoverPhoto);
 router.get("/get/profile/overview", auth, getProfileOverview);
@@ -266,19 +293,19 @@ router.put("/put/profile/visibility", auth, toggleFieldVisibility);
 router.get("/get/profile/visibility-settings", auth, getVisibilitySettings);
 
 /* --------------------- User Feed Actions --------------------- */
-router.post('/feed/like', auth, likeFeed);
-router.post("/feed/dislike", auth, toggleDislikeFeed);
-router.post('/feed/save', auth, toggleSaveFeed);
-router.post('/feed/share', auth, shareFeed);
-router.get('/feed/share-link/:feedId', generateShareLink);
-router.get('/feed/thumbnail/:feedId', getVideoThumbnail);
-router.get('/feed/liked', auth, getUserLikedFeeds);
-router.get('/feed/saved', auth, getUserSavedFeeds);
-router.get('/feed/downloaded', auth, getUserDownloadedFeeds);
-router.post('/feed/hide', auth, userHideFeed);
-router.post('/feed/download-request/:feedId', auth, requestDownloadFeed);
-router.get('/feed/direct-download/:feedId', directDownloadFeed);
-router.get('/feed/download-status/:jobId', auth, getDownloadJobStatus);
+router.post('/user/feed/like', auth, likeFeed);
+router.post("/user/feed/dislike", auth, toggleDislikeFeed);
+router.post('/user/feed/save', auth, toggleSaveFeed);
+router.post('/user/feed/share', auth, shareFeed);
+router.post('/user/feed/hide', auth, userHideFeed);
+router.post('/user/feed/download', auth, requestDownloadFeed);
+router.get('/user/feed/liked', auth, getUserLikedFeeds);
+router.get('/user/feed/saved', auth, getUserSavedFeeds);
+router.get('/user/feed/downloaded', auth, getUserDownloadedFeeds);
+router.get('/user/feed/share-link/:feedId', generateShareLink);
+router.get('/user/feed/thumbnail/:feedId', getVideoThumbnail);
+router.get('/user/feed/download-status/:jobId', auth, getDownloadJobStatus);
+router.get('/user/feed/direct-download/:feedId', directDownloadFeed);
 
 /* --------------------- Categories --------------------- */
 router.get('/categories/all', auth, getUserContentCategories);
@@ -289,11 +316,13 @@ router.post("/categories/begin", auth, saveInterestedCategory);
 router.get("/categories/not-interested/list", auth, getUserCategory);
 
 /* --------------------- Follow & Connections --------------------- */
-router.post('/follow', auth, followAccount);
-router.post('/unfollow', auth, unFollowAccount);
-router.get('/following/data', auth, getUserFollowersData);
-router.post("/remove-follower", auth, removeFollower);
-router.post("/check-follow-status", auth, checkFollowStatus);
+router.post('/user/follow/creator', auth, followAccount);
+router.post('/user/unfollow/creator', auth, unFollowAccount);
+router.post('/user/follow', auth, followAccount); // Alignment with some frontend calls
+router.post('/user/unfollow', auth, unFollowAccount); // Alignment with some frontend calls
+router.get('/user/following/data', auth, getUserFollowersData);
+router.post("/user/remove-follower", auth, removeFollower);
+router.post("/user/check-follow-status", auth, checkFollowStatus);
 
 /* --------------------- Comments --------------------- */
 router.post('/comment', auth, postComment);
@@ -311,11 +340,16 @@ router.get("/get/trending/feeds", auth, getTrendingFeeds);
 router.get('/get/all/feeds/user', auth, getAllFeedsByUserId);
 router.get('/get/feed/with/category/:id', auth, getfeedWithCategoryWithId);
 router.get('/get/user/info/associated/feed/:feedId', auth, getUserInfoAssociatedFeed);
+router.get("/get/feed/category", getCategoriesWithFeeds);
 router.get('/get/feed/:feedId', auth, getSingleFeedById);
 router.get('/get/feeds/by/creator/:feedId', auth, getFeedsByCreator);
 router.get('/get/feeds/by/hashtag/:tag', auth, getFeedsByHashtag);
-router.post('/feed/view/video/:id', auth, userVideoViewCount);
-router.post('/feed/view/image/:id', auth, userImageViewCount);
+router.post('/user/watching/vidoes', auth, userVideoViewCount);
+router.post('/feed/view/video/:id', auth, userVideoViewCount); // Alias
+router.post('/user/image/view/count', auth, userImageViewCount);
+router.post('/feed/view/image/:id', auth, userImageViewCount); // Alias
+router.post('/user/not-interested', auth, userNotInterestedCategory); // Alias
+router.post('/user/block', auth, (req, res) => res.status(501).json({ message: "Block feature not implemented" })); // Placeholder for plan completeness
 
 /* --------------------- Creator Specific --------------------- */
 router.post("/creator/feed/upload", auth, feedUpload.single("file"), attachFeedFile, creatorFeedUpload);
@@ -348,19 +382,20 @@ router.post("/availability/username", checkUsernameAvailability);
 router.post("/availability/email", checkEmailAvailability);
 router.post("/session/heartbeat", auth, heartbeat);
 router.post("/session/presence", auth, userPresence);
-router.get("/events/upcoming", auth, getUpcomingEvents);
-router.get("/birthdays", getUpcomingBirthdays);
+router.get("/user/get/birthday", getUpcomingBirthdays);
+router.get("/get/user/birthday", getUpcomingBirthdays); // Alias
+router.get("/get/trending/feed", auth, getTrendingFeeds);
+router.get("/user/invite/friends", auth, (req, res) => res.status(200).json({ message: "Invite feature" })); // Placeholder
 router.post("/feedback/submit", auth, submitUserFeedback);
 router.get("/feedback/my", auth, getMyFeedbackAndReports);
 router.get("/help/faq", getHelpFAQ);
 router.post('/search/all/category', searchCategories)
-router.get("/get/feed/category", getCategoriesWithFeeds);
 router.post("/save/user/location", auth, saveUserLocation);
 router.get('/user/referral/recent-activities', auth, getRecentActivities);
 /*--------------UserPostController--------------------------*/
 router.get("/post/allowed/status", auth, getPostInterestStatus);
 router.post("/post/intrested", auth, requestPostInterest);
-
+router.get("/get/user/post", auth, getUserFeedsWeb);
 
 
 

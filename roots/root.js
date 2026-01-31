@@ -2,109 +2,109 @@ const express = require('express');
 const router = express.Router();
 const { auth } = require('../middlewares/jwtAuthentication');
 const {
-  upload: adminUploadFeed,
-  processUploadedFiles: attachAdminFeedFiles
+    upload: adminUploadFeed,
+    processUploadedFiles: attachAdminFeedFiles
 } = require('../middlewares/uploadMiddleware');
 
 
 const {
-  creatorFeedUpload,
-  creatorFeedDelete,
-  creatorFeedScheduleUpload,
+    creatorFeedUpload,
+    creatorFeedDelete,
+    creatorFeedScheduleUpload,
 
 } = require('../controllers/feedControllers/creatorFeedController');
 
 const {
-  getAllFeedsByUserId,
-  getFeedsByAccountId,
-  getUserInfoAssociatedFeed,
-  getUserHidePost,
-  getTrendingFeeds,
-  deleteFeed,
+    getAllFeedsByUserId,
+    getFeedsByAccountId,
+    getUserInfoAssociatedFeed,
+    getUserHidePost,
+    getTrendingFeeds,
+    deleteFeed,
 
 } = require('../controllers/feedControllers/feedsController');
 
 const {
-  newAdmin,
-  adminLogin,
-  adminSendOtp,
-  existAdminVerifyOtp,
-  newAdminVerifyOtp,
-  adminPasswordReset,
-  verifyToken,
-  checkAvailability,
-  adminLogout,
+    newAdmin,
+    adminLogin,
+    adminSendOtp,
+    existAdminVerifyOtp,
+    newAdminVerifyOtp,
+    adminPasswordReset,
+    verifyToken,
+    checkAvailability,
+    adminLogout,
 } = require('../controllers/authenticationControllers/adminAuthController');
 
 const {
-  getUserDetailWithId,
-  setAppLanguage,
-  getAppLanguage,
-  getFeedLanguage,
-  setFeedLanguage,
-  checkUsernameAvailability,
-  getUserReferalCode,
-  checkEmailAvailability,
-  blockUserById,
+    getUserDetailWithId,
+    setAppLanguage,
+    getAppLanguage,
+    getFeedLanguage,
+    setFeedLanguage,
+    checkUsernameAvailability,
+    getUserReferalCode,
+    checkEmailAvailability,
+    blockUserById,
 } = require('../controllers/userControllers/userDetailController');
 
 const {
-  userSelectCategory,
-  userNotInterestedCategory,
-  userInterestedCategory,
+    userSelectCategory,
+    userNotInterestedCategory,
+    userInterestedCategory,
 } = require('../controllers/userControllers/userCategoryController')
 
 const {
-  getfeedWithCategoryWithId,
-  getAllCategories,
-  getUserContentCategories,
-  searchCategories,
-  getCategoriesWithFeeds,
-  saveInterestedCategory,
-  getFeedLanguageCategories,
-  getUserPostCategories,
-  getFeedWithCategoryId,
+    getfeedWithCategoryWithId,
+    getAllCategories,
+    getUserContentCategories,
+    searchCategories,
+    getCategoriesWithFeeds,
+    saveInterestedCategory,
+    getFeedLanguageCategories,
+    getUserPostCategories,
+    getFeedWithCategoryId,
 } = require('../controllers/categoriesController');
 
 const {
-  userProfileDetailUpdate,
-  getUserProfileDetail,
-  childAdminProfileDetailUpdate,
-  adminProfileDetailUpdate,
-  getAdminProfileDetail,
-  getChildAdminProfileDetail,
-  toggleFieldVisibility,
-  getVisibilitySettings,
-  updateCoverPhoto,
-  deleteCoverPhoto,
-  getProfileOverview,
-  getVisibilitySettingsWeb,
-  updateFieldVisibilityWeb,
-  getProfileCompletion,
+    userProfileDetailUpdate,
+    getUserProfileDetail,
+    childAdminProfileDetailUpdate,
+    adminProfileDetailUpdate,
+    getAdminProfileDetail,
+    getChildAdminProfileDetail,
+    toggleFieldVisibility,
+    getVisibilitySettings,
+    updateCoverPhoto,
+    deleteCoverPhoto,
+    getProfileOverview,
+    getVisibilitySettingsWeb,
+    updateFieldVisibilityWeb,
+    getProfileCompletion,
 } = require('../controllers/profileControllers/profileController');
 
 const {
-  getUsersStatus,
-  getUsersByDate,
-  getAllUserDetails,
-  searchAllUserDetails,
-  getAnaliticalCountforUser,
-  getUserLikedFeedsforAdmin,
-  getUserSocialMeddiaDetailWithIdForAdmin,
-  getUserAnalyticalData,
-  getUserLevelWithEarnings,
-  getUserProfileDashboardMetricCount,
-  deleteUserAndAllRelated,
+    getUsersStatus,
+    getUsersByDate,
+    getAllUserDetails,
+    searchAllUserDetails,
+    getAnaliticalCountforUser,
+    getUserLikedFeedsforAdmin,
+    getUserSocialMeddiaDetailWithIdForAdmin,
+    getUserAnalyticalData,
+    getUserLevelWithEarnings,
+    getUserProfileDashboardMetricCount,
+    deleteUserAndAllRelated,
 } = require('../controllers/adminControllers/adminUserControllers');
 
 const {
-  getUserSavedFeeds,
-  getUserDownloadedFeeds,
-  getUserLikedFeeds,
-  userHideFeed,
-  getUserCategory,
-  requestDownloadFeed,
-  getDownloadJobStatus,
+    getUserSavedFeeds,
+    getUserDownloadedFeeds,
+    getUserLikedFeeds,
+    userHideFeed,
+    getUserCategory,
+    requestDownloadFeed,
+    getDownloadJobStatus,
 } = require('../controllers/feedControllers/userActionsFeedController');
 
 
@@ -112,130 +112,130 @@ const {
 
 
 const {
-  createPlan,
-  updatePlan,
-  deletePlan,
-  getAllPlans
+    createPlan,
+    updatePlan,
+    deletePlan,
+    getAllPlans
 } = require('../controllers/adminControllers/adminSubscriptionController');
 
 const {
-  subscribePlan,
-  cancelSubscription,
-  getAllSubscriptionPlans,
-  getUserSubscriptionPlanWithId,
-  userTrialPlanActive,
-  checkUserActiveSubscription,
+    subscribePlan,
+    cancelSubscription,
+    getAllSubscriptionPlans,
+    getUserSubscriptionPlanWithId,
+    userTrialPlanActive,
+    checkUserActiveSubscription,
 } = require('../controllers/userControllers/userSubscriptionController');
 
 const {
-  adminFeedUpload,
-  childAdminFeedUpload,
-  getAllFeedAdmin,
-  getUsersWillingToPost,
-  updateUserPostPermission,
-  bulkFeedUpload,
-  getUploadProgress,
+    adminFeedUpload,
+    childAdminFeedUpload,
+    getAllFeedAdmin,
+    getUsersWillingToPost,
+    updateUserPostPermission,
+    bulkFeedUpload,
+    getUploadProgress,
 } = require('../controllers/adminControllers/adminfeedController');
 
 const {
-  getCreatorDetailWithId,
-  getAllCreatorDetails,
-  getAllTrendingCreators,
-  adminGetTrendingFeeds,
+    getCreatorDetailWithId,
+    getAllCreatorDetails,
+    getAllTrendingCreators,
+    adminGetTrendingFeeds,
 } = require('../controllers/creatorControllers/creatorDetailController');
 
 const {
-  followAccount,
-  unFollowAccount,
-  getAccountFollowers,
-  getUserFollowersData,
+    followAccount,
+    unFollowAccount,
+    getAccountFollowers,
+    getUserFollowersData,
 } = require('../controllers/followersControllers.js/followerDetailController');
 
 const {
-  adminAddCategory,
-  deleteCategory,
-  updateCategory,
+    adminAddCategory,
+    deleteCategory,
+    updateCategory,
 } = require('../controllers/adminControllers/adminCatagoryController');
 
 
 
 
 const {
-  getCommentsByFeed,
-  getRepliesForComment,
+    getCommentsByFeed,
+    getRepliesForComment,
 } = require('../controllers/conmmentController')
 
 
 const {
-  userVideoViewCount,
-  userImageViewCount,
-  fetchUserFeeds,
-  fetchUserFollowing,
-  fetchUserInterested,
-  fetchUserHidden,
-  fetchUserLiked,
-  fetchUserDisliked,
-  fetchUserCommented,
-  fetchUserShared,
-  fetchUserDownloaded,
-  getUserAnalyticsSummary,
-  fetchUserNonInterested,
-  getUserdetailWithinTheFeed,
-  getUserPost,
+    userVideoViewCount,
+    userImageViewCount,
+    fetchUserFeeds,
+    fetchUserFollowing,
+    fetchUserInterested,
+    fetchUserHidden,
+    fetchUserLiked,
+    fetchUserDisliked,
+    fetchUserCommented,
+    fetchUserShared,
+    fetchUserDownloaded,
+    getUserAnalyticsSummary,
+    fetchUserNonInterested,
+    getUserdetailWithinTheFeed,
+    getUserPost,
 } = require('../controllers/userControllers/userFeedController');
 
 const {
-  getDashboardMetricCount,
-  getDashUserRegistrationRatio,
-  getDashUserSubscriptionRatio,
+    getDashboardMetricCount,
+    getDashUserRegistrationRatio,
+    getDashUserSubscriptionRatio,
 } = require('../controllers/adminControllers/dashboardController');
 
 
 
 const {
-  getStartQuestion,
-  getNextQuestion,
-  getReportTypes,
-  createFeedReport,
+    getStartQuestion,
+    getNextQuestion,
+    getReportTypes,
+    createFeedReport,
 } = require('../controllers/adminControllers/userReportController');
 
 const {
-  sendAdminNotification,
-  notifyUserFollow,
-  getNotifications,
-  markNotificationAsRead,
-  saveToken,
-  markAllRead,
-  clearAllNotifications,
-  deleteNotification,
+    sendAdminNotification,
+    notifyUserFollow,
+    getNotifications,
+    markNotificationAsRead,
+    saveToken,
+    markAllRead,
+    clearAllNotifications,
+    deleteNotification,
 } = require('../controllers/adminControllers/notificationController');
 
 const {
-  refreshAccessToken,
-  heartbeat,
+    refreshAccessToken,
+    heartbeat,
 } = require('../controllers/sessionController')
 
 const {
-  getChildAdmins,
-  getChildAdminPermissions,
-  updateChildAdminPermissions,
-  getChildAdminById,
-  blockChildAdmin,
-  deleteChildAdmin,
+    getChildAdmins,
+    getChildAdminPermissions,
+    updateChildAdminPermissions,
+    getChildAdminById,
+    blockChildAdmin,
+    deleteChildAdmin,
 
 } = require('../controllers/adminControllers/adminChildAdminController');
 
 const {
-  getAnalytics,
-  getRecentSubscriptionUsers,
-  getTopReferralUsers,
-  getUserAndSubscriptionCountsDaily,
+    getAnalytics,
+    getRecentSubscriptionUsers,
+    getTopReferralUsers,
+    getUserAndSubscriptionCountsDaily,
 } = require("../controllers/adminControllers/SalesDashboard/salesDashboardMetricksController");
 
 const {
-  uploadFrames,
-  getAllFrames,
-  deleteFrame,
+    uploadFrames,
+    getAllFrames,
+    deleteFrame,
 } = require("../controllers/adminControllers/frameController");
 
 const { frameUpload } = require("../middlewares/helper/frameUpload");
@@ -245,41 +245,41 @@ const { frameUpload } = require("../middlewares/helper/frameUpload");
 const { getUserEarnings } = require("../controllers/userControllers/userEarningsController");
 
 const { saveUserLocation,
-  getUserLocation,
+    getUserLocation,
 } = require("../controllers/userControllers/userLoactionController");
 
 
 /*-----------------Web Controller ------------------*/
 const {
-  getUserFeedsWeb,
+    getUserFeedsWeb,
 } = require("../WebController/UserController/userFeedControllerWeb");
 
 const {
-  getUserFollowing,
-  getUserFollowers,
+    getUserFollowing,
+    getUserFollowers,
 } = require("../WebController/UserController/userFolloweController");
 
 
 const {
-  addReportQuestion,
-  getQuestionsByType,
-  createReportType,
-  adminGetReportTypes,
-  updateReportStatus,
-  getReportLogs,
-  getQuestionById,
-  deleteQuestion,
-  toggleReportType,
-  deleteReportType,
-  getReports,
-  linkNextQuestion,
-  adminTakeActionOnReport,
-  getAllQuestions,
-  getAllReports
+    addReportQuestion,
+    getQuestionsByType,
+    createReportType,
+    adminGetReportTypes,
+    updateReportStatus,
+    getReportLogs,
+    getQuestionById,
+    deleteQuestion,
+    toggleReportType,
+    deleteReportType,
+    getReports,
+    linkNextQuestion,
+    adminTakeActionOnReport,
+    getAllQuestions,
+    getAllReports
 } = require("../controllers/adminControllers/adminReportController");
 const { getPostVolumeWeekly,
-  getPostVolumeDaily,
-  getPostVolumeMonthly,
+    getPostVolumeDaily,
+    getPostVolumeMonthly,
 } = require('../controllers/feedControllers/feedVolumController');
 
 
@@ -288,11 +288,11 @@ const { getPostVolumeWeekly,
 const { getDriveDashboard, driveCommand } = require('../controllers/adminControllers/driverStatusController');
 
 const {
-  createHelpSection,
-  updateHelpSection,
-  deleteHelpSection,
-  getHelpFAQ,
-  bulkCreateHelpFAQ,
+    createHelpSection,
+    updateHelpSection,
+    deleteHelpSection,
+    getHelpFAQ,
+    bulkCreateHelpFAQ,
 } = require("../controllers/adminControllers/adminHelpController");
 const { getAllUserFeedback, updateFeedbackStatus } = require('../controllers/feedBackController');
 
@@ -414,226 +414,10 @@ router.get("/get/user/location", auth, getUserLocation);
 
 
 
-/* --------------------- Admin Authentication --------------------- */
-router.post('/auth/admin/register', auth, newAdmin);
-router.post('/auth/admin/login', adminLogin);
-router.post('/auth/admin/sent-otp', adminSendOtp);
-router.post('/auth/exist/admin/verify-otp', existAdminVerifyOtp);
-router.post('/auth/new/admin/verify-otp', newAdminVerifyOtp);
-router.post('/auth/admin/reset-password', adminPasswordReset);
-router.get('/api/admin/verify-token', auth, verifyToken);
-router.get("/auth/check-availability", checkAvailability);
-router.post('/auth/admin/logout', auth, adminLogout);
 
+// Migrated to adminRoot.js
 
-/* --------------------- Admin Profile API --------------------- */
-// router.put(
-//   "/admin/profile/detail/update",
-//   auth,
-//   adminUploadProfile.single("file"),
-// attachAdminProfileFile,
-//   adminProfileDetailUpdate
-// );
-
-router.get('/get/admin/profile', auth, getAdminProfileDetail);
-
-/* --------------------- Admin Feed API --------------------- */
-// Admin feed upload with design metadata
-router.post(
-  "/admin/feed-upload",
-  auth,
-  adminUploadFeed.fields([
-    { name: "files", maxCount: 20 },  // image/video
-    { name: "audio", maxCount: 1 }    // optional audio
-  ]),
-  attachAdminFeedFiles,
-  adminFeedUpload
-);
-
-// // Bulk feed upload endpoint
-// router.post(
-//   "/admin/feed/bulk-upload",
-//   auth,
-//   adminUploadFeed.array("files", 50),
-//   adminProcessFeedFile,
-//   attachAdminFeedFiles,
-//   bulkFeedUpload
-// );
-
-// Get upload progress
-// router.get("/admin/upload/progress/:uploadId", auth,getUploadProgress);
-
-
-// router.post(
-//   "/admin/schedule-feed",
-//   auth,
-//   adminUploadFeed.array("file"),
-//   (req, res, next) => {
-//     req.baseUrl = "/feed";
-//     next();
-//   },
-//   adminProcessFeedFile,
-//   attachAdminFeedFiles,
-//   adminFeedUpload 
-// );
-
-router.get("/admin/get/all/feed", getAllFeedAdmin);
-router.delete("/delete/feed", deleteFeed);
-
-/* --------------------- Admin Category API --------------------- */
-router.post('/admin/add/feed/category', adminAddCategory);
-router.delete('/admin/feed/category/:id', deleteCategory);
-router.get('/admin/get/feed/category', getAllCategories);
-router.put('/admin/update/category', updateCategory);
-
-/* --------------------- Admin Subscription API --------------------- */
-router.post('/admin/subscription/create', createPlan);
-router.put('/admin/subscription/update/:id', updatePlan);
-router.delete('/admin/subscription/delete/:id', deletePlan);
-router.get('/admin/subscription/all', getAllPlans);
-
-/* --------------------- Admin User API --------------------- */
-router.get('/admin/getall/users', getAllUserDetails);
-router.get("/admin/search/user", searchAllUserDetails);
-router.get('/admin/get/user/social/media/profile/detail/:id', getUserSocialMeddiaDetailWithIdForAdmin);
-router.get("/admin/users/status", getUsersStatus);
-router.get("/admin/user/detail/by-date", getUsersByDate);
-router.get('/admin/user/action/intersection/count/:userId', getAnaliticalCountforUser);
-router.get('/admin/get/user/analytical/data/:userId', getUserAnalyticalData);
-router.get("/admin/user/tree/level/:userId", getUserLevelWithEarnings);
-router.patch("/admin/block/user/:userId", blockUserById);
-router.get('/admin/user/profile/metricks', getUserProfileDashboardMetricCount);
-router.get('/admin/user/likes/:userId', getUserLikedFeedsforAdmin);
-router.delete('/admin/delete/user/:userId', deleteUserAndAllRelated);
-
-router.get("/feeds/:userId", fetchUserFeeds);
-router.get("/following/:userId", fetchUserFollowing);
-router.get("/interested/:userId", fetchUserInterested);
-router.get("/hidden/:userId", fetchUserHidden);
-router.get("/liked/:userId", fetchUserLiked);
-router.get("/disliked/:userId", fetchUserDisliked);
-router.get("/commented/:userId", fetchUserCommented);
-router.get("/shared/:userId", fetchUserShared);
-router.get("/downloaded/:userId", fetchUserDownloaded);
-router.get("/summary/:userId", getUserAnalyticsSummary);
-router.get("/nonInterested/:userId", fetchUserNonInterested);
-
-
-
-// /*-------------------Admin Report API -------------------------*/
-router.post("/admin/add/report/questions", addReportQuestion);
-router.get("/admin/get/Questions/ByType", getQuestionsByType);
-router.patch("/admin/linkNextQuestion", linkNextQuestion);
-router.get("/admin/get/QuestionById", getQuestionById);
-router.get("/admin/getAllQuestions", getAllQuestions);
-router.post("/admin/report-type", createReportType);
-router.get("/admin/get/ReportTypes", adminGetReportTypes);
-router.patch("/admin/toggleReportType", toggleReportType);
-router.delete("/admin/deleteReportType", deleteReportType);
-router.delete("/admin/deleteQuestion", deleteQuestion);
-router.put("/:reportId/status", updateReportStatus);
-router.get("/:reportId/logs", auth, getReportLogs);
-router.get('/admin/user/report', getAllReports);
-router.put("/admin/report/action/update/:reportId", auth, adminTakeActionOnReport);
-
-
-/*---------------------Admin DashBoard API---------------------*/
-router.get("/admin/dashboard/metricks/counts", getDashboardMetricCount);
-router.get("/admin/users/monthly-registrations", getDashUserRegistrationRatio);
-router.get('/posts/daily', getPostVolumeDaily);
-
-// GET /api/metrics/posts/weekly
-router.get('/posts/weekly', getPostVolumeWeekly);
-router.get('/posts/monthly', getPostVolumeMonthly);
-router.get("/admin/user/subscriptionration", getDashUserSubscriptionRatio)
-
-// /* --------------------- Admin Creator API --------------------- */
-router.get('/admin/getall/creators', getAllCreatorDetails);
-router.get('/admin/get/user/detail', getUserProfileDetail);
-router.get('/admin/get/trending/creator', getAllTrendingCreators);
-// router.get("/admin/users/status", getUserStatus);
-// router.get("/admin/user/detail/by-date", getUsersByDate);
-
-
-/*---------------------------Admin Feed ________________________*/
-router.get("/admin/get/trending/feed", adminGetTrendingFeeds)
-
-/*----------------------Admin Sales Dashboard------------------*/
-router.get("/sales/dashboard/analytics", getAnalytics);
-router.get("/get/recent/subscribers", getRecentSubscriptionUsers);
-router.get("/top/referral/users", getTopReferralUsers);
-router.get("/dashboard/user-subscription-counts", getUserAndSubscriptionCountsDaily);
-
-
-/*---------------------Admin Frame Management-----------------*/
-router.post("/upload/frame", frameUpload.array("frame"), uploadFrames);
-router.get("/get/allframe", getAllFrames);
-router.delete("/delete/frame/:id", deleteFrame)
-
-
-
-
-
-
-
-
-
-
-
-
-/*---------------------Admin Notification API-------------------*/
-// router.post("/admin/post/notification",adminSentNotification);
-
-/* --------------------- Child Admin Profile API --------------------- */
-router.get("/admin/childadmin/list", auth, getChildAdmins);
-router.get("/admin/childadmin/permissions/:childAdminId", getChildAdminPermissions);
-router.put("/admin/childadmin/permissions/:id", updateChildAdminPermissions);
-// router.put(
-//   "/child/admin/profile/detail/update",
-//   auth,
-//    adminUploadProfile.single("file"),
-//   attachAdminProfileFile,
-//    childAdminProfileDetailUpdate
-//  );
-
-router.get("/child/admin/:id", getChildAdminById);
-router.patch("/block/child/admin/:id", blockChildAdmin);
-router.delete("/delete/child/admin/:id", deleteChildAdmin);
-
-
-/* --------------------- Category API --------------------- */
-router.post('/search/all/category', searchCategories)
-router.get("/get/feed/category", getCategoriesWithFeeds);
-
-
-/*----------------------ProfileUpdate-------------------*/
-router.put("/profile/toggle-visibility", auth,
-  toggleFieldVisibility
-);
-
-router.get(
-  "/profile/visibility", auth,
-  getVisibilitySettings
-);
-
-
-/*---------------Admin Driver API----------------------*/
-router.get("/admin/drive/dashboard", auth, getDriveDashboard);
-router.post("/admin/drive/command", auth, driveCommand);
-
-
-
-// Admin
-router.post("/admin/help", createHelpSection);
-router.put("/admin/help/:id", updateHelpSection);
-router.delete("/admin/help/:id", deleteHelpSection);
-router.post("/admin/help/bulk", bulkCreateHelpFAQ);
-router.get("/help", getHelpFAQ);
-
-
-// Admin
-router.get("/admin/feedback", getAllUserFeedback);
-router.put("/admin/feedback/:id", updateFeedbackStatus);
+// Migrated to userRoot.js and adminRoot.js
 
 
 

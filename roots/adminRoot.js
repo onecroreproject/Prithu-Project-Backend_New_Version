@@ -55,6 +55,9 @@ const {
 } = require('../controllers/creatorControllers/creatorDetailController');
 
 const {
+ getTrendingFeeds,
+} = require('../controllers/feedControllers/feedsController');
+const {
     adminAddCategory,
     deleteCategory,
     updateCategory,
@@ -179,8 +182,8 @@ router.post(
 );
 router.get("/admin/get/all/feed", getAllFeedAdmin);
 router.get("/admin/get/trending/creator", adminGetTrendingFeeds); // Match key ADMIN_GET_TRENDING_CREATOR
-router.delete("/delete/feed", deleteFeed);
-
+router.delete("/admin/delete/feed", deleteFeed);
+router.get("/get/trending/feed", adminGetTrendingFeeds);
 /* --------------------- Admin Category API --------------------- */
 router.post('/admin/add/feed/category', adminAddCategory);
 router.delete('/admin/feed/category/:id', deleteCategory);
@@ -188,10 +191,11 @@ router.get('/admin/get/feed/category', getAllCategories);
 router.put('/admin/update/category', updateCategory);
 
 /* --------------------- Admin Subscription API --------------------- */
-router.post('/subscription/create', createPlan);
-router.put('/subscription/update/:id', updatePlan);
-router.delete('/subscription/delete/:id', deletePlan);
-router.get('/subscription/all', getAllPlans);
+router.post('/admin/subscription/create', createPlan);
+router.put('/admin/subscription/update/:id', updatePlan);
+router.delete('/admin/subscription/delete/:id', deletePlan);
+router.get('/admin/subscription/all', getAllPlans);
+router.get('/admin/getall/subscriptions', getAllPlans); // Alias
 
 /* --------------------- Admin User API --------------------- */
 router.get('/admin/getall/users', getAllUserDetails);
@@ -208,8 +212,23 @@ router.patch("/admin/block/user/:userId", auth, (req, res, next) => {
 router.get('/admin/user/profile/metricks', getUserProfileDashboardMetricCount);
 router.get('/admin/user/likes/:userId', getUserLikedFeedsforAdmin);
 router.delete('/admin/delete/user/:userId', deleteUserAndAllRelated);
+router.get("/user/list/willingtopost", getUsersWillingToPost);
+router.put("/update/user/post/status/:userId", updateUserPostPermission);
 
 /* --------------------- User Analytics API --------------------- */
+router.get("/admin/summary/:userId", getUserAnalyticsSummary);
+router.get("/admin/feeds/:userId", fetchUserFeeds);
+router.get("/admin/following/:userId", fetchUserFollowing);
+router.get("/admin/interested/:userId", fetchUserInterested);
+router.get("/admin/hidden/:userId", fetchUserHidden);
+router.get("/admin/liked/:userId", fetchUserLiked);
+router.get("/admin/disliked/:userId", fetchUserDisliked);
+router.get("/admin/commented/:userId", fetchUserCommented);
+router.get("/admin/shared/:userId", fetchUserShared);
+router.get("/admin/downloaded/:userId", fetchUserDownloaded);
+router.get("/admin/nonInterested/:userId", fetchUserNonInterested);
+
+// Aliases for New Admin Panel (short paths)
 router.get("/summary/:userId", getUserAnalyticsSummary);
 router.get("/feeds/:userId", fetchUserFeeds);
 router.get("/following/:userId", fetchUserFollowing);
@@ -234,57 +253,67 @@ router.get('/admin/posts/monthly', getPostVolumeMonthly);
 router.get('/admin/getall/creators', require('../controllers/creatorControllers/creatorDetailController').getAllCreatorDetails);
 
 /* --------------------- Admin Sales Dashboard ------------------ */
-router.get("/sales/dashboard/analytics", getAnalytics);
+router.get("/admin/sales/dashboard/analytics", getAnalytics);
+router.get("/admin/get/recent/subscribers", getRecentSubscriptionUsers);
+router.get("/admin/top/referral/users", getTopReferralUsers);
+router.get("/admin/dashboard/user-subscription-counts", getUserAndSubscriptionCountsDaily);
+
+// Aliases for Sales Dashboard
 router.get("/get/recent/subscribers", getRecentSubscriptionUsers);
-router.get("/top/referral/users", getTopReferralUsers);
 router.get("/dashboard/user-subscription-counts", getUserAndSubscriptionCountsDaily);
+router.delete("/delete/feed", deleteFeed);
 
 /* --------------------- Admin Report API --------------------- */
-router.post("/add/report/questions", addReportQuestion);
-router.get("/get/Questions/ByType", getQuestionsByType);
-router.patch("/linkNextQuestion", linkNextQuestion);
-router.get("/get/QuestionById", getQuestionById);
-router.get("/getAllQuestions", getAllQuestions);
-router.post("/report-type", createReportType);
-router.get("/get/ReportTypes", adminGetReportTypes);
-router.patch("/toggleReportType", toggleReportType);
-router.delete("/deleteReportType", deleteReportType);
-router.delete("/deleteQuestion", deleteQuestion);
-router.put("/report/:reportId/status", updateReportStatus);
-router.get("/report/:reportId/logs", auth, getReportLogs);
-router.get('/user/report', getAllReports);
-router.put("/report/action/:reportId", auth, adminTakeActionOnReport);
+router.post("/admin/add/report/questions", addReportQuestion);
+router.get("/admin/get/Questions/ByType", getQuestionsByType);
+router.patch("/admin/linkNextQuestion", linkNextQuestion);
+router.get("/admin/get/QuestionById", getQuestionById);
+router.get("/admin/getAllQuestions", getAllQuestions);
+router.post("/admin/report-type", createReportType);
+router.get("/admin/get/ReportTypes", adminGetReportTypes);
+router.patch("/admin/toggleReportType", toggleReportType);
+router.delete("/admin/deleteReportType", deleteReportType);
+router.delete("/admin/deleteQuestion", deleteQuestion);
+router.put("/admin/report/:reportId/status", updateReportStatus);
+router.get("/admin/report/:reportId/logs", auth, getReportLogs);
+router.get('/admin/user/report', getAllReports);
+router.put("/admin/report/action/update/:reportId", auth, adminTakeActionOnReport);
 
 /* --------------------- Admin Frame Management ----------------- */
-router.post("/upload/frame", frameUpload.array("frame"), uploadFrames);
-router.get("/get/allframe", getAllFrames);
-router.delete("/delete/frame/:id", deleteFrame);
+router.post("/admin/upload/frame", frameUpload.array("frame"), uploadFrames);
+router.get("/admin/get/allframe", getAllFrames);
+router.delete("/admin/delete/frame/:id", deleteFrame);
 
 /* --------------------- Admin Notification API ------------------- */
-router.post("/send/notification", sendAdminNotification);
+router.post("/admin/send/notification", sendAdminNotification);
 
 /* --------------------- Child Admin Profile API --------------------- */
-router.get("/childadmin/list", auth, getChildAdmins);
-router.get("/childadmin/permissions/:childAdminId", getChildAdminPermissions);
-router.put("/childadmin/permissions/:id", updateChildAdminPermissions);
-router.get("/childadmin/:id", getChildAdminById);
-router.patch("/block/childadmin/:id", blockChildAdmin);
-router.delete("/delete/childadmin/:id", deleteChildAdmin);
+router.get("/admin/childadmin/list", auth, getChildAdmins);
+router.get("/admin/childadmin/permissions/:childAdminId", getChildAdminPermissions);
+router.put("/admin/childadmin/permissions/:id", updateChildAdminPermissions);
+router.get("/admin/childadmin/:id", getChildAdminById);
+router.patch("/admin/block/childadmin/:id", blockChildAdmin);
+router.delete("/admin/delete/childadmin/:id", deleteChildAdmin);
+
+// Aliases for Child Admin
+router.get("/child/admin/:id", getChildAdminById);
+router.delete("/delete/child/admin/:id", deleteChildAdmin);
+router.patch("/block/child/admin/:id", blockChildAdmin);
 
 /* --------------------- Admin Driver API ---------------------- */
-router.get("/drive/dashboard", auth, getDriveDashboard);
-router.post("/drive/command", auth, driveCommand);
+router.get("/admin/drive/dashboard", auth, getDriveDashboard);
+router.post("/admin/drive/command", auth, driveCommand);
 
 /* --------------------- Admin Help FAQ --------------------- */
-router.post("/help", createHelpSection);
-router.put("/help/:id", updateHelpSection);
-router.delete("/help/:id", deleteHelpSection);
-router.post("/help/bulk", bulkCreateHelpFAQ);
-router.get("/help", getHelpFAQ);
+router.post("/admin/help", createHelpSection);
+router.put("/admin/help/:id", updateHelpSection);
+router.delete("/admin/help/:id", deleteHelpSection);
+router.post("/admin/help/bulk", bulkCreateHelpFAQ);
+router.get("/admin/help", getHelpFAQ);
 
 /* --------------------- Admin Feedback --------------------- */
-router.get("/feedback", getAllUserFeedback);
-router.put("/feedback/:id", updateFeedbackStatus);
+router.get("/admin/feedback", getAllUserFeedback);
+router.put("/admin/feedback/:id", updateFeedbackStatus);
 
 
 router.get('/admin/get/user/detail', getUserProfileDetailforAdmin);

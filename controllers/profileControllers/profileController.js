@@ -138,9 +138,10 @@ exports.userProfileDetailUpdate = async (req, res) => {
       if (profile?.profileAvatarFilename) {
         const oldPath = path.join(
           __dirname,
-          "../../media/user",
+          "../../media/users",
           userId.toString(),
-          "profilepic",
+          "avatar",
+          "original",
           profile.profileAvatarFilename
         );
         deleteLocalFile(oldPath);
@@ -150,16 +151,14 @@ exports.userProfileDetailUpdate = async (req, res) => {
       updateData.profileAvatarFilename = req.localFile.filename;
       updateData.avatarUpdatedAt = req.localFile.uploadedAt;
 
-      // 🧹 delete old modify avatar (cloud)
+      // 🧹 delete old modify avatar (local)
       if (profile?.modifyAvatarFilename) {
-        try {
-          await deleteCloudFile(profile.modifyAvatarFilename);
-        } catch (err) {
-          console.warn(
-            "⚠️ Failed to delete old modifyAvatar:",
-            profile.modifyAvatarFilename
-          );
-        }
+        const oldModifyPath = path.join(
+          __dirname,
+          "../../media/user/modifyAvatar",
+          profile.modifyAvatarFilename
+        );
+        deleteLocalFile(oldModifyPath);
       }
 
       // 🎨 background removal + fallback
