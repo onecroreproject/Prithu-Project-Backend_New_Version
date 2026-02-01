@@ -4,6 +4,7 @@ const path = require("path");
 const axios = require("axios");
 const sharp = require("sharp");
 const { pipeline } = require('stream/promises');
+const { getMediaUrl } = require("./storageEngine");
 
 // Helper: Ensure directory exists
 const ensureDir = (dir) => {
@@ -347,12 +348,40 @@ exports.processFeedMedia = async ({
         if (el.type === 'username' || el.type === 'text') {
             const content = el.type === 'username' ? (viewer?.userName || "User") : (el.textConfig?.content || "");
             if (content) {
-                const x = (el.xPercent / 100) * OUT_W, y = (el.yPercent / 100) * mediaH;
+                const xRaw = (el.xPercent / 100) * OUT_W, yRaw = (el.yPercent / 100) * mediaH;
                 const fontSize = Math.round((el.textConfig?.fontSize || 24) * 2.5);
                 const textLabel = `text${filterIndex}`;
+
+                let xExpr = `${Math.round(xRaw)}`, yExpr = `${Math.round(yRaw)}`;
+                if (el.animation?.enabled && el.animation.direction !== "none") {
+                    const dur = Number(el.animation.speed || 1);
+                    const delay = Number(el.animation.delay || 0);
+                    const dir = el.animation.direction;
+                    const scaleW = fontSize * content.length * 0.6; // Rough estimate of text width for animation bounds
+
+                    let startX = xRaw, startY = yRaw;
+                    if (dir.includes('left')) startX = -scaleW;
+                    if (dir.includes('right')) startX = OUT_W;
+                    if (dir.includes('top')) startY = -fontSize;
+                    if (dir.includes('bottom')) startY = mediaH;
+
+                    if (startX !== xRaw) xExpr = `if(lt(t,${delay}),(${startX}),if(lt(t,${delay + dur}),(${startX})+(${xRaw}-(${startX}))*(t-${delay})/${dur},${xRaw}))`;
+                    if (startY !== yRaw) yExpr = `if(lt(t,${delay}),(${startY}),if(lt(t,${delay + dur}),(${startY})+(${yRaw}-(${startY}))*(t-${delay})/${dur},${yRaw}))`;
+                }
+
                 combinedFilters.push({
                     filter: 'drawtext',
-                    options: { text: escapeDrawText(content), x: Math.round(x), y: Math.round(y), fontsize: fontSize, fontcolor: normalizeFfmpegColor(el.textConfig?.color || "white"), fontfile: `'${FONT_PATH}'`, shadowcolor: 'black@0.8', shadowx: 2, shadowy: 2 },
+                    options: {
+                        text: escapeDrawText(content),
+                        x: xExpr,
+                        y: yExpr,
+                        fontsize: fontSize,
+                        fontcolor: normalizeFfmpegColor(el.textConfig?.color || "white"),
+                        fontfile: `'${FONT_PATH}'`,
+                        shadowcolor: 'black@0.8',
+                        shadowx: 2,
+                        shadowy: 2
+                    },
                     inputs: currentBase, outputs: textLabel
                 });
                 currentBase = textLabel;
