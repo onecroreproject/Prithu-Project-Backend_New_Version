@@ -5,6 +5,7 @@ const axios = require("axios");
 const sharp = require("sharp");
 const { pipeline } = require('stream/promises');
 const { getMediaUrl } = require("./storageEngine");
+const footerStyle = require("../Config/footerStyleConfig");
 
 // Helper: Ensure directory exists
 const ensureDir = (dir) => {
@@ -126,6 +127,17 @@ const normalizeFfmpegColor = (c) => {
     return "black";
 };
 
+// Helper: Calculate brightness (0-255) to determine contrast
+const getBrightness = (hex) => {
+    if (!hex) return 0;
+    const cleanHex = hex.replace('#', '');
+    if (cleanHex.length !== 6) return 0;
+    const r = parseInt(cleanHex.substring(0, 2), 16);
+    const g = parseInt(cleanHex.substring(2, 4), 16);
+    const b = parseInt(cleanHex.substring(4, 6), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000;
+};
+
 // Helper: Download social icon and convert SVG to PNG
 const SOCIAL_SLUGS = {
     'twitter': 'x',
@@ -137,11 +149,11 @@ const SOCIAL_SLUGS = {
     'website': 'internetexplorer'
 };
 
-const downloadSocialIcon = async (platform, dest) => {
+const downloadSocialIcon = async (platform, dest, color = 'white') => {
     try {
         const slug = SOCIAL_SLUGS[platform.toLowerCase()] || platform.toLowerCase();
-        // Request white icon directly from SimpleIcons
-        const iconUrl = `https://cdn.simpleicons.org/${slug}/white`;
+        // Use color suffix: 'white' or hex (e.g. '000000' for black)
+        const iconUrl = `https://cdn.simpleicons.org/${slug}/${color}`;
         const response = await axios({
             url: iconUrl,
             method: 'GET',
@@ -188,8 +200,8 @@ exports.processFeedMedia = async ({
         return `#${Math.abs(r).toString(16).padStart(2, '0')}${Math.abs(g).toString(16).padStart(2, '0')}${Math.abs(b).toString(16).padStart(2, '0')}`;
     };
 
-    // For Windows FFmpeg drawtext, colons must be escaped AND the whole path often needs single quotes
-    const FONT_PATH = path.join(__dirname, "../assets/arial.ttf").replace(/\\/g, "/").replace(/:/g, "\\:");
+    // Use configurable font path
+    const FONT_PATH = footerStyle.fontFile.replace(/\\/g, "/").replace(/:/g, "\\:");
 
     ensureDir(tempDir);
 
@@ -220,7 +232,7 @@ exports.processFeedMedia = async ({
 
     const footerConfig = designMetadata?.footerConfig;
     const footerEnabled = !!footerConfig?.enabled;
-    const footerH = footerEnabled ? Math.round((footerConfig.heightPercent / 100) * OUT_H) : 0;
+    const footerH = footerStyle.footerHeight || (footerEnabled ? Math.round((footerConfig.heightPercent / 100) * OUT_H) : 0);
     const mediaH = OUT_H - footerH;
     console.log(`[Processor] Dimensions: mediaH=${mediaH}, footerH=${footerH}`);
 
@@ -399,21 +411,33 @@ exports.processFeedMedia = async ({
 
         const showElements = footerConfig?.showElements || {};
         const visibleSocialIcons = (footerConfig?.socialIcons || []).filter(i => i.visible);
-        const ROW_1_Y = Math.round(mediaH + (footerH * 0.35)), ROW_2_Y = Math.round(mediaH + (footerH * 0.75));
-        const textColor = normalizeFfmpegColor(footerConfig?.textColor || "white");
+
+        // Adaptive coloring based on background brightness
+        const brightness = getBrightness(dominantColor);
+        const isLightBg = brightness > 128; // Changed to mid-range for better detection
+        const adaptiveTextColor = isLightBg ? "black" : "white";
+        const adaptiveIconColor = isLightBg ? "000000" : "ffffff";
+        const adaptiveShadowColor = isLightBg ? "white@0.4" : "black@0.6";
+
+        // ROW calculation using paddings, sizes and row spacing from config
+        const ROW_1_Y = Math.round(mediaH + footerStyle.paddingTop + (footerStyle.nameSize / 2));
+        const ROW_2_Y = Math.round(ROW_1_Y + (footerStyle.nameSize / 2) + footerStyle.verticalRowSpacing + (footerStyle.emailSize / 2));
+
+        const textColor = normalizeFfmpegColor(adaptiveTextColor); // Force automatic contrast
+        const shadowColor = normalizeFfmpegColor(footerStyle.shadowColor || adaptiveShadowColor);
 
         if (showElements.name && viewer.userName) {
             const nameLabel = `footer_name`;
-            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(viewer.userName), x: (!showElements.socialIcons || visibleSocialIcons.length === 0) ? '(w-text_w)/2' : Math.round(paddingX + 60), y: Math.round(ROW_1_Y - 21), fontsize: 46, fontcolor: textColor, fontfile: `'${FONT_PATH}'`, shadowcolor: 'black@0.6', shadowx: 2, shadowy: 2 }, inputs: currentBase, outputs: nameLabel });
+            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(viewer.userName), x: (!showElements.socialIcons || visibleSocialIcons.length === 0) ? '(w-text_w)/2' : Math.round(paddingX + footerStyle.paddingLeft), y: Math.round(ROW_1_Y - (footerStyle.nameSize / 2)), fontsize: footerStyle.nameSize, fontcolor: textColor, fontfile: `'${FONT_PATH}'`, shadowcolor: shadowColor, shadowx: footerStyle.shadowX, shadowy: footerStyle.shadowY }, inputs: currentBase, outputs: nameLabel });
             currentBase = nameLabel;
         }
 
         if (showElements.socialIcons && visibleSocialIcons.length > 0) {
-            let currentIconX = paddingX + actualMediaW - 60 - 48;
+            let currentIconX = paddingX + actualMediaW - footerStyle.paddingRight - 48;
             for (let i = 0; i < visibleSocialIcons.length; i++) {
                 const iconPath = path.join(tempDir, `social_${i}.png`);
                 try {
-                    const success = await downloadSocialIcon(visibleSocialIcons[i].platform, iconPath);
+                    const success = await downloadSocialIcon(visibleSocialIcons[i].platform, iconPath, adaptiveIconColor);
                     if (!success) continue;
 
                     ffmpegCommand.input(iconPath);
@@ -424,7 +448,7 @@ exports.processFeedMedia = async ({
                         { filter: 'overlay', options: `x=${Math.round(currentIconX)}:y=${Math.round(ROW_1_Y - 24)}`, inputs: [currentBase, `sf${i}`], outputs: iconLabel }
                     );
                     currentBase = iconLabel;
-                    currentIconX -= 72;
+                    currentIconX -= footerStyle.socialIconSpacing;
                 } catch (e) {
                     console.error(`[Processor] Error processing social icon ${visibleSocialIcons[i].platform}:`, e.message);
                 }
@@ -433,13 +457,13 @@ exports.processFeedMedia = async ({
 
         if (showElements.email && viewer.email) {
             const emailLabel = `footer_email`;
-            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(viewer.email), x: Math.round(paddingX + 60), y: Math.round(ROW_2_Y - 16), fontsize: 38, fontcolor: textColor, fontfile: `'${FONT_PATH}'`, shadowcolor: 'black@0.6', shadowx: 2, shadowy: 2 }, inputs: currentBase, outputs: emailLabel });
+            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(viewer.email), x: Math.round(paddingX + footerStyle.paddingLeft), y: Math.round(ROW_2_Y - (footerStyle.emailSize / 2)), fontsize: footerStyle.emailSize, fontcolor: textColor, fontfile: `'${FONT_PATH}'`, shadowcolor: shadowColor, shadowx: footerStyle.shadowX, shadowy: footerStyle.shadowY }, inputs: currentBase, outputs: emailLabel });
             currentBase = emailLabel;
         }
         if (showElements.phone && (viewer.phone || viewer.phoneNumber)) {
             const phoneLabel = `footer_phone`;
             const phoneText = viewer.phone || viewer.phoneNumber;
-            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(phoneText), x: `${Math.round(paddingX + actualMediaW - 60)}-text_w`, y: Math.round(ROW_2_Y - 16), fontsize: 38, fontcolor: textColor, fontfile: `'${FONT_PATH}'`, shadowcolor: 'black@0.6', shadowx: 2, shadowy: 2 }, inputs: currentBase, outputs: phoneLabel });
+            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(phoneText), x: `${Math.round(paddingX + actualMediaW - footerStyle.paddingRight)}-text_w`, y: Math.round(ROW_2_Y - (footerStyle.phoneSize / 2)), fontsize: footerStyle.phoneSize, fontcolor: textColor, fontfile: `'${FONT_PATH}'`, shadowcolor: shadowColor, shadowx: footerStyle.shadowX, shadowy: footerStyle.shadowY }, inputs: currentBase, outputs: phoneLabel });
             currentBase = phoneLabel;
         }
     }
