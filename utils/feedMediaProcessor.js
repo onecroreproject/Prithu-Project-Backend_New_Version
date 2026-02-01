@@ -187,17 +187,41 @@ exports.processFeedMedia = async ({
     const OUT_W = 1080;
     const OUT_H = 1920;
     const BACKEND_URL = process.env.BACKEND_URL || '';
-    // Helper matching Postcard.jsx
-    const extractColorFromURL = (url) => {
-        if (!url) return "#1a1a1a";
-        let hash = 0;
-        for (let i = 0; i < url.length; i++) {
-            hash = url.charCodeAt(i) + ((hash << 5) - hash);
+    // Use content-aware dominant color extraction
+    const getDominantColor = async (filePath, isVideo, tempDir) => {
+        try {
+            if (isVideo) {
+                return new Promise((resolve, reject) => {
+                    ffmpeg(filePath)
+                        .seekInput(0.5) // Sample from 0.5s to avoid black intro
+                        .frames(1)
+                        .videoFilters('scale=1:1')
+                        .format('rawvideo')
+                        .pixelFormat('rgb24')
+                        .on('error', (err) => {
+                            console.warn("[Processor] Video color extract error:", err.message);
+                            resolve("#1a1a1a");
+                        })
+                        .pipe()
+                        .on('data', (data) => {
+                            if (data.length >= 3) {
+                                const r = data[0], g = data[1], b = data[2];
+                                resolve(`#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`);
+                            }
+                        });
+                });
+            } else {
+                const buffer = await sharp(filePath).resize(1, 1).raw().toBuffer();
+                if (buffer.length >= 3) {
+                    const r = buffer[0], g = buffer[1], b = buffer[2];
+                    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                }
+                return "#1a1a1a";
+            }
+        } catch (e) {
+            console.warn("[Processor] Dominant color extraction failed:", e.message);
+            return "#1a1a1a";
         }
-        const r = (hash & 0xff0000) >> 16;
-        const g = (hash & 0x00ff00) >> 8;
-        const b = (hash & 0x0000ff);
-        return `#${Math.abs(r).toString(16).padStart(2, '0')}${Math.abs(g).toString(16).padStart(2, '0')}${Math.abs(b).toString(16).padStart(2, '0')}`;
     };
 
     // Use configurable font path
@@ -247,8 +271,8 @@ exports.processFeedMedia = async ({
 
     let dominantColor = footerConfig?.backgroundColor || "#1a1a1a";
     if (footerConfig?.useDominantColor) {
-        dominantColor = extractColorFromURL(mediaUrl);
-        console.log(`[Processor] Deterministic color (from Postcard.jsx): ${dominantColor}`);
+        dominantColor = await getDominantColor(tempSourcePath, isVideoPost, tempDir);
+        console.log(`[Processor] Content-aware dominant color: ${dominantColor}`);
     }
     const footerBgColor = normalizeFfmpegColor(dominantColor);
 
@@ -329,13 +353,40 @@ exports.processFeedMedia = async ({
 
                 const shape = el.avatarConfig?.shape || el.shape || 'circle';
                 const isRound = el.type === 'avatar' && (shape === 'circle' || shape === 'round');
+                const maskedAvatarPath = path.join(tempDir, `masked_${overlayInputIndex}.png`);
 
-                if (isRound) {
-                    const maskedAvatarPath = path.join(tempDir, `masked_${overlayInputIndex}.png`);
-                    const circleSvg = Buffer.from(`<svg><circle cx="${scaleW / 2}" cy="${scaleW / 2}" r="${scaleW / 2}" fill="white"/></svg>`);
-                    await sharp(overlayDest).resize(scaleW, scaleW, { fit: 'cover' }).composite([{ input: circleSvg, blend: 'dest-in' }]).png().toFile(maskedAvatarPath);
+                // Create a "soft bottom" mask using SVG gradient
+                // Fades from white (opaque) to transparent at the bottom (starting at 70%)
+                const maskSvg = Buffer.from(isRound
+                    ? `<svg width="${scaleW}" height="${scaleW}">
+                        <defs>
+                          <linearGradient id="fade" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="70%" stop-color="white" />
+                            <stop offset="100%" stop-color="transparent" />
+                          </linearGradient>
+                        </defs>
+                        <circle cx="${scaleW / 2}" cy="${scaleW / 2}" r="${scaleW / 2}" fill="url(#fade)"/>
+                      </svg>`
+                    : `<svg width="${scaleW}" height="${scaleW}">
+                        <defs>
+                          <linearGradient id="fade" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="70%" stop-color="white" />
+                            <stop offset="100%" stop-color="transparent" />
+                          </linearGradient>
+                        </defs>
+                        <rect x="0" y="0" width="${scaleW}" height="${scaleW}" fill="url(#fade)"/>
+                      </svg>`
+                );
+
+                if (el.type === 'avatar') {
+                    await sharp(overlayDest)
+                        .resize(scaleW, scaleW, { fit: 'cover' })
+                        .composite([{ input: maskSvg, blend: 'dest-in' }])
+                        .png()
+                        .toFile(maskedAvatarPath);
                     ffmpegCommand.input(maskedAvatarPath).inputOptions("-loop", "1", "-t", duration.toString());
                 } else {
+                    // Non-avatar (logos) use standard download path
                     ffmpegCommand.input(overlayDest).inputOptions("-loop", "1", "-t", duration.toString());
                 }
 
