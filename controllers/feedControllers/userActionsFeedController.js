@@ -304,11 +304,21 @@ exports.directDownloadFeed = async (req, res) => {
 
     const viewer = {
       id: user._id,
-      userName: profile?.userName || user.userName || profile?.name || "User",
+      userName: (visibility.userName === 'public' || visibility.displayName === 'public')
+        ? (profile?.userName || user.userName || profile?.name || "User")
+        : null,
       email: visibility.email === 'public' ? (user.email || profile?.email) : null,
       phoneNumber: visibility.phoneNumber === 'public' ? (profile?.phoneNumber || user.phoneNumber || user.phone) : null,
-      profileAvatar: profile?.modifyAvatar || profile?.profileAvatar || null,
+      profileAvatar: (visibility.profileAvatar === 'public')
+        ? (profile?.modifyAvatar || profile?.profileAvatar || null)
+        : null,
     };
+
+    // Auto-enable footer elements if they are public and present
+    if (designMetadata.footerConfig?.showElements) {
+      if (viewer.email) designMetadata.footerConfig.showElements.email = true;
+      if (viewer.phoneNumber) designMetadata.footerConfig.showElements.phone = true;
+    }
 
     // Filter social icons based on availability and privacy
     if (designMetadata.footerConfig && profile?.socialLinks) {

@@ -346,7 +346,7 @@ exports.processFeedMedia = async ({
         }
 
         if (el.type === 'username' || el.type === 'text') {
-            const content = el.type === 'username' ? (viewer?.userName || "User") : (el.textConfig?.content || "");
+            const content = el.type === 'username' ? (viewer?.userName) : (el.textConfig?.content);
             if (content) {
                 const xRaw = (el.xPercent / 100) * OUT_W, yRaw = (el.yPercent / 100) * mediaH;
                 const fontSize = Math.round((el.textConfig?.fontSize || 24) * 2.5);
@@ -402,9 +402,9 @@ exports.processFeedMedia = async ({
         const ROW_1_Y = Math.round(mediaH + (footerH * 0.35)), ROW_2_Y = Math.round(mediaH + (footerH * 0.75));
         const textColor = normalizeFfmpegColor(footerConfig?.textColor || "white");
 
-        if (showElements.name) {
+        if (showElements.name && viewer.userName) {
             const nameLabel = `footer_name`;
-            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(viewer.userName || "User"), x: (!showElements.socialIcons || visibleSocialIcons.length === 0) ? '(w-text_w)/2' : Math.round(paddingX + 60), y: Math.round(ROW_1_Y - 21), fontsize: 46, fontcolor: textColor, fontfile: `'${FONT_PATH}'`, shadowcolor: 'black@0.6', shadowx: 2, shadowy: 2 }, inputs: currentBase, outputs: nameLabel });
+            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(viewer.userName), x: (!showElements.socialIcons || visibleSocialIcons.length === 0) ? '(w-text_w)/2' : Math.round(paddingX + 60), y: Math.round(ROW_1_Y - 21), fontsize: 46, fontcolor: textColor, fontfile: `'${FONT_PATH}'`, shadowcolor: 'black@0.6', shadowx: 2, shadowy: 2 }, inputs: currentBase, outputs: nameLabel });
             currentBase = nameLabel;
         }
 
