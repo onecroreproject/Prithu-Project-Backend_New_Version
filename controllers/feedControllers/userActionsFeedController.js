@@ -392,8 +392,35 @@ exports.directDownloadFeed = async (req, res) => {
         }
         cleanup();
       })
-      .on('end', () => {
+      .on('end', async () => {
         console.log("[DirectDL] Finished successfully");
+
+        // RECORD DOWNLOAD ACTION
+        try {
+          await UserFeedActions.findOneAndUpdate(
+            { userId },
+            {
+              $push: {
+                downloadedFeeds: {
+                  feedId,
+                  downloadedAt: new Date()
+                }
+              }
+            },
+            { upsert: true }
+          );
+
+          await logUserActivity({
+            userId,
+            actionType: "DOWNLOAD_POST",
+            targetId: feedId,
+            targetModel: "Feed",
+            metadata: { platform: "web" },
+          });
+        } catch (dlErr) {
+          console.error("[DirectDL] Action recording error:", dlErr);
+        }
+
         cleanup();
       })
       .pipe(res, { end: true });

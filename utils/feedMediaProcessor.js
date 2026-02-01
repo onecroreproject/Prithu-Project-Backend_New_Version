@@ -191,25 +191,27 @@ exports.processFeedMedia = async ({
     const getDominantColor = async (filePath, isVideo, tempDir) => {
         try {
             if (isVideo) {
-                return new Promise((resolve, reject) => {
+                const tempFramePath = path.join(tempDir, "extract_frame.jpg");
+                await new Promise((resolve, reject) => {
                     ffmpeg(filePath)
-                        .seekInput(0.5) // Sample from 0.5s to avoid black intro
+                        .seekInput(0.5) // Sample from 0.5s
                         .frames(1)
-                        .videoFilters('scale=1:1')
-                        .format('rawvideo')
-                        .pixelFormat('rgb24')
                         .on('error', (err) => {
-                            console.warn("[Processor] Video color extract error:", err.message);
-                            resolve("#1a1a1a");
+                            console.warn("[Processor] Frame export error:", err.message);
+                            resolve(); // Resolve to let it fallback
                         })
-                        .pipe()
-                        .on('data', (data) => {
-                            if (data.length >= 3) {
-                                const r = data[0], g = data[1], b = data[2];
-                                resolve(`#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`);
-                            }
-                        });
+                        .on('end', () => resolve())
+                        .save(tempFramePath);
                 });
+
+                if (fs.existsSync(tempFramePath)) {
+                    const buffer = await sharp(tempFramePath).resize(1, 1).raw().toBuffer();
+                    if (buffer.length >= 3) {
+                        const r = buffer[0], g = buffer[1], b = buffer[2];
+                        return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                    }
+                }
+                return "#1a1a1a";
             } else {
                 const buffer = await sharp(filePath).resize(1, 1).raw().toBuffer();
                 if (buffer.length >= 3) {

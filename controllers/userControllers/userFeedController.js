@@ -2,20 +2,20 @@
 const Feed = require("../../models/feedModel");
 const UserImageView = require("../../models/userModels/MediaSchema/userImageViewsModel");
 const ImageStats = require("../../models/userModels/MediaSchema/imageViewModel");
-const UserVideoView =require("../../models/userModels/MediaSchema/userVideoViewModel");
-const VideoStats =require("../../models/userModels/MediaSchema/videoViewStatusModel");
+const UserVideoView = require("../../models/userModels/MediaSchema/userVideoViewModel");
+const VideoStats = require("../../models/userModels/MediaSchema/videoViewStatusModel");
 const mongoose = require("mongoose");
 
 const User = require("../../models/userModels/userModel");
 const Follower = require("../../models/userFollowingModel");
 const UserFeedActions = require("../../models/userFeedInterSectionModel");
 const UserCategory = require("../../models/userModels/userCategotyModel");
-const {buildDateFilter} =require("../../middlewares/helper/buildDateFilter");
-const Hidden =require("../../models/userModels/hiddenPostSchema");
-const ProfileSettings=require('../../models/profileSettingModel');
-const UserComment=require ('../../models/userCommentModel');
-const CreatorFollower=require("../../models/creatorFollowerModel");
-const {feedTimeCalculator}=require("../../middlewares/feedTimeCalculator")
+const { buildDateFilter } = require("../../middlewares/helper/buildDateFilter");
+const Hidden = require("../../models/userModels/hiddenPostSchema");
+const ProfileSettings = require('../../models/profileSettingModel');
+const UserComment = require('../../models/userCommentModel');
+const CreatorFollower = require("../../models/creatorFollowerModel");
+const { feedTimeCalculator } = require("../../middlewares/feedTimeCalculator")
 
 
 
@@ -25,7 +25,7 @@ const {feedTimeCalculator}=require("../../middlewares/feedTimeCalculator")
 
 exports.userImageViewCount = async (req, res) => {
   try {
-    const { feedId } = req.body;
+    const feedId = req.body.feedId || req.params.id || req.query.feedId;
     const userId = req.Id || req.body.userId;
 
     if (!userId || !feedId) {
@@ -82,14 +82,14 @@ exports.userImageViewCount = async (req, res) => {
   }
 };
 
- 
+
 
 
 
 
 exports.userVideoViewCount = async (req, res) => {
   try {
-    const { feedId } = req.body;
+    const feedId = req.body.feedId || req.params.id || req.query.feedId;
     const userId = req.Id || req.body.userId;
 
     if (!userId || !feedId) {
@@ -97,7 +97,7 @@ exports.userVideoViewCount = async (req, res) => {
     }
 
     // 1️⃣ Validate feed
-    const feed = await Feed.findById(feedId, "type duration");
+    const feed = await Feed.findById(feedId, "postType duration");
     if (!feed) {
       return res.status(404).json({ message: "Feed not found" });
     }
@@ -127,7 +127,7 @@ exports.userVideoViewCount = async (req, res) => {
           $inc: {
             totalViews: 1,
             uniqueUsers: 1,
-            totalDuration: feed.duration, // add video duration
+            totalDuration: feed.duration || 0, // add video duration (fallback to 0)
           },
           $set: { lastViewed: new Date() },
         },
@@ -140,7 +140,7 @@ exports.userVideoViewCount = async (req, res) => {
         {
           $inc: {
             totalViews: 1,
-            totalDuration: feed.duration,
+            totalDuration: feed.duration || 0,
           },
           $set: { lastViewed: new Date() }
         },
@@ -236,7 +236,7 @@ exports.fetchUserFollowing = async (req, res) => {
       userId: f.userId?._id,
       userName: f.userId?.userName,
       email: f.userId?.email,
-      profileAvatar: avatarMap[f.userId?._id?.toString()] ,
+      profileAvatar: avatarMap[f.userId?._id?.toString()],
       followedAt: f.createdAt,
     }));
 
@@ -266,22 +266,22 @@ exports.fetchUserInterested = async (req, res) => {
 
     // Find user categories
     const userCats = await UserCategory.findOne({ userId, ...match })
-  .populate({
-    path: "interestedCategories.categoryId",
-    model: "Categories",
-    select: "name", 
-  });
-// Map to get category name + user's updatedAt
-const categories = userCats?.interestedCategories.map((c) => ({
-  _id: c.categoryId._id,
-  name: c.categoryId.name,
-  updatedAt: c.updatedAt, // user's updated date
-})) || [];
+      .populate({
+        path: "interestedCategories.categoryId",
+        model: "Categories",
+        select: "name",
+      });
+    // Map to get category name + user's updatedAt
+    const categories = userCats?.interestedCategories.map((c) => ({
+      _id: c.categoryId._id,
+      name: c.categoryId.name,
+      updatedAt: c.updatedAt, // user's updated date
+    })) || [];
 
-res.status(200).json({
-  success: true,
-  categories,
-});
+    res.status(200).json({
+      success: true,
+      categories,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({
@@ -312,7 +312,7 @@ exports.fetchUserNonInterested = async (req, res) => {
       model: "Categories",
       select: "name", // only category name
     });
-  console.log(userCats)
+    console.log(userCats)
     // Map to include category name + user's updatedAt
     const categories = userCats?.nonInterestedCategories.map((c) => ({
       _id: c.categoryId._id,
@@ -467,10 +467,10 @@ exports.fetchUserCommented = async (req, res) => {
       createdAt: comment.createdAt,
       feed: comment.feedId
         ? {
-            _id: comment.feedId._id,
-            contentUrl: comment.feedId.contentUrl,
-            title: comment.feedId.title || null,
-          }
+          _id: comment.feedId._id,
+          contentUrl: comment.feedId.contentUrl,
+          title: comment.feedId.title || null,
+        }
         : null,
     }));
 
@@ -688,7 +688,7 @@ exports.getUserdetailWithinTheFeed = async (req, res) => {
     const profileData = {
       userName: profile.userName,
       profileAvatar: profile.profileAvatar,
-      coverPhoto:profile.coverPhoto,
+      coverPhoto: profile.coverPhoto,
       bio: profile.bio,
       followingCount,
       creatorFollowerCount,
@@ -787,4 +787,3 @@ exports.getUserPost = async (req, res) => {
 
 
 
- 

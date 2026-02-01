@@ -376,7 +376,7 @@ router.delete("/notifications/clear-all", auth, clearAllNotifications);
 router.post("/notifications/save-token", auth, saveToken);
 
 /* --------------------- Miscellaneous --------------------- */
-router.get("/search/global", globalSearch);
+router.get("/global/search", globalSearch);
 router.get("/hashtags/trending", getTrendingHashtags);
 router.post("/availability/username", checkUsernameAvailability);
 router.post("/availability/email", checkEmailAvailability);

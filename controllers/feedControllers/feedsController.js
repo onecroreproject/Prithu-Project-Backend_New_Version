@@ -171,8 +171,72 @@ exports.getAllFeedsByUserId = async (req, res) => {
       },
       { $unwind: { path: "$creatorProfile", preserveNullAndEmptyArrays: true } },
 
+      // 📊 COUNTS AGGREGATION: Dynamically calculate interaction counts
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { fid: "$_id" },
+          pipeline: [
+            { $unwind: "$likedFeeds" },
+            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$fid"] } } },
+            { $count: "count" }
+          ],
+          as: "likesCountArr"
+        }
+      },
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { fid: "$_id" },
+          pipeline: [
+            { $unwind: "$sharedFeeds" },
+            { $match: { $expr: { $eq: ["$sharedFeeds.feedId", "$$fid"] } } },
+            { $count: "count" }
+          ],
+          as: "sharesCountArr"
+        }
+      },
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { fid: "$_id" },
+          pipeline: [
+            { $unwind: "$downloadedFeeds" },
+            { $match: { $expr: { $eq: ["$downloadedFeeds.feedId", "$$fid"] } } },
+            { $count: "count" }
+          ],
+          as: "downloadsCountArr"
+        }
+      },
+      {
+        $lookup: {
+          from: "UserComments",
+          let: { fid: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$feedId", "$$fid"] } } },
+            { $count: "count" }
+          ],
+          as: "commentsCountArr"
+        }
+      },
+      {
+        $lookup: {
+          from: "UserViews",
+          let: { fid: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$feedId", "$$fid"] } } },
+            { $count: "count" }
+          ],
+          as: "viewsCountArr"
+        }
+      },
       {
         $addFields: {
+          likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCountArr.count", 0] }, 0] },
+          shareCount: { $ifNull: [{ $arrayElemAt: ["$sharesCountArr.count", 0] }, 0] },
+          downloadCount: { $ifNull: [{ $arrayElemAt: ["$downloadsCountArr.count", 0] }, 0] },
+          commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCountArr.count", 0] }, 0] },
+          viewsCount: { $ifNull: [{ $arrayElemAt: ["$viewsCountArr.count", 0] }, 0] },
           creatorData: {
             $let: {
               vars: {
@@ -259,7 +323,8 @@ exports.getAllFeedsByUserId = async (req, res) => {
           likes: feed.likesCount || 0,
           views: feed.viewsCount || 0,
           comments: feed.commentsCount || 0,
-          shares: feed.shareCount || 0
+          shares: feed.shareCount || 0,
+          downloads: feed.downloadCount || 0
         }
       };
     });
@@ -436,6 +501,30 @@ exports.getFeedsByHashtag = async (req, res) => {
 
       {
         $lookup: {
+          from: "UserFeedActions",
+          let: { fid: "$_id" },
+          pipeline: [
+            { $unwind: "$sharedFeeds" },
+            { $match: { $expr: { $eq: ["$sharedFeeds.feedId", "$$fid"] } } },
+            { $count: "count" }
+          ],
+          as: "sharesCount"
+        }
+      },
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { fid: "$_id" },
+          pipeline: [
+            { $unwind: "$downloadedFeeds" },
+            { $match: { $expr: { $eq: ["$downloadedFeeds.feedId", "$$fid"] } } },
+            { $count: "count" }
+          ],
+          as: "downloadsCount"
+        }
+      },
+      {
+        $lookup: {
           from: "UserComments",
           let: { fid: "$_id" },
           pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$fid"] } } }, { $count: "count" }],
@@ -511,6 +600,8 @@ exports.getFeedsByHashtag = async (req, res) => {
           likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCount.count", 0] }, 0] },
           commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCount.count", 0] }, 0] },
           viewsCount: { $ifNull: [{ $arrayElemAt: ["$viewsCount.count", 0] }, 0] },
+          shareCount: { $ifNull: [{ $arrayElemAt: ["$sharesCount.count", 0] }, 0] },
+          downloadCount: { $ifNull: [{ $arrayElemAt: ["$downloadsCount.count", 0] }, 0] },
 
           isLiked: { $arrayElemAt: ["$userActions.isLiked", 0] },
           isSaved: { $arrayElemAt: ["$userActions.isSaved", 0] },
@@ -539,7 +630,13 @@ exports.getFeedsByHashtag = async (req, res) => {
         process.env.DEFAULT_AVATAR,
 
       timeAgo: feedTimeCalculator(f.createdAt),
-
+      stats: {
+        likes: f.likesCount || 0,
+        views: f.viewsCount || 0,
+        comments: f.commentsCount || 0,
+        shares: f.shareCount || 0,
+        downloads: f.downloadCount || 0
+      },
       themeColor:
         f.themeColor ||
         {
@@ -658,10 +755,45 @@ exports.getSingleFeedById = async (req, res) => {
       },
       {
         $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: { path: "$sharedFeeds", preserveNullAndEmptyArrays: true } },
+            { $match: { $expr: { $eq: ["$sharedFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" }
+          ],
+          as: "sharesCount"
+        }
+      },
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $unwind: { path: "$downloadedFeeds", preserveNullAndEmptyArrays: true } },
+            { $match: { $expr: { $eq: ["$downloadedFeeds.feedId", "$$feedId"] } } },
+            { $count: "count" }
+          ],
+          as: "downloadsCount"
+        }
+      },
+      {
+        $lookup: {
           from: "UserComments",
           let: { feedId: "$_id" },
           pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } }, { $count: "count" }],
           as: "commentsCount"
+        }
+      },
+      {
+        $lookup: {
+          from: "UserViews",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$feedId", "$$feedId"] } } },
+            { $count: "count" }
+          ],
+          as: "viewsCount"
         }
       },
 
@@ -706,6 +838,13 @@ exports.getSingleFeedById = async (req, res) => {
 
           isLiked: { $arrayElemAt: ["$userActions.isLiked", 0] },
           isSaved: { $arrayElemAt: ["$userActions.isSaved", 0] },
+          stats: {
+            likes: { $ifNull: [{ $arrayElemAt: ["$likesCount.count", 0] }, 0] },
+            views: { $ifNull: [{ $arrayElemAt: ["$viewsCount.count", 0] }, 0] },
+            comments: { $ifNull: [{ $arrayElemAt: ["$commentsCount.count", 0] }, 0] },
+            shares: { $ifNull: [{ $arrayElemAt: ["$sharesCount.count", 0] }, 0] },
+            downloads: { $ifNull: [{ $arrayElemAt: ["$downloadsCount.count", 0] }, 0] }
+          }
         }
       }
     ]);
@@ -892,6 +1031,13 @@ exports.getFeedsByAccountId = async (req, res) => {
         isLiked: likedFeedIds.includes(fid),
         isSaved: savedFeedIds.includes(fid),
         isDisliked: dislikedFeedIds.includes(fid),
+        stats: {
+          likes: likesCount[fid] || 0,
+          downloads: downloadsCount[fid] || 0,
+          shares: sharesCount[fid] || 0,
+          views: viewsCount[fid] || 0,
+          comments: commentsCount[fid] || 0
+        },
         userName: profile?.userName || "Unknown",
         profileAvatar: profile?.profileAvatar,
       };
@@ -1602,10 +1748,19 @@ exports.getTrendingFeeds = async (req, res) => {
 
         return {
           ...feed,
-          totalLikes,
-          totalShares,
-          totalDownloads,
-          totalViews,
+          feedId: feed._id,
+          likesCount: totalLikes,
+          shareCount: totalShares,
+          downloadCount: totalDownloads,
+          viewsCount: totalViews,
+
+          stats: {
+            likes: totalLikes,
+            shares: totalShares,
+            downloads: totalDownloads,
+            views: totalViews,
+            comments: 0 // Trending list currently doesn't compute comments
+          },
 
           isLiked,
           isSaved,

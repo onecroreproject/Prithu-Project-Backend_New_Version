@@ -172,6 +172,22 @@ exports.adminFeedUpload = async (req, res) => {
         const savedFeed = await new Feed(feedDoc).save();
         await Category.findByIdAndUpdate(categoryId, { $addToSet: { feedIds: savedFeed._id } });
 
+        // ✅ REAL-TIME BROADCAST: Fetch creator profile to enrich the feed data for users
+        let creatorProfile = null;
+        if (roleRef === "Admin") {
+          creatorProfile = await ProfileSettings.findOne({ adminId }).select("userName profileAvatar").lean();
+        } else if (roleRef === "Child_Admin") {
+          creatorProfile = await ProfileSettings.findOne({ childAdminId: adminId }).select("userName profileAvatar").lean();
+        }
+
+        if (io) {
+          const broadcastData = {
+            ...savedFeed.toObject(),
+            creatorData: creatorProfile || { userName: "Admin", profileAvatar: null }
+          };
+          io.emit("new_feed_published", broadcastData);
+        }
+
         uploadedFeeds.push({ id: savedFeed._id, url: mediaUrl, filename: file.originalname });
 
         if (savedFeed.status === "published") {
@@ -257,6 +273,25 @@ exports.bulkFeedUpload = async (req, res) => {
 
         const feed = new Feed(feedData);
         await feed.save();
+
+        // ✅ REAL-TIME BROADCAST (Bulk)
+        const { getIO } = require("../../middlewares/webSocket");
+        const io = getIO();
+        if (io) {
+          const ProfileSettings = require("../../models/profileSettingModel");
+          let creatorProfile = null;
+          if (req.role === "Admin") {
+            creatorProfile = await ProfileSettings.findOne({ adminId: adminId }).select("userName profileAvatar").lean();
+          } else if (req.role === "Child_Admin") {
+            creatorProfile = await ProfileSettings.findOne({ childAdminId: adminId }).select("userName profileAvatar").lean();
+          }
+
+          const broadcastData = {
+            ...feed.toObject(),
+            creatorData: creatorProfile || { userName: "Admin", profileAvatar: null }
+          };
+          io.emit("new_feed_published", broadcastData);
+        }
 
         results.details.push({
           success: true,

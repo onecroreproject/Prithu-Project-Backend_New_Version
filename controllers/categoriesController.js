@@ -1,14 +1,14 @@
-const Categories= require('../models/categorySchema');
+const Categories = require('../models/categorySchema');
 const Feed = require('../models/feedModel');
-const mongoose=require('mongoose')
-const {feedTimeCalculator}=require("../middlewares/feedTimeCalculator");
-const UserLanguage=require('../models/userModels/userLanguageModel');
-const  {getLanguageCode}  = require("../middlewares/helper/languageHelper");
+const mongoose = require('mongoose')
+const { feedTimeCalculator } = require("../middlewares/feedTimeCalculator");
+const UserLanguage = require('../models/userModels/userLanguageModel');
+const { getLanguageCode } = require("../middlewares/helper/languageHelper");
 const UserCategory = require("../models/userModels/userCategotyModel");
-const ProfileSettings=require('../models/profileSettingModel');
+const ProfileSettings = require('../models/profileSettingModel');
 const { applyFrame } = require("../middlewares/helper/AddFrame/addFrame.js");
-const {extractThemeColor}=require("../middlewares/helper/extractThemeColor.js");
-const UserFeedActions=require('../models/userFeedInterSectionModel');
+const { extractThemeColor } = require("../middlewares/helper/extractThemeColor.js");
+const UserFeedActions = require('../models/userFeedInterSectionModel');
 
 
 
@@ -170,9 +170,9 @@ exports.getCategoriesWithFeeds = async (req, res) => {
 // Save interested category (single or multiple)
 exports.saveInterestedCategory = async (req, res) => {
   try {
-    const {categoryIds } = req.body;
-   const userId=req.Id;
-       if (!mongoose.Types.ObjectId.isValid(userId)) {
+    const { categoryIds } = req.body;
+    const userId = req.Id;
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({ message: "Invalid userId" });
     }
 
@@ -493,7 +493,7 @@ exports.getUserContentCategories = async (req, res) => {
 exports.searchCategories = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
-    const  query = req.body.query ;
+    const query = req.body.query;
 
     if (!query || query.trim() === "") {
       return res.status(400).json({ message: "Query is required" });
@@ -508,7 +508,7 @@ exports.searchCategories = async (req, res) => {
     // 2️⃣ Build match condition for feeds
     const feedMatch = feedLang ? { language: feedLang } : {};
 
-    // 3️⃣ Aggregate feeds → categories → filter by search query
+    // 3️⃣ Aggregate feeds -> categories -> filter by search query & count videos
     const categories = await Feed.aggregate([
       { $match: feedMatch },
       {
@@ -532,7 +532,14 @@ exports.searchCategories = async (req, res) => {
           }
         }
       },
-      { $group: { _id: "$categoryObjId" } },
+      {
+        $group: {
+          _id: "$categoryObjId",
+          videoCount: {
+            $sum: { $cond: [{ $eq: ["$postType", "video"] }, 1, 0] }
+          }
+        }
+      },
       {
         $lookup: {
           from: "Categories",
@@ -544,10 +551,16 @@ exports.searchCategories = async (req, res) => {
       { $unwind: "$category" },
       {
         $match: {
-          "category.name": { $regex: query, $options: "i" } // 🔍 filter by search
+          "category.name": { $regex: query, $options: "i" }
         }
       },
-      { $project: { _id: "$category._id", name: "$category.name" } },
+      {
+        $project: {
+          _id: "$category._id",
+          name: "$category.name",
+          videoCount: 1
+        }
+      },
       { $limit: 10 }
     ]);
 
