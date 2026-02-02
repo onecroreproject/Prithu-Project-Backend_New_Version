@@ -160,7 +160,6 @@ const {
     getUserAnalyticsSummary,
     fetchUserNonInterested,
     getUserdetailWithinTheFeed,
-    getUserPost,
 } = require('../controllers/userControllers/userFeedController');
 
 const {
@@ -206,7 +205,6 @@ const { saveUserLocation,
 } = require("../controllers/userControllers/userLoactionController");
 
 const {
-    getUserFeedsWeb,
 } = require("../WebController/UserController/userFeedControllerWeb");
 
 const {
@@ -403,7 +401,6 @@ router.get('/user/referral/recent-activities', auth, getRecentActivities);
 /*--------------UserPostController--------------------------*/
 router.get("/post/allowed/status", auth, getPostInterestStatus);
 router.post("/post/intrested", auth, requestPostInterest);
-router.get("/get/user/post", auth, getUserFeedsWeb);
 
 
 

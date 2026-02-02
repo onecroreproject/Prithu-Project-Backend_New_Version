@@ -18,6 +18,7 @@ const ProfileSettings = require("../../models/profileSettingModel");
 const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
 const Follower = require("../../models/creatorFollowerModel.js");
 const { deleteLocalFile } = require("../../middlewares/services/userprofileUploadSpydy.js");
+const UserFeedActions = require("../../models/userFeedInterSectionModel");
 
 
 
@@ -1101,31 +1102,67 @@ exports.getProfileOverview = async (req, res) => {
       return res.status(404).json({ message: "Profile not found" });
     }
 
-    // 2️⃣ Followers — count where creatorId = userId
-    const followerCount = await CreatorFollower.countDocuments({
-      creatorId: userObjectId,
-    });
-
-    // 3️⃣ Following — count where followerId = userId
-    const followingCount = await CreatorFollower.countDocuments({
-      followerId: userObjectId,
-    });
-
-    // 4️⃣ Posts count
-    const postCount = await Feed.countDocuments({
+    // 2️⃣ Fetch user's published feeds to aggregate stats
+    const userFeeds = await Feed.find({
       createdByAccount: userObjectId,
       roleRef: "User",
       status: "Published",
-    });
+    }).select("_id").lean();
+
+    const feedIds = userFeeds.map(f => f._id);
+
+    let downloadCount = 0;
+    let shareCount = 0;
+
+    if (feedIds.length > 0) {
+      // 3️⃣ Aggregate Total Downloads of user's content
+      const downloadsAgg = await UserFeedActions.aggregate([
+        { $match: { "downloadedFeeds.feedId": { $in: feedIds } } },
+        {
+          $project: {
+            count: {
+              $size: {
+                $filter: {
+                  input: "$downloadedFeeds",
+                  as: "item",
+                  cond: { $in: ["$$item.feedId", feedIds] }
+                }
+              }
+            }
+          }
+        },
+        { $group: { _id: null, total: { $sum: "$count" } } }
+      ]);
+      downloadCount = downloadsAgg[0]?.total || 0;
+
+      // 4️⃣ Aggregate Total Shares of user's content
+      const sharesAgg = await UserFeedActions.aggregate([
+        { $match: { "sharedFeeds.feedId": { $in: feedIds } } },
+        {
+          $project: {
+            count: {
+              $size: {
+                $filter: {
+                  input: "$sharedFeeds",
+                  as: "item",
+                  cond: { $in: ["$$item.feedId", feedIds] }
+                }
+              }
+            }
+          }
+        },
+        { $group: { _id: null, total: { $sum: "$count" } } }
+      ]);
+      shareCount = sharesAgg[0]?.total || 0;
+    }
 
     // 5️⃣ Response
     return res.status(200).json({
       message: "Profile overview fetched successfully",
       data: {
         userId,
-        followerCount,
-        followingCount,
-        postCount,
+        downloadCount,
+        shareCount,
       },
     });
 
@@ -1201,6 +1238,36 @@ exports.getProfileByUsername = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    const feedIds = userFeeds.map(f => f._id);
+
+    let downloadCount = 0;
+    let shareCount = 0;
+
+    if (feedIds.length > 0) {
+      const [downloadsAgg, sharesAgg] = await Promise.all([
+        UserFeedActions.aggregate([
+          { $match: { "downloadedFeeds.feedId": { $in: feedIds } } },
+          {
+            $project: {
+              count: { $size: { $filter: { input: "$downloadedFeeds", as: "item", cond: { $in: ["$$item.feedId", feedIds] } } } }
+            }
+          },
+          { $group: { _id: null, total: { $sum: "$count" } } }
+        ]),
+        UserFeedActions.aggregate([
+          { $match: { "sharedFeeds.feedId": { $in: feedIds } } },
+          {
+            $project: {
+              count: { $size: { $filter: { input: "$sharedFeeds", as: "item", cond: { $in: ["$$item.feedId", feedIds] } } } }
+            }
+          },
+          { $group: { _id: null, total: { $sum: "$count" } } }
+        ])
+      ]);
+      downloadCount = downloadsAgg[0]?.total || 0;
+      shareCount = sharesAgg[0]?.total || 0;
+    }
+
     // ✅ Apply visibility filter to data
     const filteredData = {
       _id: profile._id,
@@ -1227,8 +1294,8 @@ exports.getProfileByUsername = async (req, res) => {
       shareableLink: profile.shareableLink,
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
-      followerCount,
-      followingCount,
+      downloadCount,
+      shareCount,
       feeds: userFeeds,
     };
 

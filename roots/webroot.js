@@ -223,7 +223,6 @@ const {
     getUserAnalyticsSummary,
     fetchUserNonInterested,
     getUserdetailWithinTheFeed,
-    getUserPost,
 } = require('../controllers/userControllers/userFeedController');
 
 const {
@@ -311,7 +310,6 @@ const { saveUserLocation,
 
 /*-----------------Web Controller ------------------*/
 const {
-    getUserFeedsWeb,
 } = require("../WebController/UserController/userFeedControllerWeb");
 
 const {
@@ -464,8 +462,6 @@ router.post("/individual/user/visibility/settings", getUserVisibilityByUserId);
 
 
 
-router.get("/get/user/post", auth, getUserFeedsWeb);
-router.get("/get/single/user/post", getUserFeedsWeb);
 router.get("/user/following", auth, getUserFollowing);
 router.get("/user/followers", auth, getUserFollowers);
 router.get("/single/user/following", getUserFollowing);

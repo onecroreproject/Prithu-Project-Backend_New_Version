@@ -181,7 +181,6 @@ const {
     getUserAnalyticsSummary,
     fetchUserNonInterested,
     getUserdetailWithinTheFeed,
-    getUserPost,
 } = require('../controllers/userControllers/userFeedController');
 
 const {
@@ -251,7 +250,6 @@ const { saveUserLocation,
 
 /*-----------------Web Controller ------------------*/
 const {
-    getUserFeedsWeb,
 } = require("../WebController/UserController/userFeedControllerWeb");
 
 const {
@@ -368,7 +366,6 @@ router.put("/update/user/post/status/:userId", updateUserPostPermission);
 
 
 
-router.post('/user/get/post', getUserPost);
 router.get('/user/get/feed/category', auth, getFeedLanguageCategories);
 router.get('/user/get/all/category', getUserPostCategories);
 
@@ -433,7 +430,6 @@ router.get("/user/update/visibility/settings", auth, getVisibilitySettingsWeb);
 
 
 
-router.get("/get/user/post", auth, getUserFeedsWeb);
 router.get("/user/following", auth, getUserFollowing);
 router.get("/user/followers", auth, getUserFollowers);
 router.get("/user/profile/completion", auth, getProfileCompletion);
