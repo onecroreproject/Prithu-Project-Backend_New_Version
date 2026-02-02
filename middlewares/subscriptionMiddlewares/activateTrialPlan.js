@@ -2,7 +2,7 @@ const UserSubscription = require("../../models/subscriptionModels/userSubscripti
 const SubscriptionPlan = require("../../models/subscriptionModels/subscriptionPlanModel.js");
 const User = require('../../models/userModels/userModel.js');
 const hasTrial = require('../../middlewares/subscriptionMiddlewares/userTrialChecker');
-const sendTemplateEmail = require("../../utils/templateMailer.js");
+const { sendTemplateEmail } = require("../../utils/templateMailer.js");
 const mongoose = require('mongoose');
 const { prithuDB } = require("../../database");
 

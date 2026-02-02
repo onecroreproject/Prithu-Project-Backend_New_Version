@@ -1437,15 +1437,69 @@ exports.getUserDownloadedFeeds = async (req, res) => {
 
 exports.getUserLikedFeeds = async (req, res) => {
   const userId = req.Id || req.body.userId;
-
-  if (!userId) return res.status(400).json({ message: "userId is required" });
+  if (!userId) {
+    return res.status(400).json({ success: false, message: "userId is required" });
+  }
 
   try {
-    const likedFeeds = await UserFeedActions.aggregate([
-      { $match: { userId: new mongoose.Types.ObjectId(userId) } },
-      { $unwind: "$likedFeeds" },
+    const userIdObj = new mongoose.Types.ObjectId(userId);
 
-      // Join feed data
+    // 1️⃣ FETCH VIEWER PROFILE & PRIVACY FOR FOOTER
+    const ProfileVisibility = require("../../models/profileVisibilitySchema.js");
+    const viewerProfile = await ProfileSettings.findOne({ userId: userIdObj })
+      .select("name userName profileAvatar phoneNumber socialLinks privacy visibility modifyAvatar")
+      .lean();
+
+    let viewerVisibility = null;
+    if (viewerProfile?.visibility) {
+      viewerVisibility = await ProfileVisibility.findById(viewerProfile.visibility).lean();
+    }
+
+    const canShow = (rule) => rule === "public";
+    let viewerSocialIcons = [];
+    if (viewerProfile?.socialLinks && typeof viewerProfile.socialLinks === "object") {
+      viewerSocialIcons = Object.entries(viewerProfile.socialLinks)
+        .map(([platform, url]) => ({
+          platform,
+          url: typeof url === "string" ? url.trim() : "",
+          visible: true,
+        }))
+        .filter((i) => i.url);
+    }
+
+    const safeSocialLinks = viewerSocialIcons.filter((icon) => {
+      const rule = viewerVisibility?.socialLinks || "private";
+      return canShow(rule) && icon.visible !== false && !!icon.url;
+    });
+
+    const footerVisibilityConfig = {
+      showElements: {
+        name: canShow(viewerVisibility?.name || "public"),
+        email: canShow(viewerVisibility?.email || "private"),
+        phone: canShow(viewerVisibility?.phoneNumber || "private"),
+        socialIcons: safeSocialLinks.length > 0
+      },
+      socialIcons: safeSocialLinks.map((icon) => ({
+        platform: icon.platform,
+        visible: true,
+        urlTemplate: icon.url
+      }))
+    };
+
+    const viewer = {
+      id: userIdObj,
+      name: viewerProfile?.name || "User",
+      userName: viewerProfile?.userName || "user",
+      profileAvatar: viewerProfile?.modifyAvatar || viewerProfile?.profileAvatar || "https://via.placeholder.com/150",
+      socialLinks: safeSocialLinks
+    };
+
+    // 2️⃣ AGGREGATION PIPELINE
+    const likedFeedsRaw = await UserFeedActions.aggregate([
+      { $match: { userId: userIdObj } },
+      { $unwind: "$likedFeeds" },
+      { $sort: { "likedFeeds.likedAt": -1 } },
+
       {
         $lookup: {
           from: "Feeds",
@@ -1455,63 +1509,172 @@ exports.getUserLikedFeeds = async (req, res) => {
         },
       },
       { $unwind: "$feed" },
+      {
+        $match: {
+          "feed.isDeleted": false,
+          "feed.status": { $in: ["Published", "published"] }
+        }
+      },
 
-      // Count total likes for each feed
+      {
+        $lookup: {
+          from: "ProfileSettings",
+          let: { creatorId: "$feed.postedBy.userId", role: "$feed.roleRef" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $and: [{ $eq: ["$$role", "Admin"] }, { $eq: ["$adminId", "$$creatorId"] }] },
+                    { $and: [{ $eq: ["$$role", "Child_Admin"] }, { $eq: ["$childAdminId", "$$creatorId"] }] },
+                    { $and: [{ $eq: ["$$role", "User"] }, { $eq: ["$userId", "$$creatorId"] }] }
+                  ]
+                }
+              }
+            },
+            { $project: { name: 1, userName: 1, profileAvatar: 1, modifyAvatar: 1 } }
+          ],
+          as: "creatorProfile"
+        }
+      },
+      { $unwind: { path: "$creatorProfile", preserveNullAndEmptyArrays: true } },
+
       {
         $lookup: {
           from: "UserFeedActions",
-          let: { feedId: "$likedFeeds.feedId" },
+          let: { fid: "$feed._id" },
           pipeline: [
             { $unwind: "$likedFeeds" },
-            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$feedId"] } } },
-            { $count: "totalLikes" },
+            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$fid"] } } },
+            { $count: "count" }
           ],
-          as: "likeStats",
-        },
+          as: "likesCountArr"
+        }
+      },
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { fid: "$feed._id" },
+          pipeline: [
+            { $unwind: "$sharedFeeds" },
+            { $match: { $expr: { $eq: ["$sharedFeeds.feedId", "$$fid"] } } },
+            { $count: "count" }
+          ],
+          as: "sharesCountArr"
+        }
+      },
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { fid: "$feed._id" },
+          pipeline: [
+            { $unwind: "$downloadedFeeds" },
+            { $match: { $expr: { $eq: ["$downloadedFeeds.feedId", "$$fid"] } } },
+            { $count: "count" }
+          ],
+          as: "downloadsCountArr"
+        }
+      },
+      {
+        $lookup: {
+          from: "UserComments",
+          let: { fid: "$feed._id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$feedId", "$$fid"] } } },
+            { $count: "count" }
+          ],
+          as: "commentsCountArr"
+        }
       },
 
-      // Format output (no host concatenation)
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { fid: "$feed._id" },
+          pipeline: [
+            { $match: { userId: userIdObj } },
+            { $unwind: "$savedFeeds" },
+            { $match: { $expr: { $eq: ["$savedFeeds.feedId", "$$fid"] } } }
+          ],
+          as: "savedCheck"
+        }
+      },
+
       {
         $project: {
-          feedId: "$feed._id",
-          type: "$feed.type",
+          _id: 1,
+          feed: 1,
           likedAt: "$likedFeeds.likedAt",
-          totalLikes: { $ifNull: [{ $arrayElemAt: ["$likeStats.totalLikes", 0] }, 0] },
-          url: {
-            $cond: [
-              { $ifNull: ["$feed.downloadUrl", false] },
-              "$feed.downloadUrl",
-              {
-                $cond: [
-                  { $ifNull: ["$feed.fileUrl", false] },
-                  "$feed.fileUrl",
-                  {
-                    $cond: [
-                      { $ifNull: ["$feed.contentUrl", false] },
-                      "$feed.contentUrl",
-                      null,
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        },
-      },
+          creatorProfile: 1,
+          likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCountArr.count", 0] }, 0] },
+          sharesCount: { $ifNull: [{ $arrayElemAt: ["$sharesCountArr.count", 0] }, 0] },
+          downloadsCount: { $ifNull: [{ $arrayElemAt: ["$downloadsCountArr.count", 0] }, 0] },
+          commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCountArr.count", 0] }, 0] },
+          isSaved: { $gt: [{ $size: "$savedCheck" }, 0] },
+        }
+      }
     ]);
 
-    if (!likedFeeds.length) {
-      return res.status(404).json({ message: "No liked feeds found" });
-    }
+    // 3️⃣ POST-PROCESSING (Normalize like feedsController.js)
+    const enrichedFeeds = likedFeedsRaw.map(item => {
+      const feed = item.feed;
+      const isTemplateMode = feed.uploadType === 'template' || feed.uploadMode === 'template';
+      const themeColor = feed.themeColor || { primary: "#2563eb", secondary: "#1e40af", accent: "#ffffff", text: "#000000" };
+
+      let designState = null;
+      if (isTemplateMode && feed.designMetadata) {
+        designState = {
+          elements: feed.designMetadata.overlayElements || [],
+          mediaDimensions: feed.designMetadata.canvasSettings || { width: 1080, height: 1920 },
+          audioConfig: feed.designMetadata.audioConfig || null,
+          themeColors: themeColor
+        };
+      }
+
+      return {
+        ...feed,
+        feedId: feed._id,
+        likedAt: item.likedAt,
+        creatorData: {
+          id: feed.postedBy?.userId,
+          userName: item.creatorProfile?.userName || "unknown",
+          name: item.creatorProfile?.name || "User",
+          avatar: item.creatorProfile?.modifyAvatar || item.creatorProfile?.profileAvatar || "https://via.placeholder.com/150",
+          role: feed.roleRef || "User"
+        },
+        footerDisplay: isTemplateMode
+          ? {
+            ...(feed.designMetadata?.footerConfig || {}),
+            ...footerVisibilityConfig,
+            colors: themeColor
+          }
+          : { enabled: false },
+        designState,
+        stats: {
+          likes: item.likesCount,
+          shares: item.sharesCount,
+          downloads: item.downloadsCount,
+          comments: item.commentsCount
+        },
+        userInteractions: {
+          isLiked: true,
+          isSaved: item.isSaved,
+          isFollowing: false // Simplified or lookup needed
+        },
+        viewer // Inject current viewer for personalization engine if needed
+      };
+    });
 
     res.status(200).json({
+      success: true,
       message: "Liked feeds retrieved successfully",
-      count: likedFeeds.length,
-      likedFeeds,
+      count: enrichedFeeds.length,
+      feeds: enrichedFeeds,
+      viewer
     });
   } catch (err) {
     console.error("Error fetching liked feeds:", err);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 

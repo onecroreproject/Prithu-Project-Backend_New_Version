@@ -81,6 +81,8 @@ const {
     getProfileCompletion,
     getProfileByUsername,
     getUserVisibilityByUserId,
+    getUserVisibilitySettings,
+    updateUserVisibilitySettings,
 } = require('../controllers/profileControllers/profileController');
 
 const {
@@ -237,7 +239,7 @@ const {
 router.get("/get/hidden-posts", auth, getHiddenPosts); // Frontend alias
 router.post("/remove/hidden-post", auth, removeHiddenPost); // Frontend alias
 
-const { getManiBoardStats } = require('../controllers/mainHomeControlle');
+
 const { getPostInterestStatus,
     requestPostInterest
 } = require('../controllers/postIntrestedController');
@@ -294,6 +296,9 @@ router.get("/get/profile/completion", auth, getProfileCompletion);
 router.put("/put/profile/visibility", auth, toggleFieldVisibility);
 router.get("/get/profile/visibility-settings", auth, getVisibilitySettings);
 
+router.get("/user/get/visibility/settings", auth, getUserVisibilitySettings);
+router.post("/user/update/visibility/settings", auth, updateUserVisibilitySettings);
+
 /* --------------------- User Feed Actions --------------------- */
 router.post('/user/feed/like', auth, likeFeed);
 router.post("/user/feed/dislike", auth, toggleDislikeFeed);
@@ -342,7 +347,8 @@ router.post('/replies/list', auth, getRepliesForComment);
 router.post('/replies/nested', auth, getNestedReplies);
 
 /* --------------------- Feed Fetching --------------------- */
-router.get("/get/trending/feeds", auth, getTrendingFeeds);
+router.get("/get/trending-v2/feeds", auth, (req, res, next) => { console.log("REQ: Trending v2 hit"); next(); }, getTrendingFeeds);
+router.get("/get/trending/feeds", auth, (req, res, next) => { console.log("REQ: Trending hit"); next(); }, getTrendingFeeds);
 router.get('/get/all/feeds/user', auth, getAllFeedsByUserId);
 router.get('/get/feed/with/category/:id', auth, getfeedWithCategoryWithId);
 router.get('/get/user/info/associated/feed/:feedId', auth, getUserInfoAssociatedFeed);
@@ -371,6 +377,7 @@ router.post('/subscription/activate-trial', auth, userTrialPlanActive);
 router.get('/subscription/check-active', auth, checkUserActiveSubscription);
 router.get('/subscription/trial-eligible', auth, checkTrialEligibility);
 router.post('/subscription/create-order', auth, createSubscriptionOrder);
+router.post('/user/subscription/create-order', auth, createSubscriptionOrder); // Alias for frontend consistency
 router.post('/subscription/verify-payment', auth, verifySubscriptionPayment);
 
 /* --------------------- Notifications --------------------- */
@@ -385,7 +392,9 @@ router.post("/notifications/save-token", auth, saveToken);
 router.get("/global/search", globalSearch);
 router.get("/hashtags/trending", getTrendingHashtags);
 router.post("/availability/username", checkUsernameAvailability);
+router.get("/check/username/availability", checkUsernameAvailability);
 router.post("/availability/email", checkEmailAvailability);
+router.get("/check/email/availability", checkEmailAvailability);
 router.post("/session/heartbeat", auth, heartbeat);
 router.post("/session/presence", auth, userPresence);
 router.get("/user/get/birthday", getUpcomingBirthdays);
@@ -401,6 +410,10 @@ router.get('/user/referral/recent-activities', auth, getRecentActivities);
 /*--------------UserPostController--------------------------*/
 router.get("/post/allowed/status", auth, getPostInterestStatus);
 router.post("/post/intrested", auth, requestPostInterest);
+
+/* --------------------- Public Stats --------------------- */
+const { getMainBoardStats } = require('../controllers/mainHomeController');
+router.get("/main/board/status", getMainBoardStats);
 
 
 

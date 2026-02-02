@@ -13,7 +13,7 @@ const UserReferralActivitySchema = new mongoose.Schema({
     shareCount: { type: Number, default: 0 },
     sharingMedium: {
         type: String,
-        enum: ["WhatsApp", "Facebook", "Instagram", "Copy Link", "Other"],
+        enum: ["WhatsApp", "Facebook", "Instagram", "Copy Link", "Other", "whatsapp", "facebook", "instagram", "copy link"],
         default: "Other"
     },
     earnedAmount: { type: Number, default: 0 },

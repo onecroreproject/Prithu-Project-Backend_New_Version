@@ -7,6 +7,7 @@ const { startUpProcessCheck } = require('../../middlewares/services/User Service
 const Device = require("../../models/userModels/userSession-Device/deviceModel");
 const Session = require("../../models/userModels/userSession-Device/sessionModel");
 const UserReferral = require('../../models/userModels/userRefferalModels/userReferralModel');
+const UserEarning = require('../../models/userModels/userRefferalModels/referralEarnings.js');
 const ProfileSettings = require("../../models/profileSettingModel");
 const fs = require("fs");
 const path = require("path");
@@ -76,6 +77,26 @@ exports.createNewUser = async (req, res) => {
           { $addToSet: { childIds: user._id } },
           { upsert: true }
         ),
+        // 💰 REWARD REFERRER: Add 25 rupees
+        User.updateOne(
+          { _id: parent._id },
+          {
+            $inc: {
+              totalEarnings: 25,
+              balanceEarnings: 25,
+              referralCodeUsageCount: 1
+            }
+          }
+        ),
+        // 📜 LEDGER ENTRY: Create earning record for API calculation and history
+        UserEarning.create({
+          userId: parent._id,
+          fromUserId: user._id,
+          amount: 25,
+          level: 1,
+          tier: 1,
+          isPartial: false
+        })
       ]);
     } else {
       await user.save();

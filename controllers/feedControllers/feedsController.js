@@ -230,6 +230,35 @@ exports.getAllFeedsByUserId = async (req, res) => {
           as: "viewsCountArr"
         }
       },
+      // 📊 USER INTERACTIONS: Check if current user liked/saved/followed
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { fid: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$userId", userId] } } },
+            {
+              $project: {
+                isLiked: { $in: ["$$fid", { $map: { input: "$likedFeeds", as: "i", in: "$$i.feedId" } }] },
+                isSaved: { $in: ["$$fid", { $map: { input: "$savedFeeds", as: "i", in: "$$i.feedId" } }] },
+                isDisliked: { $in: ["$$fid", { $map: { input: "$disLikeFeeds", as: "i", in: "$$i.feedId" } }] },
+              }
+            }
+          ],
+          as: "userActions"
+        }
+      },
+      {
+        $lookup: {
+          from: "Follows",
+          let: { creatorId: "$postedBy.userId" },
+          pipeline: [
+            { $match: { $expr: { $and: [{ $eq: ["$creatorId", "$$creatorId"] }, { $eq: ["$followerId", userId] }] } } },
+            { $limit: 1 }
+          ],
+          as: "followInfo"
+        }
+      },
       {
         $addFields: {
           likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCountArr.count", 0] }, 0] },
@@ -237,6 +266,10 @@ exports.getAllFeedsByUserId = async (req, res) => {
           downloadCount: { $ifNull: [{ $arrayElemAt: ["$downloadsCountArr.count", 0] }, 0] },
           commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCountArr.count", 0] }, 0] },
           viewsCount: { $ifNull: [{ $arrayElemAt: ["$viewsCountArr.count", 0] }, 0] },
+          isLiked: { $arrayElemAt: ["$userActions.isLiked", 0] },
+          isSaved: { $arrayElemAt: ["$userActions.isSaved", 0] },
+          isDisliked: { $arrayElemAt: ["$userActions.isDisliked", 0] },
+          isFollowing: { $gt: [{ $size: "$followInfo" }, 0] },
           creatorData: {
             $let: {
               vars: {
@@ -1618,22 +1651,29 @@ exports.getUserInfoAssociatedFeed = async (req, res) => {
 
 
 exports.getTrendingFeeds = async (req, res) => {
+  console.log("🔥 HIT: getTrendingFeeds");
   try {
     const rawUserId = req.Id || req.body.userId;
     const userId = rawUserId ? new mongoose.Types.ObjectId(rawUserId) : null;
 
     if (!userId) {
+      console.log("❌ Missing userId in getTrendingFeeds");
       return res.status(400).json({ message: "userId is required" });
     }
 
     /* -----------------------------------------
-       1️⃣ Today date range
+       1️⃣ Date range & Pagination
     ----------------------------------------- */
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const page = Math.max(1, Number(req.query.page || 1));
+    const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
 
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
+    // Trending over last 30 days for more content
+    const trendingStart = new Date();
+    trendingStart.setDate(trendingStart.getDate() - 30);
+    trendingStart.setHours(0, 0, 0, 0);
+
+    const trendingEnd = new Date();
+    trendingEnd.setHours(23, 59, 59, 999);
 
     /* -----------------------------------------
        2️⃣ User Preferences (Hidden & Non-Interested)
@@ -1646,16 +1686,17 @@ exports.getTrendingFeeds = async (req, res) => {
     const notInterestedCategoryIds = userCat?.nonInterestedCategories || [];
 
     /* -----------------------------------------
-       3️⃣ Fetch TODAY’s Feeds (Filtered)
+       3️⃣ Fetch Trending Feeds (Filtered)
     ----------------------------------------- */
     const feeds = await Feed.find({
       _id: { $nin: hiddenPostIds },
       category: { $nin: notInterestedCategoryIds },
-      createdAt: { $gte: todayStart, $lte: todayEnd },
+      createdAt: { $gte: trendingStart, $lte: trendingEnd },
       status: "Published",
       isDeleted: false
     })
       .populate("createdByAccount", "_id roleRef")
+      .sort({ createdAt: -1 }) // Get recent ones first, score will handle ranking
       .lean();
 
     if (!feeds.length) {
@@ -1797,9 +1838,11 @@ exports.getTrendingFeeds = async (req, res) => {
           isSaved,
           isDisliked,
 
-          createdByProfile: {
-            userName: profile?.userName || "Unknown User",
-            profileAvatar: profile?.profileAvatar || null
+          creatorData: {
+            _id: profile?._id || creatorId,
+            userName: profile?.userName || "Unknown",
+            profileAvatar: profile?.profileAvatar || null,
+            modifyAvatar: profile?.modifyAvatar || null
           },
 
           score
@@ -1812,26 +1855,34 @@ exports.getTrendingFeeds = async (req, res) => {
     --------------------------------------------------------- */
     enriched.sort((a, b) => b.score - a.score);
 
+    // Apply pagination AFTER scoring/sorting
+    const paginated = enriched.slice((page - 1) * limit, page * limit);
+
     const maxScore = enriched.length ? Math.max(...enriched.map((f) => f.score)) : 0;
 
-    const response = enriched.map((f, index) => ({
+    const finalFeeds = paginated.map((f, index) => ({
       ...f,
-      rank: index + 1,
+      rank: ((page - 1) * limit) + index + 1,
       trendingScore: maxScore ? Math.round((f.score / maxScore) * 100) : 0
     }));
 
+    console.log(`✅ SUCCESS: Sending ${finalFeeds.length} trending feeds`);
     res.status(200).json({
-      message: "Today's Trending Feeds",
-      count: response.length,
-      data: response
+      success: true,
+      message: "Trending Feeds",
+      data: {
+        feeds: finalFeeds,
+        totalCount: enriched.length,
+        pagination: {
+          currentPage: page,
+          limit,
+          totalPages: Math.ceil(enriched.length / limit)
+        }
+      }
     });
 
   } catch (err) {
-    console.error("Error fetching trending feeds:", err);
-    res.status(500).json({
-      message: "Internal server error",
-      error: err.message
-    });
+    console.error("💥 ERROR in getTrendingFeeds:", err);
   }
 };
 

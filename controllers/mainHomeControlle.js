@@ -1,20 +1,34 @@
 const User = require("../models/userModels/userModel"); // prithuDB
+const Feed = require("../models/feedModel");
+const UserFeedActions = require("../models/userFeedInterSectionModel.js");
 
 
 exports.getManiBoardStats = async (req, res) => {
   try {
     const [
       totalUsers,
+      totalTemplates,
+      shareAgg
     ] = await Promise.all([
-      // 👤 Users (only active users, optional)
-      User.countDocuments({ isActive: true }),
+      // 👤 Users
+      User.countDocuments({ isActive: true, isBlocked: false }),
 
+      // 🎨 Templates
+      Feed.countDocuments({ uploadType: 'template', status: 'published', isDeleted: false }),
+
+      // 🚀 Total Shares
+      UserFeedActions.aggregate([
+        { $project: { shareCount: { $size: { $ifNull: ["$sharedFeeds", []] } } } },
+        { $group: { _id: null, total: { $sum: "$shareCount" } } }
+      ])
     ]);
 
     return res.status(200).json({
       success: true,
       data: {
-        totalUsers,
+        totalUsers: totalUsers || 0,
+        totalTemplates: totalTemplates || 0,
+        totalShares: shareAgg[0]?.total || 0
       },
     });
   } catch (error) {

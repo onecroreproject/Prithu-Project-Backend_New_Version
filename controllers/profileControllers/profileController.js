@@ -1329,6 +1329,80 @@ exports.getProfileByUsername = async (req, res) => {
 };
 
 
+// ------------------- Visibility Settings -------------------
+
+exports.getUserVisibilitySettings = async (req, res) => {
+  try {
+    const userId = req.Id;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const profile = await ProfileSettings.findOne({ userId }).populate("visibility");
+
+    if (!profile) {
+      return res.status(404).json({ message: "Profile not found" });
+    }
+
+    // If visibility document doesn't exist, create one
+    if (!profile.visibility) {
+      const newVisibility = new ProfileVisibility({});
+      await newVisibility.save();
+      profile.visibility = newVisibility._id;
+      await profile.save();
+      return res.status(200).json({ status: true, data: newVisibility });
+    }
+
+    return res.status(200).json({ status: true, visibility: profile.visibility });
+
+  } catch (error) {
+    console.error("Error fetching visibility settings:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+exports.updateUserVisibilitySettings = async (req, res) => {
+  try {
+    const userId = req.Id;
+    const updates = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const profile = await ProfileSettings.findOne({ userId });
+
+    if (!profile) {
+      return res.status(404).json({ message: "Profile not found" });
+    }
+
+    let visibilityId = profile.visibility;
+
+    if (!visibilityId) {
+      // Create new if missing
+      const newVisibility = new ProfileVisibility(updates);
+      await newVisibility.save();
+      profile.visibility = newVisibility._id;
+      await profile.save();
+      return res.status(200).json({ status: true, message: "Visibility settings updated", data: newVisibility });
+    } else {
+      // Update existing
+      const updatedVisibility = await ProfileVisibility.findByIdAndUpdate(
+        visibilityId,
+        { $set: updates },
+        { new: true }
+      );
+      return res.status(200).json({ status: true, message: "Visibility settings updated", data: updatedVisibility });
+    }
+
+  } catch (error) {
+    console.error("Error updating visibility settings:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+
 
 
 
