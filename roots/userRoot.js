@@ -102,6 +102,7 @@ const {
     getVideoThumbnail,
     getDownloadJobStatus,
     directDownloadFeed,
+    getUserLikedFeedsForSaved,
 } = require('../controllers/feedControllers/userActionsFeedController');
 
 const {
@@ -235,6 +236,9 @@ const {
     removeHiddenPost,
 } = require("../controllers/userControllers/hiddenPostController");
 
+router.get("/get/hidden-posts", auth, getHiddenPosts); // Frontend alias
+router.post("/remove/hidden-post", auth, removeHiddenPost); // Frontend alias
+
 const { getManiBoardStats } = require('../controllers/mainHomeControlle');
 const { getPostInterestStatus,
     requestPostInterest
@@ -298,10 +302,12 @@ router.post("/user/feed/dislike", auth, toggleDislikeFeed);
 router.post('/user/feed/save', auth, toggleSaveFeed);
 router.post('/user/feed/share', auth, shareFeed);
 router.post('/user/feed/hide', auth, userHideFeed);
+router.post('/user/hide/feed', auth, userHideFeed); // Alias for frontend compatibility
 router.post('/user/feed/download', auth, requestDownloadFeed);
 router.get('/user/feed/liked', auth, getUserLikedFeeds);
 router.get('/user/feed/saved', auth, getUserSavedFeeds);
 router.get('/user/feed/downloaded', auth, getUserDownloadedFeeds);
+router.get('/user/get/saved/feeds', auth, getUserLikedFeedsForSaved); // Alias for frontend compatibility (using liked feeds as requested)
 router.get('/user/feed/share-link/:feedId', generateShareLink);
 router.get('/user/feed/thumbnail/:feedId', getVideoThumbnail);
 router.get('/user/feed/download-status/:jobId', auth, getDownloadJobStatus);
@@ -314,6 +320,8 @@ router.post('/categories/not-interested', auth, userNotInterestedCategory);
 router.post('/categories/interested', auth, userInterestedCategory);
 router.post("/categories/begin", auth, saveInterestedCategory);
 router.get("/categories/not-interested/list", auth, getUserCategory);
+router.get("/get/non-interested-categories", auth, getNonInterestedCategories); // Frontend alias
+router.post("/remove/non-interested-category", auth, removeNonInterestedCategory); // Frontend alias
 
 /* --------------------- Follow & Connections --------------------- */
 router.post('/user/follow/creator', auth, followAccount);

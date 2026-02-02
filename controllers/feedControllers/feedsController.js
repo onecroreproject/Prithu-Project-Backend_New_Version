@@ -678,13 +678,30 @@ exports.getSingleFeedById = async (req, res) => {
     if (!feedId)
       return res.status(400).json({ message: "Feed ID is required" });
 
+    const userId = new mongoose.Types.ObjectId(rawUserId);
+
+    // Filter check: If this feed is hidden or in a non-interested category, don't show it.
+    const [hiddenPost, userCat] = await Promise.all([
+      HiddenPost.findOne({ userId, postId: feedId }).lean(),
+      UserCategory.findOne({ userId }).select("nonInterestedCategories").lean()
+    ]);
+
+    if (hiddenPost) {
+      return res.status(403).json({ message: "This post is hidden by you" });
+    }
+
+    const notCats = (userCat?.nonInterestedCategories || []).map(id => id.toString());
+    const feedCheck = await Feed.findById(feedId).select("category").lean();
+    if (feedCheck && feedCheck.category && notCats.includes(feedCheck.category.toString())) {
+      return res.status(403).json({ message: "This post belongs to a non-interested category" });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(rawUserId))
       return res.status(400).json({ message: "Invalid User ID format" });
 
     if (!mongoose.Types.ObjectId.isValid(feedId))
       return res.status(400).json({ message: "Invalid Feed ID format" });
 
-    const userId = new mongoose.Types.ObjectId(rawUserId);
     const feedObjectId = new mongoose.Types.ObjectId(feedId);
 
     // SAME PIPELINE AS getAllFeedsByUserId BUT MATCH ONE FEED
@@ -1619,10 +1636,24 @@ exports.getTrendingFeeds = async (req, res) => {
     todayEnd.setHours(23, 59, 59, 999);
 
     /* -----------------------------------------
-       2️⃣ Fetch TODAY’s Feeds
+       2️⃣ User Preferences (Hidden & Non-Interested)
+    ----------------------------------------- */
+    const [hiddenPostDocs, userCat] = await Promise.all([
+      HiddenPost.find({ userId }).select("postId -_id").lean(),
+      UserCategory.findOne({ userId }).select("nonInterestedCategories").lean()
+    ]);
+    const hiddenPostIds = hiddenPostDocs.map(x => x.postId);
+    const notInterestedCategoryIds = userCat?.nonInterestedCategories || [];
+
+    /* -----------------------------------------
+       3️⃣ Fetch TODAY’s Feeds (Filtered)
     ----------------------------------------- */
     const feeds = await Feed.find({
-      createdAt: { $gte: todayStart, $lte: todayEnd }
+      _id: { $nin: hiddenPostIds },
+      category: { $nin: notInterestedCategoryIds },
+      createdAt: { $gte: todayStart, $lte: todayEnd },
+      status: "Published",
+      isDeleted: false
     })
       .populate("createdByAccount", "_id roleRef")
       .lean();

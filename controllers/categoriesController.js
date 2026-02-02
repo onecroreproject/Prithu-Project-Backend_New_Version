@@ -115,8 +115,19 @@ exports.getUserPostCategories = async (req, res) => {
 
 exports.getCategoriesWithFeeds = async (req, res) => {
   try {
-    // 1️⃣ Fetch categories that have at least one feed
-    const categories = await Categories.find({ feedIds: { $exists: true, $ne: [] } })
+    // 1️⃣ Fetch non-interested categories if user is authenticated
+    let nonInterestedCategoryIds = [];
+    const userId = req.Id;
+    if (userId) {
+      const userCategory = await UserCategory.findOne({ userId }).select("nonInterestedCategories").lean();
+      nonInterestedCategoryIds = (userCategory?.nonInterestedCategories || []).map(id => id.toString());
+    }
+
+    // 2️⃣ Fetch categories that have at least one feed
+    const categories = await Categories.find({
+      feedIds: { $exists: true, $ne: [] },
+      _id: { $nin: nonInterestedCategoryIds }
+    })
       .select("_id name feedIds")
       .lean();
 
@@ -127,10 +138,13 @@ exports.getCategoriesWithFeeds = async (req, res) => {
       });
     }
 
-    // 2️⃣ Optional: filter out categories where all feedIds do not exist in Feed collection
+    // 3️⃣ Optional: filter out categories where all feedIds do not exist in Feed collection
     const filteredCategories = [];
     for (const cat of categories) {
-      const feedCount = await Feed.countDocuments({ _id: { $in: cat.feedIds } });
+      const feedCount = await Feed.countDocuments({
+        _id: { $in: cat.feedIds },
+        category: { $nin: nonInterestedCategoryIds }
+      });
       if (feedCount > 0) {
         filteredCategories.push({
           categoryId: cat._id,
@@ -238,7 +252,26 @@ exports.getfeedWithCategoryWithId = async (req, res) => {
   try {
     const categoryId = req.params.id;
     const userId = req.Id; // assuming middleware adds req.Id
-    const hiddenPostIds = req.hiddenPostIds || []; // optional hidden posts from user preferences
+
+    let hiddenPostIds = [];
+    let nonInterestedCategoryIds = [];
+
+    if (userId) {
+      const [hiddenPosts, userCategories] = await Promise.all([
+        UserFeedActions.findOne({ userId }).select("hiddenFeeds").lean(), // Adjust model if needed
+        UserCategory.findOne({ userId }).select("nonInterestedCategories").lean()
+      ]);
+
+      // Attempt to get from HiddenPost model as well (consistent with feedsController)
+      const hiddenPostDocs = await mongoose.model("HiddenPost").find({ userId }).select("postId").lean();
+      hiddenPostIds = hiddenPostDocs.map(h => h.postId.toString());
+
+      nonInterestedCategoryIds = (userCategories?.nonInterestedCategories || []).map(id => id.toString());
+    }
+
+    if (nonInterestedCategoryIds.includes(categoryId.toString())) {
+      return res.status(403).json({ message: "This category is marked as non-interested" });
+    }
 
     if (!mongoose.Types.ObjectId.isValid(categoryId)) {
       return res.status(400).json({ message: "Invalid category ID" });
@@ -448,18 +481,9 @@ exports.getUserContentCategories = async (req, res) => {
 
     // 4️⃣ Check if user has a UserCategory record
     const userCategory = await UserCategory.findOne({ userId }).lean();
+    const nonInterestedCategoryIds = (userCategory?.nonInterestedCategories || []).map(id => id.toString());
 
-    let filteredCategoryIds = categoryIds;
-
-    // If first time (no record), filter by interested categories
-    if (!userCategory) {
-      // Here you might want to define default interested categories for first-time users
-      // For now, assuming all categories are sent as "interested" for the first time
-      filteredCategoryIds = categoryIds;
-    } else if (userCategory.interestedCategories?.length > 0) {
-      // If record exists, send all categories regardless of interested (per requirement)
-      filteredCategoryIds = categoryIds;
-    }
+    let filteredCategoryIds = categoryIds.filter(id => !nonInterestedCategoryIds.includes(id.toString()));
 
     // 5️⃣ Fetch category details
     const categories = await Categories.find({ _id: { $in: filteredCategoryIds } })

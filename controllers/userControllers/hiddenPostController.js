@@ -1,5 +1,5 @@
-const Hidden =require("../../models/userModels/hiddenPostSchema")
-const Feed =require("../../models/feedModel")
+const Hidden = require("../../models/userModels/hiddenPostSchema")
+const Feed = require("../../models/feedModel")
 
 
 
@@ -31,7 +31,6 @@ exports.getHiddenPosts = async (req, res) => {
 
     // 2️⃣ Fetch feed details for those postIds
     const feeds = await Feed.find({ _id: { $in: postIds } })
-      .populate("createdByAccount", "name profilePic roleRef") // optional
       .populate("category", "name")
       .populate("statsId") // views, likes, shares etc
       .lean();

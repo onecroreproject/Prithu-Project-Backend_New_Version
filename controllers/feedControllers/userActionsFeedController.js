@@ -1649,3 +1649,84 @@ exports.removeNonInterestedCategory = async (req, res) => {
 
 
 
+
+exports.getUserLikedFeedsForSaved = async (req, res) => {
+  const userId = req.Id || req.body.userId;
+
+  if (!userId) return res.status(400).json({ message: "userId is required" });
+
+  try {
+    const savedFeeds = await UserFeedActions.aggregate([
+      { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+      { $unwind: "$likedFeeds" },
+
+      // Join feed data
+      {
+        $lookup: {
+          from: "Feeds",
+          localField: "likedFeeds.feedId",
+          foreignField: "_id",
+          as: "feed",
+        },
+      },
+      { $unwind: "$feed" },
+
+      // Count total likes for each feed
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$likedFeeds.feedId" },
+          pipeline: [
+            { $unwind: "$likedFeeds" },
+            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$feedId"] } } },
+            { $count: "totalLikes" },
+          ],
+          as: "likeStats",
+        },
+      },
+
+      // Format output to match Saved Feeds schema
+      {
+        $project: {
+          _id: "$feed._id",
+          type: "$feed.type",
+          savedAt: "$likedFeeds.likedAt", // Map likedAt to savedAt
+          likeCount: { $ifNull: [{ $arrayElemAt: ["$likeStats.totalLikes", 0] }, 0] },
+          contentUrl: { // Map url logic to contentUrl
+            $cond: [
+              { $ifNull: ["$feed.downloadUrl", false] },
+              "$feed.downloadUrl",
+              {
+                $cond: [
+                  { $ifNull: ["$feed.fileUrl", false] },
+                  "$feed.fileUrl",
+                  {
+                    $cond: [
+                      { $ifNull: ["$feed.contentUrl", false] },
+                      "$feed.contentUrl",
+                      null,
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    ]);
+
+    // Return empty array if no results (frontend expects 200 OK with empty array, not 404)
+    if (!savedFeeds) {
+      return res.status(200).json({ savedFeeds: [] });
+    }
+
+    res.status(200).json({
+      message: "Saved feeds (from likes) retrieved successfully",
+      count: savedFeeds.length,
+      savedFeeds, // Root key must be savedFeeds
+    });
+  } catch (err) {
+    console.error("Error fetching liked feeds for saved:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
