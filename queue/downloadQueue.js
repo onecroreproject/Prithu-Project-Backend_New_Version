@@ -173,7 +173,7 @@ downloadQueue.process(async (job) => {
     const tempDir = path.join(__dirname, "../uploads/temp_processing", jobId);
     const finalOutputName = `processed_${jobId}.mp4`;
     const finalOutputPath = path.join(__dirname, "../uploads", finalOutputName);
-    const BACKEND_URL = process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com';
+    const BACKEND_URL = process.env.BACKEND_URL;
 
     try {
         const io = getIO();

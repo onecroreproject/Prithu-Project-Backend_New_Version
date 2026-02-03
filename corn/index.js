@@ -11,6 +11,7 @@ const notificationQueue = require("../queue/notificationQueue");
 
 // NEW: hashtag trending queue (includes worker inside)
 const hashtagTrendingQueue = require("../queue/hashTagTrendingQueue");
+const cleanupInactiveSessions = require("../scripts/sessionCleanup");
 
 module.exports = ({ timezone = "Asia/Kolkata" } = {}) => {
   // Deactivate subscriptions — Midnight
@@ -63,6 +64,15 @@ module.exports = ({ timezone = "Asia/Kolkata" } = {}) => {
     "0 0 * * *",
     () => {
       dailyAnalyticsQueue.add({});
+    },
+    { timezone }
+  );
+
+  // Child Admin Session Cleanup — Every 15 minutes
+  cron.schedule(
+    "*/15 * * * *",
+    () => {
+      cleanupInactiveSessions();
     },
     { timezone }
   );

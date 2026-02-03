@@ -5,8 +5,10 @@ require('dotenv').config();
 const bcrypt = require('bcrypt');
 const otpStore = new Map();
 const ChildAdmin = require('../../models/childAdminModel');
+const ChildAdminActivity = require('../../models/childAdminActivityModel');
 const ProfileSettings = require("../../models/profileSettingModel");
 const { sendTemplateEmail } = require("../../utils/templateMailer");
+const mongoose = require('mongoose');
 
 
 // Create nodemailer transporter
@@ -154,10 +156,27 @@ exports.adminLogin = async (req, res) => {
       // Get granted permissions from child admin
       grantedPermissions = child.grantedPermissions || [];
 
-      // ✅ Update Child Admin Status
+      // ✅ Close previous offline record if exists
+      const now = new Date();
+      const lastOffline = await ChildAdminActivity.findOne({
+        childAdminId: child._id,
+        offlineTo: null
+      }).sort({ createdAt: -1 });
+
+      if (lastOffline) {
+        lastOffline.offlineTo = now;
+        const durationMs = now - lastOffline.offlineFrom;
+        const hours = Math.floor(durationMs / (1000 * 60 * 60));
+        const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+        lastOffline.duration = `${hours}h ${minutes}m`;
+        lastOffline.status = "Offline"; // Record is now a completed "Offline" period
+        await lastOffline.save();
+      }
+
       await ChildAdmin.findByIdAndUpdate(child._id, {
         isOnline: true,
-        lastLoginTime: new Date(),
+        lastLoginTime: now,
+        lastActivityTime: now
       });
     }
 
@@ -426,9 +445,21 @@ exports.adminLogout = async (req, res) => {
     const role = req.role;
 
     if (role === 'Child_Admin') {
+      const now = new Date();
+
+      // Create new offline record starting now
+      await ChildAdminActivity.create({
+        childAdminId: adminId,
+        date: now.toISOString().split('T')[0],
+        offlineFrom: now,
+        loginTime: now, // Keeping for compatibility or reference
+        status: "Offline"
+      });
+
       await ChildAdmin.findByIdAndUpdate(adminId, {
         isOnline: false,
-        lastLogoutTime: new Date(),
+        lastLogoutTime: now,
+        currentSessionId: null
       });
     }
 
@@ -440,5 +471,75 @@ exports.adminLogout = async (req, res) => {
   } catch (error) {
     console.error("Logout error:", error);
     return res.status(500).json({ error: "Logout failed" });
+  }
+};
+
+// Heartbeat for activity tracking
+exports.childAdminHeartbeat = async (req, res) => {
+  try {
+    const adminId = req.Id;
+    const role = req.role;
+
+    if (role !== 'Child_Admin') {
+      return res.status(200).json({ success: true }); // Ignore for main admin
+    }
+
+    const now = new Date();
+    const child = await ChildAdmin.findById(adminId);
+
+    if (!child) return res.status(404).json({ error: "Child Admin not found" });
+
+    // If was offline, mark online and close offline record
+    if (!child.isOnline) {
+      const lastOffline = await ChildAdminActivity.findOne({
+        childAdminId: child._id,
+        offlineTo: null
+      }).sort({ createdAt: -1 });
+
+      if (lastOffline) {
+        lastOffline.offlineTo = now;
+        const durationMs = now - lastOffline.offlineFrom;
+        const hours = Math.floor(durationMs / (1000 * 60 * 60));
+        const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+        lastOffline.duration = `${hours}h ${minutes}m`;
+        await lastOffline.save();
+      }
+      child.isOnline = true;
+    }
+
+    child.lastActivityTime = now;
+    await child.save();
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Heartbeat error:", error);
+    return res.status(500).json({ error: "Heartbeat failed" });
+  }
+};
+
+// Admin Dashboard Stats
+exports.getChildAdminStats = async (req, res) => {
+  try {
+    if (req.role !== 'Admin') {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    const totalChildAdmins = await ChildAdmin.countDocuments();
+    const onlineChildAdmins = await ChildAdmin.countDocuments({ isOnline: true });
+
+    // Get offline history (recent 50)
+    const offlineHistory = await ChildAdminActivity.find({ status: "Offline" })
+      .populate('childAdminId', 'userName email')
+      .sort({ createdAt: -1 })
+      .limit(50);
+
+    return res.status(200).json({
+      totalChildAdmins,
+      onlineChildAdmins,
+      offlineHistory
+    });
+  } catch (error) {
+    console.error("Stats error:", error);
+    return res.status(500).json({ error: "Failed to fetch stats" });
   }
 };

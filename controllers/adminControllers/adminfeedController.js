@@ -197,7 +197,7 @@ exports.adminFeedUpload = async (req, res) => {
             senderId: adminId,
             title: "New Fresh Content! 🔥",
             message: `Hi \${username}, check out this new feed! Download it and share 🔥❤️`,
-            image: isImage ? mediaUrl : (file.dimensions?.thumbnail || "/default-video-thumbnail.png"),
+            image: isImage ? mediaUrl : (file.dimensions?.thumbnail ? `${process.env.BACKEND_URL}/media/${file.dimensions.thumbnail}` : `${process.env.BACKEND_URL}/default-video-thumbnail.png`),
           }, {
             removeOnComplete: true,
             attempts: 3,

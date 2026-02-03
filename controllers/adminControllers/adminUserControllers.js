@@ -558,140 +558,16 @@ exports.getUserSocialMeddiaDetailWithIdForAdmin = async (req, res) => {
       .lean();
 
     // -------------------------------------------
-    // 6️⃣ FOLLOWERS (who follow this user)
     // -------------------------------------------
-    const followers = await Followers.find({ creatorId: userId })
-      .populate({
-        path: "followerId",
-        select: "userName email",
-      })
-      .lean();
-
-    const followerIds = followers.map((f) => f.followerId._id);
-
-    const followerProfiles = await ProfileSettings.find({
-      userId: { $in: followerIds },
-    })
-      .select("userId profileAvatar userName")
-      .lean();
-
-    const formattedFollowers = followers.map((f) => {
-      const p = followerProfiles.find(
-        (x) => x.userId.toString() === f.followerId._id.toString()
-      );
-      return {
-        _id: f.followerId._id,
-        userName: f.followerId.userName,
-        email: f.followerId.email,
-        profileAvatar: p?.profileAvatar || null,
-        followedAt: f.createdAt,
-      };
-    });
+    // 6️⃣ FOLLOWERS & FOLLOWING (Removed as requested)
+    // -------------------------------------------
+    const formattedFollowers = [];
+    const formattedFollowing = [];
 
     // -------------------------------------------
-    // 7️⃣ FOLLOWING (this user follows)
+    // 8️⃣ POSTS & ENGAGEMENTS (Removed as requested)
     // -------------------------------------------
-    const following = await Followers.find({ followerId: userId })
-      .populate({
-        path: "creatorId",
-        select: "userName email",
-      })
-      .lean();
-
-    const followingIds = following.map((f) => f.creatorId._id);
-
-    const followingProfiles = await ProfileSettings.find({
-      userId: { $in: followingIds },
-    })
-      .select("userId profileAvatar userName")
-      .lean();
-
-    const formattedFollowing = following.map((f) => {
-      const p = followingProfiles.find(
-        (x) => x.userId.toString() === f.creatorId._id.toString()
-      );
-      return {
-        _id: f.creatorId._id,
-        userName: f.creatorId.userName,
-        email: f.creatorId.email,
-        profileAvatar: p?.profileAvatar || null,
-        followedAt: f.createdAt,
-      };
-    });
-
-    // -------------------------------------------
-    // 8️⃣ GET ALL POSTS MADE BY USER
-    // -------------------------------------------
-    const posts = await Feed.find({
-      createdByAccount: userId,
-      roleRef: "User",
-    })
-      .select("type contentUrl category createdAt statsId hashtags")
-      .sort({ createdAt: -1 })
-      .lean();
-
-    const feedIds = posts.map((f) => f._id);
-
-    // -------------------------------------------
-    // 9️⃣ FEED ENGAGEMENTS (Likes, Saves, Shares)
-    // -------------------------------------------
-    const engagements = await UserFeedActions.find({
-      $or: [
-        { "likedFeeds.feedId": { $in: feedIds } },
-        { "savedFeeds.feedId": { $in: feedIds } },
-        { "sharedFeeds.feedId": { $in: feedIds } },
-      ],
-    })
-      .select("likedFeeds savedFeeds sharedFeeds downloadedFeeds")
-      .lean();
-
-    const engagementMap = {};
-    feedIds.forEach((id) => {
-      engagementMap[id] = {
-        likes: 0,
-        saved: 0,
-        shares: 0,
-        downloads: 0,
-      };
-    });
-
-    engagements.forEach((act) => {
-      act.likedFeeds?.forEach((l) => {
-        if (engagementMap[l.feedId]) engagementMap[l.feedId].likes++;
-      });
-      act.savedFeeds?.forEach((s) => {
-        if (engagementMap[s.feedId]) engagementMap[s.feedId].saved++;
-      });
-      act.sharedFeeds?.forEach((s) => {
-        if (engagementMap[s.feedId]) engagementMap[s.feedId].shares++;
-      });
-      act.downloadedFeeds?.forEach((d) => {
-        if (engagementMap[d.feedId]) engagementMap[d.feedId].downloads++;
-      });
-    });
-
-    // -------------------------------------------
-    // 🔟 COMMENTS ON USER POSTS
-    // -------------------------------------------
-    const comments = await UserComments.find({
-      feedId: { $in: feedIds },
-    })
-      .populate({
-        path: "userId",
-        select: "userName",
-      })
-      .lean();
-
-    const commentsMap = {};
-    feedIds.forEach((id) => (commentsMap[id] = []));
-
-    comments.forEach((c) => {
-      commentsMap[c.feedId].push({
-        commenterName: c.userId?.userName,
-        commentText: c.commentText,
-        createdAt: c.createdAt,
-      });
-    });
+    const formattedPosts = [];
 
     // -------------------------------------------
     // 1️⃣1️⃣ Reports by this user
@@ -708,11 +584,6 @@ exports.getUserSocialMeddiaDetailWithIdForAdmin = async (req, res) => {
     // -------------------------------------------
     // FINAL RESPONSE
     // -------------------------------------------
-    const formattedPosts = posts.map((p) => ({
-      ...p,
-      stats: engagementMap[p._id],
-      comments: commentsMap[p._id],
-    }));
 
     return res.status(200).json({
       success: true,

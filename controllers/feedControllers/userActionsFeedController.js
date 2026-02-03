@@ -645,7 +645,7 @@ exports.generateShareLink = async (req, res) => {
       mediaType = 'image';
     }
     // Handle local server images/videos
-    else if (feed.contentUrl && feed.contentUrl.includes('1croreprojects.com')) {
+    else if (feed.contentUrl) {
       // For local server, make sure the URL is publicly accessible
       ogImageUrl = feed.contentUrl;
       directMediaUrl = feed.contentUrl;
@@ -655,7 +655,7 @@ exports.generateShareLink = async (req, res) => {
       if (feed.type === 'video') {
         // Try to get thumbnail from files array
         if (feed.files && feed.files.length > 0 && feed.files[0].thumbnail) {
-          ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'} /media/${feed.files[0].thumbnail} `;
+          ogImageUrl = `${process.env.BACKEND_URL}/media/${feed.files[0].thumbnail}`;
         }
         // Try to find _thumb.jpg file
         else if (feed.files && feed.files.length > 0 && feed.files[0].localPath) {
@@ -666,11 +666,11 @@ exports.generateShareLink = async (req, res) => {
           if (fs.existsSync(thumbPath)) {
             const relativePath = thumbPath.split('/uploads/').pop();
             if (relativePath) {
-              ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'} /uploads/${relativePath} `;
+              ogImageUrl = `${process.env.BACKEND_URL}/uploads/${relativePath}`;
             }
           } else {
             // Use video thumbnail endpoint as fallback
-            ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'} /api/feed / video - thumbnail / ${feedId} `;
+            ogImageUrl = `${process.env.BACKEND_URL}/api/feed/video-thumbnail/${feedId}`;
           }
         }
       }
@@ -685,7 +685,7 @@ exports.generateShareLink = async (req, res) => {
       }
       // For video thumbnails
       if (feed.type === 'video' && firstFile.thumbnail) {
-        ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'} /media/${firstFile.thumbnail} `;
+        ogImageUrl = `${process.env.BACKEND_URL}/media/${firstFile.thumbnail}`;
       }
     }
 
@@ -693,14 +693,14 @@ exports.generateShareLink = async (req, res) => {
     if (!ogImageUrl && feed.localPath) {
       const pathPart = feed.localPath.split('/media/').pop();
       if (pathPart) {
-        ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'} /media/${pathPart} `;
+        ogImageUrl = `${process.env.BACKEND_URL}/media/${pathPart}`;
         directMediaUrl = ogImageUrl;
       }
     }
 
     // ULTIMATE FALLBACK: Use default OG image
     if (!ogImageUrl || !ogImageUrl.startsWith('http')) {
-      ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/default-og-image.jpg`;
+      ogImageUrl = `${process.env.BACKEND_URL}/default-og-image.jpg`;
     }
 
     // IMPORTANT: Validate the OG image URL is accessible
@@ -850,14 +850,14 @@ async function getOptimizedOGMedia(feed) {
     directMediaUrl = feed.contentUrl;
   }
   // Handle local server images/videos
-  else if (feed.contentUrl && feed.contentUrl.includes('1croreprojects.com')) {
+  else if (feed.contentUrl) {
     ogImageUrl = feed.contentUrl;
     directMediaUrl = feed.contentUrl;
 
     // If it's a video and we have thumbnail
     if (feed.type === 'video') {
       if (feed.files && feed.files.length > 0 && feed.files[0].thumbnail) {
-        ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${feed.files[0].thumbnail}`;
+        ogImageUrl = `${process.env.BACKEND_URL}/media/${feed.files[0].thumbnail}`;
       }
       else if (feed.files && feed.files.length > 0 && feed.files[0].localPath) {
         const videoPath = feed.files[0].localPath;
@@ -867,10 +867,10 @@ async function getOptimizedOGMedia(feed) {
         if (fs.existsSync(thumbPath)) {
           const relativePath = thumbPath.split('/uploads/').pop();
           if (relativePath) {
-            ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/uploads/${relativePath}`;
+            ogImageUrl = `${process.env.BACKEND_URL}/uploads/${relativePath}`;
           }
         } else {
-          ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/api/feed/video-thumbnail/${feed._id}`;
+          ogImageUrl = `${process.env.BACKEND_URL}/api/feed/video-thumbnail/${feed._id}`;
         }
       }
     }
@@ -884,7 +884,7 @@ async function getOptimizedOGMedia(feed) {
       directMediaUrl = firstFile.url;
     }
     if (feed.type === 'video' && firstFile.thumbnail) {
-      ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${firstFile.thumbnail}`;
+      ogImageUrl = `${process.env.BACKEND_URL}/media/${firstFile.thumbnail}`;
     }
   }
 
@@ -892,14 +892,14 @@ async function getOptimizedOGMedia(feed) {
   if (!ogImageUrl && feed.localPath) {
     const pathPart = feed.localPath.split('/media/').pop();
     if (pathPart) {
-      ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/media/${pathPart}`;
+      ogImageUrl = `${process.env.BACKEND_URL}/media/${pathPart}`;
       directMediaUrl = ogImageUrl;
     }
   }
 
   // ULTIMATE FALLBACK: Use default OG image
   if (!ogImageUrl || !ogImageUrl.startsWith('http')) {
-    ogImageUrl = `${process.env.BACKEND_URL || 'https://prithubackend.1croreprojects.com'}/default-og-image.jpg`;
+    ogImageUrl = `${process.env.BACKEND_URL}/default-og-image.jpg`;
   }
 
   // Set ogVideoUrl for videos

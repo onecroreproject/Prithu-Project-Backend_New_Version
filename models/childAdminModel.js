@@ -74,6 +74,8 @@ const childAdminSchema = new mongoose.Schema(
     isOnline: { type: Boolean, default: false },
     lastLoginTime: { type: Date, default: null },
     lastLogoutTime: { type: Date, default: null },
+    lastActivityTime: { type: Date, default: null },
+    currentSessionId: { type: mongoose.Schema.Types.ObjectId, ref: "Child_Admin_Activity", default: null },
   },
   { timestamps: true }
 );

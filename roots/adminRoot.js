@@ -16,6 +16,8 @@ const {
     verifyToken,
     checkAvailability,
     adminLogout,
+    childAdminHeartbeat,
+    getChildAdminStats,
 } = require('../controllers/authenticationControllers/adminAuthController');
 
 const {
@@ -55,7 +57,7 @@ const {
 } = require('../controllers/creatorControllers/creatorDetailController');
 
 const {
- getTrendingFeeds,
+    getTrendingFeeds,
 } = require('../controllers/feedControllers/feedsController');
 const {
     adminAddCategory,
@@ -165,6 +167,8 @@ router.post('/auth/admin/reset-password', adminPasswordReset);
 router.get('/admin/verify-token', auth, verifyToken);
 router.get("/auth/check-availability", checkAvailability);
 router.post('/auth/admin/logout', auth, adminLogout);
+router.post('/auth/child-admin/heartbeat', auth, childAdminHeartbeat);
+router.get('/admin/child-admin-stats', auth, getChildAdminStats);
 
 /* --------------------- Admin Profile API --------------------- */
 router.get('/admin/profile', auth, getAdminProfileDetail);
