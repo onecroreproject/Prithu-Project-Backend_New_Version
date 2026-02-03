@@ -2,6 +2,8 @@ const multer = require("multer");
 const path = require("path");
 const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
+const { getVideoDurationInSeconds } = require("get-video-duration");
+const { Readable } = require("stream");
 
 // Use memory storage so we can process the buffer and then decide where to save it
 const storage = multer.memoryStorage();
@@ -39,32 +41,57 @@ const processUploadedFiles = async (req, res, next) => {
     if (!files) return next();
 
     try {
-        const processFile = (file) => {
+        const processFile = async (file) => {
             const hash = crypto.createHash('md5').update(file.buffer).digest('hex');
             file.fileHash = hash;
+
+            // Extract duration for video and audio
+            if (file.mimetype.startsWith('video/') || file.mimetype.startsWith('audio/')) {
+                try {
+                    const duration = await getVideoDurationInSeconds(Readable.from(file.buffer));
+                    file.duration = duration;
+                } catch (durationErr) {
+                    console.error("Failed to extract duration:", durationErr);
+                    file.duration = null;
+                }
+            } else {
+                file.duration = null;
+            }
+
             return file;
         };
 
         if (Array.isArray(files)) {
-            req.localFiles = files.map(processFile);
+            // Use Promise.all since processFile is now async
+            req.localFilesArr = await Promise.all(files.map(processFile));
+            req.localFiles = req.localFilesArr;
         } else if (typeof files === 'object') {
             // For .fields() or .array()
             req.localFiles = {};
             for (const fieldname in files) {
-                req.localFiles[fieldname] = files[fieldname].map(processFile);
+                req.localFiles[fieldname] = await Promise.all(files[fieldname].map(processFile));
             }
 
             // Flatten for controllers that expect req.localFiles as an array (like adminFeedUpload)
-            // But we should be careful. Let's provide both or stay compatible.
             if (files['files']) {
-                req.localFilesArr = files['files'].map(processFile);
+                req.localFilesArr = await Promise.all(files['files'].map(processFile));
+            } else {
+                // If there are other file fields, maybe flatten them all?
+                // For now, let's keep it specific to the known fields
+                let flattened = [];
+                for (const fieldname in req.localFiles) {
+                    flattened = flattened.concat(req.localFiles[fieldname]);
+                }
+                req.localFilesArr = flattened;
             }
+
             if (files['audio']) {
-                req.localAudioFile = processFile(files['audio'][0]);
+                req.localAudioFile = await processFile(files['audio'][0]);
             }
         } else if (req.file) {
             // For .single()
-            req.localFile = processFile(req.file);
+            req.localFile = await processFile(req.file);
+            req.localFilesArr = [req.localFile];
         }
 
         next();

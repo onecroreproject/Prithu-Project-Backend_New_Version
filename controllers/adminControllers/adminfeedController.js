@@ -126,6 +126,7 @@ exports.adminFeedUpload = async (req, res) => {
           uploadMode: currentUploadType,
           language,
           category: categoryId,
+          duration: file.duration, // Top-level duration
           mediaUrl,
           files: [{
             url: mediaUrl,
