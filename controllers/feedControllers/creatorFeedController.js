@@ -29,6 +29,7 @@ exports.creatorFeedUpload = async (req, res) => {
     const {
       language = "en",
       categoryId,
+      categoryIds: inputCategoryIds,
       type, // image | video
       scheduleDate,
       dec = "",
@@ -42,11 +43,13 @@ exports.creatorFeedUpload = async (req, res) => {
       location
     } = req.body;
 
-    if (!categoryId || !type) {
-      return res.status(400).json({ message: "categoryId and type are required" });
+    const categoryIds = Array.isArray(inputCategoryIds) ? inputCategoryIds : (categoryId ? [categoryId] : (inputCategoryIds ? [inputCategoryIds] : []));
+
+    if (!categoryIds.length || !type) {
+      return res.status(400).json({ message: "categoryIds and type are required" });
     }
 
-    const categoryDoc = await Categories.findById(categoryId).lean();
+    const categoryDoc = await Categories.findById(categoryIds[0]).lean();
     if (!categoryDoc) {
       return res.status(400).json({ message: "Invalid categoryId" });
     }
@@ -92,7 +95,7 @@ exports.creatorFeedUpload = async (req, res) => {
     const feedData = {
       type,
       language,
-      category: categoryId,
+      category: categoryIds,
       createdByAccount: userId,
       roleRef: userRole,
       contentUrl: url,
@@ -148,9 +151,10 @@ exports.creatorFeedUpload = async (req, res) => {
 
     const newFeed = await Feed.create(feedData);
 
-    await Categories.findByIdAndUpdate(categoryId, {
-      $addToSet: { feedIds: newFeed._id }
-    });
+    await Categories.updateMany(
+      { _id: { $in: categoryIds } },
+      { $addToSet: { feedIds: newFeed._id } }
+    );
 
     return res.status(201).json({
       message: scheduleDate ? "Feed scheduled successfully" : "Feed uploaded successfully",
@@ -184,8 +188,11 @@ exports.creatorFeedDelete = async (req, res) => {
     await Feed.findByIdAndDelete(feedId);
 
     // Also remove from category
-    if (feed.category) {
-      await Categories.findByIdAndUpdate(feed.category, { $pull: { feedIds: feedId } });
+    if (feed.category && feed.category.length) {
+      await Categories.updateMany(
+        { _id: { $in: feed.category } },
+        { $pull: { feedIds: feedId } }
+      );
     }
 
     return res.status(200).json({ message: "Feed deleted successfully" });

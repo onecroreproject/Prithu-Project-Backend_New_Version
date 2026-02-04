@@ -1,6 +1,7 @@
-const Categories= require('../../models/categorySchema');
+const Categories = require('../../models/categorySchema');
 const { v2: cloudinary } = require("cloudinary");
-const Feed=require('../../models/feedModel');
+const Feed = require('../../models/feedModel');
+const { clearCategoryCache } = require('../categoriesController');
 
 
 
@@ -13,10 +14,10 @@ exports.adminAddCategory = async (req, res) => {
 
     // ✅ Convert string into array
     const inputCategories = names
-      .split(",") 
+      .split(",")
       .map((n) => n.trim())
-      .filter((n) => n.length > 0) 
-      .map((name) => name.charAt(0).toUpperCase() + name.slice(1)); 
+      .filter((n) => n.length > 0)
+      .map((name) => name.charAt(0).toUpperCase() + name.slice(1));
 
     if (!inputCategories.length) {
       return res.status(400).json({ message: "No valid category names provided" });
@@ -43,6 +44,8 @@ exports.adminAddCategory = async (req, res) => {
       newCategories.map((name) => ({ name }))
     );
 
+    clearCategoryCache(); // 👈 Clear cache for instant UI update
+
     return res.status(201).json({
       message: "Categories added successfully",
       addedCategories: createdCategories.map((cat) => ({
@@ -64,7 +67,7 @@ exports.adminAddCategory = async (req, res) => {
 
 exports.deleteCategory = async (req, res) => {
   try {
-    const { id } = req.params; // expects category ID in body
+    const id = req.params.id || req.body.id || req.body.categoryId;
 
     if (!id) {
       return res.status(400).json({ message: "Category ID is required" });
@@ -95,6 +98,8 @@ exports.deleteCategory = async (req, res) => {
 
     // ✅ Finally, delete the category itself
     await Categories.findByIdAndDelete(id);
+
+    clearCategoryCache(); // 👈 Clear cache for instant UI update
 
     return res.status(200).json({
       message: "Category and related feeds deleted successfully",
@@ -131,6 +136,8 @@ exports.updateCategory = async (req, res) => {
     if (!category) {
       return res.status(404).json({ message: "Category not found" });
     }
+
+    clearCategoryCache(); // 👈 Clear cache for instant UI update
 
     res.status(200).json({
       message: "Category updated successfully",

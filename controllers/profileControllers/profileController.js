@@ -8,6 +8,7 @@ const ChildAdmin = require("../../models/childAdminModel");
 const UserLanguage = require('../../models/userModels/userLanguageModel');
 const { calculateAge } = require("../../middlewares/helper/calculateAge");
 const { removeImageBackground } = require("../../middlewares/helper/removeImageBackground");
+const { getMediaUrl } = require("../../utils/storageEngine");
 const DEFAULT_COVER_PHOTO = "https://res.cloudinary.com/demo/image/upload/v1730123456/default-cover.jpg";
 const Following = require("../../models/userFollowingModel");
 const CreatorFollower = require("../../models/creatorFollowerModel");
@@ -213,6 +214,12 @@ exports.userProfileDetailUpdate = async (req, res) => {
       .populate("userId", "userName email role")
       .lean();
 
+    if (populatedProfile) {
+      populatedProfile.profileAvatar = getMediaUrl(populatedProfile.profileAvatar);
+      populatedProfile.modifyAvatar = getMediaUrl(populatedProfile.modifyAvatar);
+      populatedProfile.coverPhoto = getMediaUrl(populatedProfile.coverPhoto);
+    }
+
     return res.status(200).json({
       message: "✅ User profile updated successfully",
       profile: populatedProfile,
@@ -311,6 +318,12 @@ exports.adminProfileDetailUpdate = async (req, res) => {
       .populate("adminId", "userName email role")
       .lean();
 
+    if (populatedProfile) {
+      populatedProfile.profileAvatar = getMediaUrl(populatedProfile.profileAvatar);
+      populatedProfile.modifyAvatar = getMediaUrl(populatedProfile.modifyAvatar);
+      populatedProfile.coverPhoto = getMediaUrl(populatedProfile.coverPhoto);
+    }
+
     return res.status(200).json({
       message: "Admin profile updated successfully",
       profile: populatedProfile,
@@ -406,6 +419,12 @@ exports.childAdminProfileDetailUpdate = async (req, res) => {
     const populatedProfile = await Profile.findById(updatedProfile._id)
       .populate("childAdminId", "userName email role parentAdminId")
       .lean();
+
+    if (populatedProfile) {
+      populatedProfile.profileAvatar = getMediaUrl(populatedProfile.profileAvatar);
+      populatedProfile.modifyAvatar = getMediaUrl(populatedProfile.modifyAvatar);
+      populatedProfile.coverPhoto = getMediaUrl(populatedProfile.coverPhoto);
+    }
 
     return res.status(200).json({
       message: "Child Admin profile updated successfully",
@@ -760,46 +779,48 @@ exports.getUserProfileDetail = async (req, res) => {
     // ✅ Compute age safely
     const age = dateOfBirth ? calculateAge(dateOfBirth) : null;
 
+    const finalProfile = {
+      userId: user._id || userId,
+      name,
+      profileSummary,
+      lastName,
+      bio,
+      maritalStatus,
+      phoneNumber,
+      whatsAppNumber,
+      dateOfBirth,
+      maritalDate,
+      gender,
+      theme,
+      language,
+      timezone,
+      privacy,
+      notifications,
+      country,
+      city,
+      address,
+      coverPhoto: getMediaUrl(coverPhoto || DEFAULT_COVER_PHOTO),
+      details,
+      profileAvatar: getMediaUrl(profileAvatar),
+      modifyAvatar: getMediaUrl(modifyAvatar),
+      userName: user.userName || null,
+      userEmail: user.email || null,
+      age,
+      socialLinks: {
+        facebook: socialLinks.facebook || "",
+        instagram: socialLinks.instagram || "",
+        twitter: socialLinks.twitter || "",
+        linkedin: socialLinks.linkedin || "",
+        github: socialLinks.github || "",
+        youtube: socialLinks.youtube || "",
+        website: socialLinks.website || "",
+      },
+    };
+
     // ✅ Build clean response
     return res.status(200).json({
       message: "Profile fetched successfully",
-      profile: {
-        userId: user._id || userId, // Include user ID in response
-        name,
-        profileSummary,
-        lastName,
-        bio,
-        maritalStatus,
-        phoneNumber,
-        whatsAppNumber,
-        dateOfBirth,
-        maritalDate,
-        gender,
-        theme,
-        language,
-        timezone,
-        privacy,
-        notifications,
-        country,
-        city,
-        address,
-        coverPhoto,
-        details,
-        profileAvatar,
-        modifyAvatar,
-        userName: user.userName || null,
-        userEmail: user.email || null,
-        age,
-        socialLinks: {
-          facebook: socialLinks.facebook || "",
-          instagram: socialLinks.instagram || "",
-          twitter: socialLinks.twitter || "",
-          linkedin: socialLinks.linkedin || "",
-          github: socialLinks.github || "",
-          youtube: socialLinks.youtube || "",
-          website: socialLinks.website || "",
-        },
-      },
+      profile: finalProfile
     });
   } catch (error) {
     console.error("❌ Error fetching profile:", error);

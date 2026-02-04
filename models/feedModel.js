@@ -25,11 +25,13 @@ const feedSchema = new mongoose.Schema(
       type: String,
       default: "en"
     },
-    category: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Categories",
-      required: true,
-    },
+    category: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Categories",
+        required: true,
+      },
+    ],
     // Duration for videos and audio
     duration: { type: Number, default: null },
     // Primary media URL

@@ -19,6 +19,7 @@ const Feed = require("../../models/feedModel.js");
 const Notification = require("../../models/notificationModel.js");
 const { createAndSendNotification } = require("../../middlewares/helper/socketNotification.js");
 const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
+const { getMediaUrl } = require("../../utils/storageEngine");
 const idToString = (id) => (id ? id.toString() : null);
 const downloadQueue = require("../../queue/downloadQueue");
 const { processFeedMedia } = require("../../utils/feedMediaProcessor");
@@ -79,11 +80,12 @@ exports.likeFeed = async (req, res) => {
 
       if (feed && ownerId && ownerId.toString() !== userId.toString()) {
         // ✅ pick thumbnail/image for notification
-        const previewImage =
+        const previewImage = getMediaUrl(
           feed.files?.[0]?.thumbnail ||
           feed.files?.[0]?.url ||
           feed.mediaUrl ||
-          "";
+          ""
+        );
 
         await createAndSendNotification({
           senderId: userId,
@@ -310,7 +312,7 @@ exports.directDownloadFeed = async (req, res) => {
       email: visibility.email === 'public' ? (user.email || profile?.email) : null,
       phoneNumber: visibility.phoneNumber === 'public' ? (profile?.phoneNumber || user.phoneNumber || user.phone) : null,
       profileAvatar: (visibility.profileAvatar === 'public')
-        ? (profile?.modifyAvatar || profile?.profileAvatar || null)
+        ? getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null)
         : null,
     };
 
@@ -471,7 +473,7 @@ exports.requestDownloadFeed = async (req, res) => {
       userId,
       viewer: {
         userName: viewerProfile?.userName || userRecord?.userName || viewerProfile?.name || "User",
-        profileAvatar: viewerProfile?.modifyAvatar || viewerProfile?.profileAvatar || null,
+        profileAvatar: getMediaUrl(viewerProfile?.modifyAvatar || viewerProfile?.profileAvatar || null),
         name: viewerProfile?.name || "",
         email: userRecord?.email || "",
         phone: viewerProfile?.phoneNumber || ""
@@ -527,6 +529,9 @@ exports.getDownloadJobStatus = async (req, res) => {
     let result = null;
     if (state === 'completed') {
       result = job.returnvalue; // { downloadUrl: ... }
+      if (result && result.downloadUrl) {
+        result.downloadUrl = getMediaUrl(result.downloadUrl);
+      }
     }
 
     res.json({
@@ -718,8 +723,8 @@ exports.generateShareLink = async (req, res) => {
       caption: actualCaption,
       userName,
       mediaType,
-      directMediaUrl,
-      profileAvatar
+      directMediaUrl: getMediaUrl(directMediaUrl),
+      profileAvatar: getMediaUrl(profileAvatar)
     });
 
 

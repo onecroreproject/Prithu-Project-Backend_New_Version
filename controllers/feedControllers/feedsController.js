@@ -21,6 +21,7 @@ const path = require("path");
 const { google } = require("googleapis");
 const { oAuth2Client } = require("../../middlewares/services/googleDriveMedia/googleDriverAuth");
 const ProfileVisibility = require("../../models/profileVisibilitySchema.js")
+const { getMediaUrl } = require("../../utils/storageEngine");
 
 
 
@@ -108,7 +109,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
         ? viewerProfile?.phoneNumber || null
         : null,
 
-      profileAvatar: viewerProfile?.modifyAvatar || "https://via.placeholder.com/150",
+      profileAvatar: getMediaUrl(viewerProfile?.modifyAvatar) || "https://via.placeholder.com/150",
       socialLinks: safeSocialLinks // Use filtered social links
     };
 
@@ -339,6 +340,12 @@ exports.getAllFeedsByUserId = async (req, res) => {
         ...feed,
         feedId: feed._id,
         uploadType: feed.uploadType || 'normal',
+        mediaUrl: getMediaUrl(feed.mediaUrl),
+
+        creatorData: {
+          ...feed.creatorData,
+          avatar: getMediaUrl(feed.creatorData?.avatar)
+        },
 
         // ✅ Footer Configuration with Privacy-Aware Social Icons
         footerDisplay: isTemplateMode
@@ -656,11 +663,13 @@ exports.getFeedsByHashtag = async (req, res) => {
        CLEAN FINAL FEED FORMAT
     -------------------------------------------------- */
     const finalFeeds = feeds.map((f) => ({
-      ...f,
-      avatarToUse:
+      avatarToUse: getMediaUrl(
         f.modifyAvatarFromProfile ||
         f.profileAvatar ||
-        process.env.DEFAULT_AVATAR,
+        process.env.DEFAULT_AVATAR
+      ),
+
+      contentUrl: getMediaUrl(f.contentUrl),
 
       timeAgo: feedTimeCalculator(f.createdAt),
       stats: {
@@ -903,9 +912,15 @@ exports.getSingleFeedById = async (req, res) => {
       return res.status(404).json({ message: "Feed not found" });
     }
 
+    const enrichedFeed = {
+      ...result[0],
+      contentUrl: getMediaUrl(result[0].contentUrl),
+      profileAvatar: getMediaUrl(result[0].profileAvatar)
+    };
+
     res.status(200).json({
       message: "Feed retrieved successfully",
-      feed: result[0]
+      feed: enrichedFeed
     });
 
   } catch (err) {
@@ -1072,7 +1087,7 @@ exports.getFeedsByAccountId = async (req, res) => {
         type: feed.type,
         language: feed.language,
         category: feed.category,
-        contentUrl,
+        contentUrl: getMediaUrl(contentUrl),
         likesCount: likesCount[fid] || 0,
         downloadsCount: downloadsCount[fid] || 0,
         shareCount: sharesCount[fid] || 0,
@@ -1089,7 +1104,7 @@ exports.getFeedsByAccountId = async (req, res) => {
           comments: commentsCount[fid] || 0
         },
         userName: profile?.userName || "Unknown",
-        profileAvatar: profile?.profileAvatar,
+        profileAvatar: getMediaUrl(profile?.profileAvatar),
       };
     });
 
@@ -1392,7 +1407,8 @@ exports.getFeedsByCreator = async (req, res) => {
 
         return {
           ...feed,
-          avatarToUse,
+          contentUrl: getMediaUrl(feed.contentUrl),
+          avatarToUse: getMediaUrl(avatarToUse),
           themeColor,
           timeAgo: feedTimeCalculator(feed.createdAt)
         };

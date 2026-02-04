@@ -2,6 +2,7 @@ const Frame = require("../../models/frameModel");
 const { deleteLocalFrame } = require("../../middlewares/helper/frameUpload");
 const fs = require("fs");
 const path = require("path");
+const { getMediaUrl } = require("../../utils/storageEngine");
 
 // Upload frames
 exports.uploadFrames = async (req, res) => {
@@ -10,11 +11,8 @@ exports.uploadFrames = async (req, res) => {
     if (!files || files.length === 0)
       return res.status(400).json({ message: "No frame files uploaded" });
 
-    const host = (process.env.BACKEND_URL || '').replace(/\/$/, "");
-    const uploadedFrames = [];
-
     for (const file of files) {
-      const url = `${host}/media/frames/${file._savedName}`;
+      const url = getMediaUrl(`/media/frames/${file._savedName}`);
 
       const newFrame = await Frame.create({
         name: path.parse(file.originalname).name,
@@ -36,8 +34,12 @@ exports.uploadFrames = async (req, res) => {
 // Get all active frames
 exports.getAllFrames = async (req, res) => {
   try {
-    const frames = await Frame.find({ isActive: true });
-    res.json({ success: true, frames });
+    const frames = await Frame.find({ isActive: true }).lean();
+    const enrichedFrames = frames.map(f => ({
+      ...f,
+      url: getMediaUrl(f.url)
+    }));
+    res.json({ success: true, frames: enrichedFrames });
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch frames" });
   }

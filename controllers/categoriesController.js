@@ -33,8 +33,9 @@ exports.getAllCategories = async (req, res) => {
       return res.status(404).json({ message: "No categories found" });
     }
 
-    // Step 2: Aggregate feed stats by category (category stored as ObjectId)
+    // Step 2: Aggregate feed stats by category (category stored as Array of ObjectId)
     const feedStats = await Feed.aggregate([
+      { $unwind: "$category" },
       {
         $group: {
           _id: "$category", // ObjectId reference to Categories
@@ -247,6 +248,10 @@ exports.saveInterestedCategory = async (req, res) => {
 // In-memory cache for category stats
 const categoryStatsCache = new Map();
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+exports.clearCategoryCache = () => {
+  categoryStatsCache.clear();
+};
 
 exports.getfeedWithCategoryWithId = async (req, res) => {
   try {

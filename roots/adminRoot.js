@@ -191,6 +191,9 @@ router.get("/get/trending/feed", adminGetTrendingFeeds);
 /* --------------------- Admin Category API --------------------- */
 router.post('/admin/add/feed/category', adminAddCategory);
 router.delete('/admin/feed/category/:id', deleteCategory);
+router.delete('/admin/delete/category/:id', deleteCategory);
+router.delete('/delete/category/:id', deleteCategory);
+router.delete('/delete/category', deleteCategory); // For body-based ID
 router.get('/admin/get/feed/category', getAllCategories);
 router.put('/admin/update/category', updateCategory);
 

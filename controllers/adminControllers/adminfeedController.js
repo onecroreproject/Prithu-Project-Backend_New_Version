@@ -5,7 +5,7 @@ const Feed = require("../../models/feedModel");
 const ProfileSettings = require("../../models/profileSettingModel");
 const Account = require("../../models/accountSchemaModel");
 const User = require("../../models/userModels/userModel");
-const { saveFile } = require("../../utils/storageEngine");
+const { saveFile, getMediaUrl } = require("../../utils/storageEngine");
 const mongoose = require("mongoose");
 const { prithuDB } = require("../../database");
 const notificationQueue = require("../../queue/notificationQueue");
@@ -31,9 +31,9 @@ exports.adminFeedUpload = async (req, res) => {
   try {
     const adminId = req.Id || "68edd60dff4c9aa0a69663ba";
     const roleRef = req.role || "Admin";
-    const mediaFiles = req.localFiles || [];
+    const mediaFiles = req.localFilesArr || [];
     const audioFile = req.localAudioFile || null;
-    const { categoryId: globalCategoryId, language = "en", caption: globalCaption, designData: globalDesignData, scheduleTime: globalScheduleTime, audience = "public", perFileMetadata } = req.body;
+    const { categoryId: globalCategoryId, categoryIds: globalCategoryIds, language = "en", caption: globalCaption, designData: globalDesignData, scheduleTime: globalScheduleTime, audience = "public", perFileMetadata } = req.body;
 
     if (!mediaFiles.length) {
       return res.status(400).json({ success: false, message: "No media files provided" });
@@ -77,17 +77,21 @@ exports.adminFeedUpload = async (req, res) => {
     for (const file of mediaFiles) {
       try {
         const specificMetadata = fileMetadataMap[file.originalname] || {};
-        const categoryId = specificMetadata.categoryId || globalCategoryId;
+        const categoryIdInput = specificMetadata.categoryId || specificMetadata.categoryIds || globalCategoryId || globalCategoryIds;
+
+        // Ensure categoryIds is always an array
+        const categoryIds = Array.isArray(categoryIdInput) ? categoryIdInput : (categoryIdInput ? [categoryIdInput] : []);
+
         const caption = specificMetadata.caption || globalCaption || "";
         const scheduleTime = specificMetadata.scheduleTime || globalScheduleTime;
         const designData = specificMetadata.designData || globalDesignData;
 
-        if (!categoryId) throw new Error("Category ID is required");
+        if (!categoryIds.length) throw new Error("Category ID(s) are required");
 
-        const category = await Category.findById(categoryId).lean();
-        if (!category) throw new Error("Category not found");
+        const categoryDoc = await Category.findById(categoryIds[0]).lean();
+        if (!categoryDoc) throw new Error("Primary category not found");
 
-        const categorySlug = category.name.toLowerCase().replace(/\s+/g, '-');
+        const categorySlug = categoryDoc.name.toLowerCase().replace(/\s+/g, '-');
         const isImage = file.mimetype.startsWith("image/");
 
         if (io) io.to(adminId).emit("upload_progress", { filename: file.originalname, percent: 10 });
@@ -125,7 +129,7 @@ exports.adminFeedUpload = async (req, res) => {
           postType: currentPostType,
           uploadMode: currentUploadType,
           language,
-          category: categoryId,
+          category: categoryIds,
           duration: file.duration, // Top-level duration
           mediaUrl,
           files: [{
@@ -171,14 +175,24 @@ exports.adminFeedUpload = async (req, res) => {
         };
 
         const savedFeed = await new Feed(feedDoc).save();
-        await Category.findByIdAndUpdate(categoryId, { $addToSet: { feedIds: savedFeed._id } });
+
+        // Update all categories
+        await Category.updateMany(
+          { _id: { $in: categoryIds } },
+          { $addToSet: { feedIds: savedFeed._id } }
+        );
 
         // ✅ REAL-TIME BROADCAST: Fetch creator profile to enrich the feed data for users
         let creatorProfile = null;
         if (roleRef === "Admin") {
-          creatorProfile = await ProfileSettings.findOne({ adminId }).select("userName profileAvatar").lean();
+          creatorProfile = await ProfileSettings.findOne({ adminId }).select("userName profileAvatar modifyAvatar").lean();
         } else if (roleRef === "Child_Admin") {
-          creatorProfile = await ProfileSettings.findOne({ childAdminId: adminId }).select("userName profileAvatar").lean();
+          creatorProfile = await ProfileSettings.findOne({ childAdminId: adminId }).select("userName profileAvatar modifyAvatar").lean();
+        }
+
+        if (creatorProfile) {
+          creatorProfile.profileAvatar = getMediaUrl(creatorProfile.profileAvatar);
+          creatorProfile.modifyAvatar = getMediaUrl(creatorProfile.modifyAvatar);
         }
 
         if (io) {
@@ -197,7 +211,7 @@ exports.adminFeedUpload = async (req, res) => {
             senderId: adminId,
             title: "New Fresh Content! 🔥",
             message: `Hi \${username}, check out this new feed! Download it and share 🔥❤️`,
-            image: isImage ? mediaUrl : (file.dimensions?.thumbnail ? `${process.env.BACKEND_URL}/media/${file.dimensions.thumbnail}` : `${process.env.BACKEND_URL}/default-video-thumbnail.png`),
+            image: isImage ? getMediaUrl(mediaUrl) : (file.dimensions?.thumbnail ? getMediaUrl(`/media/${file.dimensions.thumbnail}`) : getMediaUrl('/default-video-thumbnail.png')),
           }, {
             removeOnComplete: true,
             attempts: 3,
@@ -220,7 +234,7 @@ exports.adminFeedUpload = async (req, res) => {
 exports.bulkFeedUpload = async (req, res) => {
   try {
     const adminId = req.Id;
-    const files = req.localFiles || [];
+    const files = req.localFilesArr || [];
 
     if (files.length === 0) {
       return res.status(400).json({ success: false, message: "No files to process" });
@@ -238,9 +252,12 @@ exports.bulkFeedUpload = async (req, res) => {
         const feedType = file.mimetype.startsWith('image/') ? 'image' :
           file.mimetype.startsWith('video/') ? 'video' : 'audio';
 
+        const categoryIdInput = req.body.categoryId || req.body.categoryIds;
+        const categoryIds = Array.isArray(categoryIdInput) ? categoryIdInput : (categoryIdInput ? [categoryIdInput] : []);
+
         let categorySlug = 'bulk-upload';
-        if (req.body.categoryId) {
-          const category = await Category.findById(req.body.categoryId).lean();
+        if (categoryIds.length) {
+          const category = await Category.findById(categoryIds[0]).lean();
           if (category) categorySlug = category.name.toLowerCase().replace(/\s+/g, '-');
         }
 
@@ -253,7 +270,7 @@ exports.bulkFeedUpload = async (req, res) => {
         const feedData = {
           type: feedType,
           language: "en",
-          category: req.body.categoryId || null,
+          category: categoryIds,
           contentUrl: fileSave.url,
           files: [{
             url: fileSave.url,
@@ -274,6 +291,14 @@ exports.bulkFeedUpload = async (req, res) => {
 
         const feed = new Feed(feedData);
         await feed.save();
+
+        // Update all categories
+        if (categoryIds.length) {
+          await Category.updateMany(
+            { _id: { $in: categoryIds } },
+            { $addToSet: { feedIds: feed._id } }
+          );
+        }
 
         // ✅ REAL-TIME BROADCAST (Bulk)
         const { getIO } = require("../../middlewares/webSocket");
@@ -350,13 +375,13 @@ exports.getFeedWithDesign = async (req, res) => {
       return res.status(404).json({ success: false, message: "Feed not found or access denied" });
     }
 
-    feed.formattedUrl = feed.contentUrl || (feed.files && feed.files[0]?.url);
+    feed.formattedUrl = getMediaUrl(feed.contentUrl || (feed.files && feed.files[0]?.url));
     feed.thumbnailUrl = feed.type === 'video' && feed.files && feed.files[0]?.thumbnail
-      ? feed.files[0].thumbnail
+      ? getMediaUrl(feed.files[0].thumbnail)
       : feed.formattedUrl;
 
     if (feed.designMetadata?.audioConfig?.audioUrl) {
-      feed.audioUrl = feed.designMetadata.audioConfig.audioUrl;
+      feed.audioUrl = getMediaUrl(feed.designMetadata.audioConfig.audioUrl);
     }
 
     feed.designState = feed.designMetadata ? {
@@ -450,7 +475,7 @@ exports.getFeedsWithDesign = async (req, res) => {
 
     const enrichedFeeds = feeds.map(feed => ({
       ...feed,
-      formattedUrl: feed.contentUrl || (feed.files && feed.files[0]?.url),
+      formattedUrl: getMediaUrl(feed.contentUrl || (feed.files && feed.files[0]?.url)),
       storageInfo: {
         type: feed.storageType || "local"
       }
@@ -507,8 +532,11 @@ exports.duplicateFeedWithDesign = async (req, res) => {
     const duplicateFeed = new Feed(duplicateData);
     await duplicateFeed.save();
 
-    if (duplicateFeed.category) {
-      await Category.findByIdAndUpdate(duplicateFeed.category, { $addToSet: { feedIds: duplicateFeed._id } });
+    if (duplicateFeed.category && duplicateFeed.category.length) {
+      await Category.updateMany(
+        { _id: { $in: duplicateFeed.category } },
+        { $addToSet: { feedIds: duplicateFeed._id } }
+      );
     }
 
     return res.status(201).json({
@@ -541,8 +569,13 @@ exports.getAllFeedAdmin = async (req, res) => {
           profile = await ProfileSettings.findOne({ userId: feed.createdByAccount }).select("userName profileAvatar").lean();
         }
 
+        if (profile) {
+          profile.profileAvatar = getMediaUrl(profile.profileAvatar);
+        }
+
         return {
           ...feed,
+          contentUrl: getMediaUrl(feed.contentUrl),
           creator: profile ? { userName: profile.userName || "Unknown", profileAvatar: profile.profileAvatar || null } : { userName: "Unknown", profileAvatar: null },
         };
       })

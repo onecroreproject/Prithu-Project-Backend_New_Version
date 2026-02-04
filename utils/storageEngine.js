@@ -92,13 +92,19 @@ exports.saveFile = async (file, options = {}) => {
     };
 };
 
-exports.getMediaUrl = (path) => {
-    if (!path) return '';
-    if (path.startsWith('http')) return path;
+exports.getMediaUrl = (pathOrUrl) => {
+    if (!pathOrUrl || typeof pathOrUrl !== 'string') return '';
+
+    // If it's already an absolute URL, return it
+    if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+        return pathOrUrl;
+    }
 
     const backendUrl = process.env.BACKEND_URL || '';
     const cleanBaseUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
-    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+    // Ensure the path starts with a single slash
+    const normalizedPath = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`;
 
     return `${cleanBaseUrl}${normalizedPath}`;
 };
