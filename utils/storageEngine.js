@@ -123,7 +123,8 @@ exports.getMediaUrl = (pathOrUrl) => {
     // 🛡️ Extra Sanitization for Env Var
     finalBaseUrl = finalBaseUrl.replace(/^(profileAvatar|modifyAvatar)\s+/i, "").trim();
 
-    if (backendUrl.includes("1croreprojects")) {
+    // ✅ Enforce correct live URL if env var is missing or invalid
+    if (!finalBaseUrl || finalBaseUrl === "" || finalBaseUrl === "/") {
         finalBaseUrl = "https://api.prithu.app";
     }
 

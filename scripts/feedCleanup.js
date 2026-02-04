@@ -2,7 +2,7 @@ require("dotenv").config();
 const mongoose = require("mongoose");
 const path = require("path");
 const fs = require("fs");
-const { google } = require("googleapis");
+// const { google } = require("googleapis");
 
 // Import Database Connection
 const { prithuDB } = require("../database");
@@ -77,20 +77,10 @@ async function deleteFeedsBatch(daysOld = null, specificIds = []) {
                 deleteFeedFile(legacyPath);
             }
 
-            // D. Google Drive (if driveId exists)
-            if (feed.driveFileId) {
-                try {
-                    // Attempt drive deletion if auth is configured
-                    const { oAuth2Client } = require("../middlewares/services/googleDriveMedia/googleDriverAuth");
-                    if (oAuth2Client && Object.keys(oAuth2Client).length > 0) {
-                        const drive = google.drive({ version: "v3", auth: oAuth2Client });
-                        await drive.files.delete({ fileId: feed.driveFileId });
-                        console.log(`🗑️ Deleted Drive file: ${feed.driveFileId}`);
-                    }
-                } catch (driveErr) {
-                    console.error(`⚠️ Drive delete failed for ${feed.driveFileId}:`, driveErr.message);
-                }
-            }
+            // D. Google Drive (DISABLED)
+            // if (feed.driveFileId) {
+            //     console.log(`⚠️ Skipping Drive deletion for ${feed.driveFileId} (Drive disabled)`);
+            // }
         }
 
         // --- 2. RELATED DATA IDENTIFICATION ---

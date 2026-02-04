@@ -123,17 +123,20 @@ const userProcessFeedFile = async (req, res, next) => {
 const attachFeedFile = (req, res, next) => {
   if (!req.file) return next();
 
-  const backendUrl = (process.env.BACKEND_URL || '').replace(/\/$/, "");
+  // ✅ Use centralized storage engine to generate correct URL
+  const { getMediaUrl } = require("../../utils/storageEngine");
+
+  // Construct relative path for DB (e.g. /media/feed/user/...)
+  const relativePath = `/media/feed/user/${req.Id || req.body.userId}/${req.feedFolderType}/${req.feedSavedName}`;
 
   req.localFile = {
-    url: `${backendUrl}/media/feed/user/${req.Id || req.body.userId}/${req.feedFolderType}/${req.feedSavedName}`,
+    url: getMediaUrl(relativePath), // Let storageEngine handle domain & prefixes
     filename: req.feedSavedName,
     folder: req.feedFolderType,
     path: req.feedSavedPath,     // full local path
     uploadedAt: new Date(),
     fileHash: req.fileHash,
     videoDuration: req.videoDuration || null,
-
   };
 
   next();

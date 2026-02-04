@@ -348,8 +348,8 @@ const feedSchema = new mongoose.Schema(
     storage: {
       type: {
         type: String,
-        enum: ["local", "gdrive", "s3", "cloudinary"],
-        default: "gdrive"
+        enum: ["local", "s3", "cloudinary"],
+        default: "local"
       },
       drive: {
         fileId: { type: String },

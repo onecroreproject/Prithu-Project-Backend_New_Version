@@ -83,7 +83,8 @@ app.use("/web/api", userRoot);
 
 
 // 🟢 Cron
- startCrons();
+
+startCrons();
 
 // 🟢 Start server
 server.listen(process.env.PORT || 5000, () => {

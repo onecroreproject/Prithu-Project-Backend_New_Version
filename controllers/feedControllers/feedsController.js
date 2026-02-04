@@ -18,8 +18,8 @@ const HiddenPost = require("../../models/userModels/hiddenPostSchema.js")
 const { deleteFeedFile } = require("../../middlewares/services/feedUploadSpydy.js");
 const Categories = require("../../models/categorySchema.js");
 const path = require("path");
-const { google } = require("googleapis");
-const { oAuth2Client } = require("../../middlewares/services/googleDriveMedia/googleDriverAuth");
+// const { google } = require("googleapis");
+// const { oAuth2Client } = require("../../middlewares/services/googleDriveMedia/googleDriverAuth");
 const ProfileVisibility = require("../../models/profileVisibilitySchema.js")
 const { getMediaUrl } = require("../../utils/storageEngine");
 
@@ -1952,10 +1952,10 @@ exports.getFeedById = async (req, res) => {
 exports.deleteFeed = async (req, res) => {
   try {
     const { feedId } = req.body;
-    const drive = google.drive({
-      version: "v3",
-      auth: oAuth2Client
-    });
+    // const drive = google.drive({
+    //   version: "v3",
+    //   auth: oAuth2Client
+    // });
 
 
     if (!feedId) {
@@ -1979,21 +1979,12 @@ exports.deleteFeed = async (req, res) => {
     /* --------------------------------------------------
        2️⃣ DELETE GOOGLE DRIVE FILE (NEW)
     -------------------------------------------------- */
-    if (
-      feed.storageType === "gdrive" &&
-      feed.driveFileId
-    ) {
-      deleteTasks.push(
-        drive.files.delete({
-          fileId: feed.driveFileId,
-        }).catch(err => {
-          console.error(
-            `⚠️ Failed to delete Drive file ${feed.driveFileId}:`,
-            err.message
-          );
-        })
-      );
-    }
+    /* --------------------------------------------------
+       2️⃣ DELETE GOOGLE DRIVE FILE (DISABLED)
+    -------------------------------------------------- */
+    // if (feed.storageType === "gdrive" && feed.driveFileId) {
+    //   console.log("⚠️ Drive deletion skipped (Drive disabled via cleanup)");
+    // }
 
     /* --------------------------------------------------
        3️⃣ DELETE LOCAL FILE (BACKWARD COMPAT)
