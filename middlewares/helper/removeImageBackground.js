@@ -28,13 +28,16 @@ async function removeImageBackground(imageSource, userId) {
 
     fs.writeFileSync(targetPath, outputBuffer);
 
-    const backendUrl = (process.env.BACKEND_URL || "").replace(/\/$/, "");
+    // ✅ Use centralized getMediaUrl to ensure correct domain and format
+    const { getMediaUrl } = require("../../utils/storageEngine");
+
+    // Construct the DB path (relative path starting with /media)
     const relativeUrl = userId
       ? `/media/user/${userId}/modify/${filename}`
       : `/media/user/modify/${filename}`;
 
     return {
-      secure_url: `${backendUrl}${relativeUrl}`,
+      secure_url: getMediaUrl(relativeUrl),
       public_id: filename,
       localPath: targetPath,
     };

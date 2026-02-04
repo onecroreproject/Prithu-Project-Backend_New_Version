@@ -104,9 +104,30 @@ exports.getMediaUrl = (pathOrUrl) => {
     const cleanBaseUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
 
     // Ensure the path starts with a single slash
-    const normalizedPath = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`;
+    let normalizedPath = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`;
 
-    return `${cleanBaseUrl}${normalizedPath}`;
+    // 🛡️ SANITIZATION FIX: Remove any accidental prefixes (profileAvatar, modifyAvatar, etc.)
+    // and replace legacy/incorrect domains if present
+    normalizedPath = normalizedPath
+        .replace(/^(profileAvatar|modifyAvatar)\s+/i, "") // Remove known prefixes
+        .replace(/^https?:\/\/[^\/]+/, "") // Remove potential existing domain to force fresh one
+        .trim();
+
+    // Ensure it starts with / after cleaning
+    if (!normalizedPath.startsWith('/')) normalizedPath = `/${normalizedPath}`;
+
+    // Force strict API URL if env var is suspicious, otherwise use env
+    // Use the user's requested correct domain if BACKEND_URL seems wrong
+    let finalBaseUrl = backendUrl;
+
+    // 🛡️ Extra Sanitization for Env Var
+    finalBaseUrl = finalBaseUrl.replace(/^(profileAvatar|modifyAvatar)\s+/i, "").trim();
+
+    if (backendUrl.includes("1croreprojects")) {
+        finalBaseUrl = "https://api.prithu.app";
+    }
+
+    return `${finalBaseUrl}${normalizedPath}`;
 };
 
 exports.BASE_MEDIA_DIR = BASE_MEDIA_DIR;

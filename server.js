@@ -23,8 +23,16 @@ initSocket(server);
 app.use(
   cors({
     origin: (origin, callback) => {
-      const allowedOrigins = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(",") : [];
-      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV === "development") {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+
+      const allowedOrigins = [
+        "https://admin.prithu.app",
+        "https://api.prithu.app",
+        ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(",") : [])
+      ];
+
+      if (allowedOrigins.includes(origin) || process.env.NODE_ENV === "development") {
         callback(null, true);
       } else {
         console.warn(`CORS blocked for origin: ${origin}`);
@@ -75,7 +83,7 @@ app.use("/web/api", userRoot);
 
 
 // 🟢 Cron
- startCrons();
+// startCrons();
 
 // 🟢 Start server
 server.listen(process.env.PORT || 5000, () => {
