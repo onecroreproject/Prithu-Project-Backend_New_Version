@@ -49,8 +49,9 @@ exports.saveFile = async (file, options = {}) => {
             targetDir = path.join(BASE_MEDIA_DIR, 'child-admins', id, 'avatar');
             break;
         case 'feed':
-            const today = new Date().toISOString().split('T')[0];
-            targetDir = path.join(BASE_MEDIA_DIR, 'feeds', categorySlug || 'uncategorized', today, subType || 'media');
+            // Flattened structure: media/feed/image/filename
+            const startFolder = subType === 'image' ? 'image' : (subType === 'video' ? 'video' : 'media');
+            targetDir = path.join(BASE_MEDIA_DIR, 'feed', startFolder);
             break;
         case 'upload':
             targetDir = path.join(BASE_MEDIA_DIR, 'uploads', subType === 'video' ? 'videos' : 'images');

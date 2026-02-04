@@ -7,8 +7,8 @@ const { v4: uuidv4 } = require("uuid");
 const { getVideoDurationInSeconds } = require("get-video-duration");
 const Feed = require("../../models/feedModel");
 
-// Base folder -> media/feed/user
-const BASE_DIR = path.join(__dirname, "../../media/feed/user");
+// Base folder -> media/feed (No user folder)
+const BASE_DIR = path.join(__dirname, "../../media/feed");
 if (!fs.existsSync(BASE_DIR)) fs.mkdirSync(BASE_DIR, { recursive: true });
 
 // timestamp helper
@@ -25,11 +25,11 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const userId = req.Id || req.body.userId;
     const isImage = file.mimetype.startsWith("image/");
-    const typeFolder = isImage ? "images" : "videos";
+    const typeFolder = isImage ? "image" : "video"; // singular per request
 
+    // Structure: media/feed/image or media/feed/video
     const uploadPath = path.join(
       BASE_DIR,
-      String(userId),
       typeFolder
     );
 
@@ -126,8 +126,8 @@ const attachFeedFile = (req, res, next) => {
   // ✅ Use centralized storage engine to generate correct URL
   const { getMediaUrl } = require("../../utils/storageEngine");
 
-  // Construct relative path for DB (e.g. /media/feed/user/...)
-  const relativePath = `/media/feed/user/${req.Id || req.body.userId}/${req.feedFolderType}/${req.feedSavedName}`;
+  // Construct relative path for DB (e.g. /media/feed/image/...)
+  const relativePath = `/media/feed/${req.feedFolderType}/${req.feedSavedName}`;
 
   req.localFile = {
     url: getMediaUrl(relativePath), // Let storageEngine handle domain & prefixes
