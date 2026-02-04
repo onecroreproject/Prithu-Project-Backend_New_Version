@@ -47,8 +47,7 @@ app.use(
   })
 );
 
-// ✅ Explicit preflight support
-app.options("*", cors());
+// app.options("*", cors());
 
 app.use(express.json({ limit: "200mb" }));
 app.use(express.urlencoded({ limit: "200mb", extended: true }));
