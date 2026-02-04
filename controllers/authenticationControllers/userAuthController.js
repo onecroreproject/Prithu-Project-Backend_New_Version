@@ -270,7 +270,7 @@ exports.userLogin = async (req, res) => {
       subject: "👋 Welcome Back!",
       placeholders: {
         username: user.userName,
-        dashboardLink: `${process.env.FRONTEND_URL}/dashboard`,
+        dashboardLink: `${process.env.FRONTEND_URL.split(',')[0]}/dashboard`,
       },
       embedLogo: false,
     }).catch((err) => console.error("Email error:", err));

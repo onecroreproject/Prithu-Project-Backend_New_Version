@@ -57,7 +57,7 @@ const storage = multer.diskStorage({
 // multer instance
 const feedUpload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 }
+  limits: { fileSize: 500 * 1024 * 1024 } // 500MB max for videos
 });
 
 // hash generator
