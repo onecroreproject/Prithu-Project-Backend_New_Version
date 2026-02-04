@@ -68,7 +68,7 @@ const profileStorage = multer.diskStorage({
 
 const adminUploadProfile = multer({
   storage: profileStorage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 200 * 1024 * 1024 }, // 10MB
 });
 
 // Attach uploaded file info
@@ -131,7 +131,7 @@ const feedStorage = multer.diskStorage({
 
 const adminUploadFeed = multer({
   storage: feedStorage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  limits: { fileSize: 200 * 1024 * 1024 }, // 50MB
 });
 
 function deleteLocalAdminFile(filePath) {

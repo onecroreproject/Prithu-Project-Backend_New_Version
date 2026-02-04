@@ -19,25 +19,27 @@ const app = express();
 const server = http.createServer(app);
 initSocket(server);
 
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://admin.prithu.app",
+  "https://www.prithu.app",
+  "https://prithu.app",
+];
+
 // 🟢 CORS
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
+    origin: function (origin, callback) {
+      // allow server-to-server, curl, postman
       if (!origin) return callback(null, true);
 
-      const allowedOrigins = [
-        "https://admin.prithu.app",
-        "https://api.prithu.app",
-        ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(",") : [])
-      ];
-
-      if (allowedOrigins.includes(origin) || process.env.NODE_ENV === "development") {
-        callback(null, true);
-      } else {
-        console.warn(`CORS blocked for origin: ${origin}`);
-        callback(new Error("Not allowed by CORS"));
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
       }
+
+      console.error("❌ CORS blocked:", origin);
+      return callback(null, false); // IMPORTANT: do NOT throw error
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
@@ -45,8 +47,11 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
+// ✅ Explicit preflight support
+app.options("*", cors());
+
+app.use(express.json({ limit: "200mb" }));
+app.use(express.urlencoded({ limit: "200mb", extended: true }));
 app.use(cookieParser());
 
 app.use("/logo", express.static(path.join(__dirname, "logo")));

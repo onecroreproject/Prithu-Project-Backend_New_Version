@@ -33,7 +33,7 @@ const storage = multer.diskStorage({
 
 const frameUpload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
+  limits: { fileSize: 200 * 1024 * 1024 }, // 10 MB max
 });
 
 // Delete function
