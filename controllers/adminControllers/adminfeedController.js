@@ -36,6 +36,9 @@ exports.adminFeedUpload = async (req, res) => {
     const { categoryId: globalCategoryId, categoryIds: globalCategoryIds, language = "en", caption: globalCaption, designData: globalDesignData, scheduleTime: globalScheduleTime, audience = "public", perFileMetadata } = req.body;
 
     if (!mediaFiles.length) {
+      console.error("❌ Admin Feed Upload Failed: No media files detected in req.localFilesArr");
+      console.log("Req Body Keys:", Object.keys(req.body));
+      // console.log("Req Files:", req.files);
       return res.status(400).json({ success: false, message: "No media files provided" });
     }
 

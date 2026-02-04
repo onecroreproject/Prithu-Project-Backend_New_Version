@@ -179,6 +179,10 @@ router.post(
     auth,
     adminUploadFeed.fields([
         { name: "files", maxCount: 20 },
+        { name: "file", maxCount: 20 },
+        { name: "media", maxCount: 20 },
+        { name: "image", maxCount: 20 },
+        { name: "video", maxCount: 20 },
         { name: "audio", maxCount: 1 }
     ]),
     attachAdminFeedFiles,
