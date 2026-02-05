@@ -26,9 +26,9 @@ exports.getDashboardMetricCount = async (req, res) => {
       // 1️⃣ Total Users
       User.countDocuments(),
 
-      // 2️⃣ Active Users Today → users who are ONLINE
+      // 2️⃣ Active Users Today → users who were active today
       User.countDocuments({
-        isOnline: true,
+        lastActiveAt: { $gte: startOfToday },
       }),
 
       // 3️⃣ New registrations today
