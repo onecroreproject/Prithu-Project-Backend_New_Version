@@ -3,12 +3,12 @@ const nodemailer = require("nodemailer");
 require("dotenv").config();
 
 const transporter = nodemailer.createTransport({
-  host:process.env.MAIL_HOST,
-  port: process.env.MAIL_PORT,
+  host: process.env.MAIL_HOST || "smtp.gmail.com",
+  port: process.env.MAIL_PORT || 465,
   secure: true, // ✅ SSL
   auth: {
-    user: process.env.MAIL_USER, // info@prithu.app
-    pass: process.env.MAIL_PASS,
+    user: process.env.EMAIL_USER, // info@prithu.app
+    pass: process.env.EMAIL_PASS,
   },
   authMethod: "LOGIN", // ✅ IMPORTANT for cPanel
   tls: {
@@ -30,7 +30,7 @@ transporter.verify((error, success) => {
  */
 const sendMail = async ({ to, subject, html, attachments = [] }) => {
   const mailOptions = {
-    from: `"PRITHU" <${process.env.MAIL_USER}>`,
+    from: `"PRITHU" <${process.env.EMAIL_USER}>`,
     to,
     subject,
     html,

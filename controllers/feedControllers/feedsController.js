@@ -128,7 +128,8 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const watchedFeedIds = (userActions?.watchedFeeds || []).map(w => w.feedId);
 
     // Combine hidden and watched
-    const excludeIds = [...hiddenPostIds, ...watchedFeedIds];
+    // const excludeIds = [...hiddenPostIds, ...watchedFeedIds];
+    const excludeIds = [...hiddenPostIds];
 
     /* -----------------------------------------------------
        ✅ 3️⃣ AGGREGATION PIPELINE
@@ -144,6 +145,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
             { isScheduled: { $ne: true } },
             { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] }
           ],
+          isApproved: true,
           isDeleted: false,
           status: { $in: ["Published", "Scheduled", "published", "scheduled"] }
         },
@@ -342,7 +344,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
         }
       }
     ]);
-
+   
     /* -----------------------------------------------------
        ✅ 4️⃣ POST-PROCESSING (Normal vs Template Logic)
     ------------------------------------------------------*/
@@ -412,6 +414,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
               { isScheduled: { $ne: true } },
               { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] }
             ],
+            isApproved: true,
             isDeleted: false,
             status: { $in: ["Published", "Scheduled", "published", "scheduled"] }
           })
@@ -486,7 +489,8 @@ exports.getFeedsByHashtag = async (req, res) => {
             { isScheduled: { $ne: true } },
             { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] }
           ],
-          status: "Published"
+          isApproved: true,
+          status: { $in: ["Published", "published"] }
         }
       },
 
@@ -1006,7 +1010,11 @@ exports.getFeedsByAccountId = async (req, res) => {
     const excludedCategories = (userCat?.nonInterestedCategories || []).map(c => c.toString());
 
     // 4️ Filter feeds based on language and category
-    const feedFilter = {};
+    const feedFilter = {
+      isApproved: true,
+      status: { $in: ["Published", "published"] },
+      isDeleted: false
+    };
     if (feedLangCode) feedFilter.language = feedLangCode;
     if (excludedCategories.length) feedFilter.category = { $nin: excludedCategories };
 
@@ -1198,6 +1206,9 @@ exports.getFeedsByCreator = async (req, res) => {
               ],
             },
           ],
+          isApproved: true,
+          isDeleted: false,
+          status: { $in: ["Published", "published", "Scheduled", "scheduled"] }
         },
       },
       { $sort: { createdAt: -1 } },
@@ -1733,7 +1744,8 @@ exports.getTrendingFeeds = async (req, res) => {
       _id: { $nin: hiddenPostIds },
       category: { $nin: notInterestedCategoryIds },
       createdAt: { $gte: trendingStart, $lte: trendingEnd },
-      status: "Published",
+      isApproved: true,
+      status: { $in: ["Published", "published"] },
       isDeleted: false
     })
       .populate("createdByAccount", "_id roleRef")

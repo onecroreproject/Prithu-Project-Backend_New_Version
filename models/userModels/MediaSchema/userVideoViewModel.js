@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const {prithuDB}=require("../../../database");
+const { prithuDB } = require("../../../database");
 
 
 const videoViewSchema = new mongoose.Schema(
@@ -7,7 +7,13 @@ const videoViewSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: false, // Optional for guest users
+      index: true
+    },
+
+    deviceId: {
+      type: String, // Unique identifier for guests
+      required: false,
       index: true
     },
 
@@ -33,8 +39,10 @@ const videoViewSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Unified Unique Index for Deduplication
+videoViewSchema.index({ videoId: 1, userId: 1, deviceId: 1 }, { unique: true });
+
 // Compound indexes for super-fast lookups
-videoViewSchema.index({ userId: 1, videoId: 1 });
 videoViewSchema.index({ videoId: 1, viewedAt: -1 });
 videoViewSchema.index({ userId: 1, viewedAt: -1 });
 

@@ -22,58 +22,66 @@ const { feedTimeCalculator } = require("../../middlewares/feedTimeCalculator")
 
 
 
+const redisClient = require("../../Config/redisConfig");
 
 exports.userImageViewCount = async (req, res) => {
   try {
     const feedId = req.body.feedId || req.params.id || req.query.feedId;
-    const userId = req.Id || req.body.userId;
+    const userId = req.Id || req.body.userId; // Optional for guests
+    const deviceId = req.body.deviceId || req.headers["x-device-id"]; // Guest ID
 
-    if (!userId || !feedId) {
-      return res.status(400).json({ message: "userId and feedId are required" });
+    if (!feedId || (!userId && !deviceId)) {
+      return res.status(400).json({ message: "feedId and (userId or deviceId) are required" });
     }
 
-    // 1️⃣ Check if user already viewed this image
-    const existing = await UserImageView.findOne({ userId, imageId: feedId });
+    const viewerId = userId || deviceId;
+    const redisKey = `view:img:${feedId}:${viewerId}`;
 
-    let isUniqueUser = false;
+    // 1️⃣ Short-circuit with Redis to avoid DB hit for recent views
+    const cachedView = await redisClient.get(redisKey);
+    if (cachedView) {
+      const stats = await ImageStats.findOne({ imageId: feedId }).lean();
+      return res.json({
+        message: "View already counted (cached)",
+        isNewView: false,
+        totalViews: stats?.totalViews || 0
+      });
+    }
 
-    if (!existing) {
-      // 2️⃣ Create a new user view record
+    let isNewView = false;
+    try {
+      // 2️⃣ Try to create a unique view record (Atomic via Unique Constraint)
       await UserImageView.create({
-        userId,
+        userId: userId || null,
+        deviceId: deviceId || null,
         imageId: feedId,
         viewedAt: new Date(),
       });
+      isNewView = true;
 
-      isUniqueUser = true;
-
-      // 3️⃣ Update global image stats
+      // 3️⃣ Increment global stats only if record was created
       await ImageStats.findOneAndUpdate(
         { imageId: feedId },
         {
-          $inc: {
-            totalViews: 1,
-            uniqueUsers: 1,
-          },
+          $inc: { totalViews: 1, uniqueUsers: 1 },
           $set: { lastViewed: new Date() },
         },
-        { upsert: true }
+        { upsert: true, new: true }
       );
-    } else {
-      // Existing user → Only increase total views
-      await ImageStats.findOneAndUpdate(
-        { imageId: feedId },
-        {
-          $inc: { totalViews: 1 },
-          $set: { lastViewed: new Date() }
-        },
-        { upsert: true }
-      );
+    } catch (dbErr) {
+      // Duplicate key error (code 11000) means already viewed
+      if (dbErr.code !== 11000) throw dbErr;
     }
 
+    // 4️⃣ Cache the view event in Redis (TTL: 24h)
+    await redisClient.set(redisKey, "1", "EX", 86400);
+
+    const finalStats = await ImageStats.findOne({ imageId: feedId }).lean();
+
     return res.json({
-      message: "Image view recorded",
-      uniqueUser: isUniqueUser,
+      message: isNewView ? "Image view recorded" : "View already exists",
+      isNewView,
+      totalViews: finalStats?.totalViews || 0,
     });
 
   } catch (err) {
@@ -82,118 +90,86 @@ exports.userImageViewCount = async (req, res) => {
   }
 };
 
-
-
-
-
-
 exports.userVideoViewCount = async (req, res) => {
   try {
     const feedId = req.body.feedId || req.params.id || req.query.feedId;
     const userId = req.Id || req.body.userId;
+    const deviceId = req.body.deviceId || req.headers["x-device-id"];
 
-    if (!userId || !feedId) {
-      return res.status(400).json({ message: "userId and feedId are required" });
+    if (!feedId || (!userId && !deviceId)) {
+      return res.status(400).json({ message: "feedId and (userId or deviceId) are required" });
     }
 
     // 1️⃣ Validate feed
     const feed = await Feed.findById(feedId, "postType duration");
-    if (!feed) {
-      return res.status(404).json({ message: "Feed not found" });
-    }
-    if (feed.postType !== "video") {
-      return res.status(400).json({ message: "Feed is not a video" });
+    if (!feed || feed.postType !== "video") {
+      return res.status(400).json({ message: "Video feed not found" });
     }
 
-    // 2️⃣ Check if user already viewed this video
-    const existing = await UserVideoView.findOne({ userId, videoId: feedId });
+    const viewerId = userId || deviceId;
+    const redisKey = `view:vid:${feedId}:${viewerId}`;
 
-    let isUniqueUser = false;
+    // 2️⃣ Short-circuit with Redis
+    const cachedView = await redisClient.get(redisKey);
+    if (cachedView) {
+      const stats = await VideoStats.findOne({ videoId: feedId }).lean();
+      return res.json({
+        message: "View already counted (cached)",
+        isNewView: false,
+        totalViews: stats?.totalViews || 0
+      });
+    }
 
-    if (!existing) {
-      // 3️⃣ Insert one document per view
+    let isNewView = false;
+    try {
+      // 3️⃣ Atomic Unique Guard
       await UserVideoView.create({
-        userId,
+        userId: userId || null,
+        deviceId: deviceId || null,
         videoId: feedId,
         viewedAt: new Date(),
       });
-
-      isUniqueUser = true;
+      isNewView = true;
 
       // 4️⃣ Update global video stats
       await VideoStats.findOneAndUpdate(
         { videoId: feedId },
         {
-          $inc: {
-            totalViews: 1,
-            uniqueUsers: 1,
-            totalDuration: feed.duration || 0, // add video duration (fallback to 0)
-          },
+          $inc: { totalViews: 1, uniqueUsers: 1, totalDuration: feed.duration || 0 },
           $set: { lastViewed: new Date() },
         },
-        { upsert: true }
+        { upsert: true, new: true }
       );
-    } else {
-      // NOT unique → only update totalViews + totalDuration
-      await VideoStats.findOneAndUpdate(
-        { videoId: feedId },
-        {
-          $inc: {
-            totalViews: 1,
-            totalDuration: feed.duration || 0,
-          },
-          $set: { lastViewed: new Date() }
-        },
-        { upsert: true }
-      );
-    }
 
-    // 5️⃣ NEW: Track fully watched feeds in UserFeedActions for "You're all caught up" logic
-    await UserFeedActions.findOneAndUpdate(
-      { userId },
-      {
-        $addToSet: {
-          watchedFeeds: {
-            feedId: new mongoose.Types.ObjectId(feedId),
-            // Note: $addToSet uses deep equality. Dates might cause uniqueness issues if not handled carefully.
-            // However, we want to know *if* they watched it. 
-            // If we just want the ID, we could store just IDs.
-            // But the schema has an object { feedId, watchedAt }.
-            // To prevent duplicates based on feedId ONLY, we might need a different approach or accept multiple entries.
-            // BETTER: Use a query that checks if feedId exists in array.
-          }
-        }
-      },
-      { upsert: true }
-    );
-    // FIX: $addToSet with objects is tricky if timestamps differ.
-    // Let's use a two-step approach or simpler schema if possible.
-    // The requirement is "track video watch completion".
-    // If I just want to filter them out, I only need to know IF they watched it.
-    // I will use a query to check existence first, or push if not exists.
-
-    const actionDoc = await UserFeedActions.findOne({ userId });
-    const alreadyWatched = actionDoc?.watchedFeeds?.some(w => w.feedId.toString() === feedId.toString());
-
-    if (!alreadyWatched) {
-      await UserFeedActions.findOneAndUpdate(
-        { userId },
-        {
-          $push: {
-            watchedFeeds: {
-              feedId: new mongoose.Types.ObjectId(feedId),
-              watchedAt: new Date()
+      // 5️⃣ Track watched feeds for user personal list (Logged-in only)
+      if (userId) {
+        await UserFeedActions.findOneAndUpdate(
+          { userId },
+          {
+            $addToSet: {
+              watchedFeeds: {
+                feedId: new mongoose.Types.ObjectId(feedId),
+                watchedAt: new Date()
+              }
             }
-          }
-        },
-        { upsert: true }
-      );
+          },
+          { upsert: true }
+        );
+      }
+    } catch (dbErr) {
+      if (dbErr.code !== 11000) throw dbErr;
     }
+
+    // 6️⃣ Cache in Redis
+    await redisClient.set(redisKey, "1", "EX", 86400);
+
+    const finalStats = await VideoStats.findOne({ videoId: feedId }).lean();
 
     return res.json({
-      message: "Video view recorded",
-      durationAdded: feed.duration,
-      uniqueUser: isUniqueUser,
+      message: isNewView ? "Video view recorded" : "View already exists",
+      isNewView,
+      totalViews: finalStats?.totalViews || 0,
+      durationAdded: isNewView ? feed.duration : 0
     });
 
   } catch (err) {
