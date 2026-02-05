@@ -1385,7 +1385,12 @@ exports.getUserVisibilitySettings = async (req, res) => {
 exports.updateUserVisibilitySettings = async (req, res) => {
   try {
     const userId = req.Id;
-    const updates = req.body;
+    let updates = req.body;
+
+    // ✅ FIX: specific handling for { field, value } structure sent by ProfileSettings.jsx
+    if (updates.field && updates.value) {
+      updates = { [updates.field]: updates.value };
+    }
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
