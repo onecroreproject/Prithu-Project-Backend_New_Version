@@ -109,13 +109,7 @@ const {
     getUserAndSubscriptionCountsDaily,
 } = require("../controllers/adminControllers/SalesDashboard/salesDashboardMetricksController");
 
-const {
-    uploadFrames,
-    getAllFrames,
-    deleteFrame,
-} = require("../controllers/adminControllers/frameController");
 
-const { frameUpload } = require("../middlewares/helper/frameUpload");
 
 const { getPostVolumeWeekly,
     getPostVolumeDaily,
@@ -270,6 +264,8 @@ router.get("/admin/top/referral/users", getTopReferralUsers);
 router.get("/admin/dashboard/user-subscription-counts", getUserAndSubscriptionCountsDaily);
 
 // Aliases for Sales Dashboard
+router.get("/sales/dashboard/analytics", getAnalytics);
+router.get("/top/referral/users", getTopReferralUsers);
 router.get("/get/recent/subscribers", getRecentSubscriptionUsers);
 router.get("/dashboard/user-subscription-counts", getUserAndSubscriptionCountsDaily);
 router.delete("/delete/feed", deleteFeed);
@@ -290,10 +286,7 @@ router.get("/admin/report/:reportId/logs", auth, getReportLogs);
 router.get('/admin/user/report', getAllReports);
 router.put("/admin/report/action/update/:reportId", auth, adminTakeActionOnReport);
 
-/* --------------------- Admin Frame Management ----------------- */
-router.post("/admin/upload/frame", frameUpload.array("frame"), uploadFrames);
-router.get("/admin/get/allframe", getAllFrames);
-router.delete("/admin/delete/frame/:id", deleteFrame);
+
 
 /* --------------------- Admin Notification API ------------------- */
 router.post("/admin/send/notification", sendAdminNotification);

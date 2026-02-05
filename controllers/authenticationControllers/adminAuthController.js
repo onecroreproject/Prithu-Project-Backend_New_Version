@@ -178,6 +178,14 @@ exports.adminLogin = async (req, res) => {
         lastLoginTime: now,
         lastActivityTime: now
       });
+
+      // ✅ Create a new "Online" activity record
+      await ChildAdminActivity.create({
+        childAdminId: child._id,
+        date: now.toISOString().split('T')[0],
+        loginTime: now,
+        status: "Online"
+      });
     }
 
     // 3️⃣ Generate JWT
@@ -268,8 +276,10 @@ exports.adminSendOtp = async (req, res) => {
 exports.newAdminVerifyOtp = async (req, res) => {
   const { otp, email } = req.body;
 
-  if (!otp || !email) {
-    return res.status(400).json({ error: 'Email and OTP are required' });
+  const record = otpStore.get(email);
+
+  if (!record) {
+    return res.status(400).json({ error: 'No OTP requested for this email' });
   }
 
   if (Date.now() > record.expires) {
@@ -291,20 +301,24 @@ exports.newAdminVerifyOtp = async (req, res) => {
 // Verify OTP
 exports.existAdminVerifyOtp = async (req, res) => {
   try {
+    const { otp, email } = req.body;
+    if (!otp || !email) {
+      return res.status(400).json({ error: 'Email and OTP are required' });
+    }
 
-    const { otp } = req.body;
-    console.log(otp)
+    const admin = await Admin.findOne({ email: email.trim().toLowerCase(), otpCode: otp });
+    const child = !admin ? await ChildAdmin.findOne({ email: email.trim().toLowerCase(), otpCode: otp }) : null;
+    const user = admin || child;
 
-    const admin = await Admin.findOne({ otpCode: otp });
-    if (!admin) {
+    if (!user) {
       return res.status(400).json({ error: 'Invalid email or OTP' });
     }
 
-    if (!admin.otpCode || !admin.otpExpiresAt || admin.otpCode !== otp || admin.otpExpiresAt < new Date()) {
+    if (!user.otpCode || !user.otpExpiresAt || user.otpCode !== otp || user.otpExpiresAt < new Date()) {
       return res.status(400).json({ error: 'Invalid or expired OTP' });
     }
 
-    res.json({ message: 'OTP verified successfully', email: admin.email });
+    res.json({ message: 'OTP verified successfully', email: user.email });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -316,19 +330,23 @@ exports.existAdminVerifyOtp = async (req, res) => {
 exports.adminPasswordReset = async (req, res) => {
   try {
     const { email, newPassword } = req.body;
-    const admin = await Admin.findOne({ email: email });
-    if (!admin) {
+    let user = await Admin.findOne({ email: email.trim().toLowerCase() });
+    if (!user) {
+      user = await ChildAdmin.findOne({ email: email.trim().toLowerCase() });
+    }
+
+    if (!user) {
       return res.status(400).json({ error: 'Invalid email' });
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    admin.passwordHash = passwordHash;
+    user.passwordHash = passwordHash;
 
     // Clear OTP fields after successful reset
-    admin.otpCode = undefined;
-    admin.otpExpiresAt = undefined;
+    user.otpCode = undefined;
+    user.otpExpiresAt = undefined;
 
-    await admin.save();
+    await user.save();
 
     res.json({ message: 'Password reset successful' });
   } catch (error) {
@@ -447,19 +465,36 @@ exports.adminLogout = async (req, res) => {
     if (role === 'Child_Admin') {
       const now = new Date();
 
-      // Create new offline record starting now
+      // 1. Close the current "Online" record if it exists
+      const lastOnline = await ChildAdminActivity.findOne({
+        childAdminId: adminId,
+        status: "Online",
+        offlineTo: null // Assuming this is how we track "still online"
+      }).sort({ createdAt: -1 });
+
+      if (lastOnline) {
+        lastOnline.offlineTo = now;
+        lastOnline.logoutTime = now;
+        const durationMs = now - lastOnline.loginTime;
+        const hours = Math.floor(durationMs / (1000 * 60 * 60));
+        const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+        lastOnline.duration = `${hours}h ${minutes}m`;
+        // Keep status as "Online" to indicate it was a successful session
+        await lastOnline.save();
+      }
+
+      // 2. Create new offline record starting now (for dashboard duration tracking)
       await ChildAdminActivity.create({
         childAdminId: adminId,
         date: now.toISOString().split('T')[0],
         offlineFrom: now,
-        loginTime: now, // Keeping for compatibility or reference
+        loginTime: now, // For schema compliance
         status: "Offline"
       });
 
       await ChildAdmin.findByIdAndUpdate(adminId, {
         isOnline: false,
         lastLogoutTime: now,
-        currentSessionId: null
       });
     }
 
@@ -505,6 +540,14 @@ exports.childAdminHeartbeat = async (req, res) => {
         await lastOffline.save();
       }
       child.isOnline = true;
+
+      // ✅ Create a new "Online" activity record
+      await ChildAdminActivity.create({
+        childAdminId: child._id,
+        date: now.toISOString().split('T')[0],
+        loginTime: now,
+        status: "Online"
+      });
     }
 
     child.lastActivityTime = now;

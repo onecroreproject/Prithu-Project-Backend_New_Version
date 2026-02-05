@@ -57,7 +57,14 @@ exports.getChildAdminPermissions = async (req, res) => {
       'canManageSettingsSubscriptions',
       'canManageSalesDashboard',
       'canFaqManagement',
-      'canManageUserFeedbacks'
+      'canManageUserFeedbacks',
+      'canViewBilling',
+      'canManagePlans',
+      'canManageAddReport',
+      'canViewSystemLogs',
+      'canManageAdminRoles',
+      'canManagePermissions',
+      'canManageStudio'
     ];
 
     const childAdmin = await ChildAdmin.findById(childAdminId)
@@ -129,7 +136,14 @@ exports.updateChildAdminPermissions = async (req, res) => {
       'canManageSettingsSubscriptions',
       'canManageSalesDashboard',
       'canFaqManagement',
-      'canManageUserFeedbacks'
+      'canManageUserFeedbacks',
+      'canViewBilling',
+      'canManagePlans',
+      'canManageAddReport',
+      'canViewSystemLogs',
+      'canManageAdminRoles',
+      'canManagePermissions',
+      'canManageStudio'
     ];
 
     // Compute ungranted permissions
@@ -203,7 +217,11 @@ exports.getChildAdminById = async (req, res) => {
       'canManageSettingsSubscriptions',
       'canManageSalesDashboard',
       'canFaqManagement',
-      'canManageUserFeedbacks'
+      'canManageUserFeedbacks',
+      'canViewBilling',
+      'canManagePlans',
+      'canManageAddReport',
+      'canViewSystemLogs'
     ];
 
     // 1️⃣ Fetch ChildAdmin basic details (excluding password), populate parent

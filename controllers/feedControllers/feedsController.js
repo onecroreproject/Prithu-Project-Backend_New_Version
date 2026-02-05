@@ -9,7 +9,7 @@ const UserView = require("../../models/userModels/userViewFeedsModel.js");
 const UserLanguage = require('../../models/userModels/userLanguageModel.js');
 const UserCategory = require('../../models/userModels/userCategotyModel.js');
 const ProfileSettings = require('../../models/profileSettingModel');
-const { applyFrame } = require("../../middlewares/helper/AddFrame/addFrame.js");
+
 const { extractThemeColor } = require("../../middlewares/helper/extractThemeColor.js");
 const ImageStats = require("../../models/userModels/MediaSchema/imageViewModel.js");
 const VideoStats = require("../../models/userModels/MediaSchema/videoViewStatusModel");

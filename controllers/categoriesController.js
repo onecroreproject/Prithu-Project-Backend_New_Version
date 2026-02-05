@@ -6,7 +6,7 @@ const UserLanguage = require('../models/userModels/userLanguageModel');
 const { getLanguageCode } = require("../middlewares/helper/languageHelper");
 const UserCategory = require("../models/userModels/userCategotyModel");
 const ProfileSettings = require('../models/profileSettingModel');
-const { applyFrame } = require("../middlewares/helper/AddFrame/addFrame.js");
+
 const { extractThemeColor } = require("../middlewares/helper/extractThemeColor.js");
 const UserFeedActions = require('../models/userFeedInterSectionModel');
 
@@ -379,9 +379,7 @@ exports.getfeedWithCategoryWithId = async (req, res) => {
     }
 
     // 3️⃣ Enrich feeds with theme colors and avatar frames (batch process theme colors)
-    const profileSetting = await ProfileSettings.findOne({ userId });
-    const avatarToUse = profileSetting?.modifyAvatarPublicId;
-    const framedAvatar = await applyFrame(avatarToUse);
+
 
     const enrichedFeeds = await Promise.all(
       feeds.map(async (feed) => {
@@ -419,7 +417,7 @@ exports.getfeedWithCategoryWithId = async (req, res) => {
           viewsCount: 0, // Placeholder, implement if needed
           commentsCount: 0, // Placeholder, implement if needed
           ...actions,
-          framedAvatar: framedAvatar || avatarToUse,
+          framedAvatar: feed.profileAvatar || null,
           themeColor,
           timeAgo: feedTimeCalculator(feed.createdAt),
         };

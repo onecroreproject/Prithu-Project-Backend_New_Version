@@ -28,6 +28,7 @@ const UserEarnings = require('../../models/userModels/userRefferalModels/referra
 const UserFeedCategories = require('../../models/userModels/userCategotyModel.js');
 const UserFollowings = require("../../models/userFollowingModel.js");
 const UserLevels = require("../../models/userModels/userRefferalModels/userReferralLevelModel");
+const UserReferral = require('../../models/userModels/userRefferalModels/userReferralModel.js');
 const UserNotification = require("../../models/notificationModel.js");
 const UserViews = require("../../models/userModels/MediaSchema/userImageViewsModel.js");
 const { extractPublicId } = require("../../middlewares/helper/cloudnaryDetete.js");
@@ -37,7 +38,6 @@ const UserSubscriptions = require("../../models/subscriptionModels/userSubscript
 const CommentLikes = require("../../models/commentsLikeModel.js");
 const CreatorFollowers = require('../../models/creatorFollowerModel.js');
 const Devices = require("../../models/userModels/userSession-Device/deviceModel.js");
-const UserReferral = require("../../models/userModels/userRefferalModels/userReferralModel.js");
 const TrendingCreators = require("../../models/treandingCreators.js")
 
 
@@ -164,7 +164,7 @@ exports.getAllUserDetails = async (req, res) => {
     // 1️⃣ Get all users (online + lastLoginAt directly from User schema)
     const allUsers = await Users.find()
       .select(
-        "userName _id email lastActiveAt lastLoginAt createdAt subscription isBlocked isOnline profileSettings"
+        "userName _id email lastActiveAt lastLoginAt lastSeenAt createdAt subscription isBlocked isOnline profileSettings trialUsed referralCode referalCode referealCode gender phone phoneNumber"
       )
       .lean();
 
@@ -175,17 +175,20 @@ exports.getAllUserDetails = async (req, res) => {
     // 2️⃣ Extract userIds
     const userIds = allUsers.map((u) => u._id);
 
-    // 3️⃣ Fetch profile settings (profile avatar)
+    // 3️⃣ Fetch profile settings (profile avatar & phone number)
     const profileSettingsList = await ProfileSettings.find({
       userId: { $in: userIds },
     })
-      .select("userId profileAvatar")
+      .select("userId profileAvatar phoneNumber")
       .lean();
 
-    // Create quick lookup map for avatars
+    // Create quick lookup map for avatars and phone numbers
     const profileMap = {};
     profileSettingsList.forEach((p) => {
-      profileMap[p.userId.toString()] = p.profileAvatar || null;
+      profileMap[p.userId.toString()] = {
+        avatar: p.profileAvatar || null,
+        phone: p.phoneNumber || null,
+      };
     });
 
     // 4️⃣ Format final response
@@ -195,8 +198,14 @@ exports.getAllUserDetails = async (req, res) => {
       email: user.email,
       createdAt: user.createdAt,
 
-      // 📌 USER ONLINE STATUS (Directly from User schema)
-      isOnline: user.isOnline || false,
+      // 📌 USER ONLINE STATUS (Calculated with 20min threshold)
+      isOnline: (() => {
+        if (!user.isOnline) return false;
+        if (!user.lastSeenAt) return false;
+        const now = new Date();
+        const diffInMinutes = (now - new Date(user.lastSeenAt)) / (1000 * 60);
+        return diffInMinutes < 20; // Active in last 20 minutes
+      })(),
 
       // 📌 LAST ACTIVE TIME (Already in User schema)
       lastActiveAt: user.lastActiveAt || null,
@@ -204,11 +213,29 @@ exports.getAllUserDetails = async (req, res) => {
       // 📌 LAST LOGIN TIME (From User schema)
       lastLoginAt: user.lastLoginAt || null,
 
-      // 📌 Avatar
-      profileAvatar: profileMap[user._id.toString()] || null,
+      // 📌 Avatar and Phone
+      profileAvatar: profileMap[user._id.toString()]?.avatar || null,
+      phone: profileMap[user._id.toString()]?.phone || user.phone || user.phoneNumber || null,
+      gender: user.gender || null,
+      referralCode: user.referralCode || user.referalCode || user.referealCode || null,
 
       // 📌 Subscription info
+      subscription: user.subscription || {},
       subscriptionActive: user.subscription?.isActive || false,
+
+      // 📌 Trial status calculation
+      trialStatus: (() => {
+        if (!user.trialUsed) return "Not Used";
+
+        const now = new Date();
+        const endDate = user.subscription?.endDate ? new Date(user.subscription.endDate) : null;
+        const isTrial = user.subscription?.planType === 'trial';
+
+        if (user.subscription?.isActive && isTrial && endDate && endDate > now) {
+          return "Active";
+        }
+        return "Expired";
+      })(),
 
       // 📌 Block status
       isBlocked: user.isBlocked,
@@ -234,25 +261,37 @@ exports.searchAllUserDetails = async (req, res) => {
     let searchFilter = {};
 
     // -----------------------------------------
-    // 1️⃣ APPLY SMART SEARCH FILTER
+    // 1️⃣ APPLY SMART SEARCH FILTER (Improved)
     // -----------------------------------------
     if (search && search.trim() !== "") {
-      const trimmed = search.trim();
+      const query = search.trim();
 
-      // A) Referral code: ABC123 (3 letters + 3 digits)
-      if (/^[A-Za-z]{3}\d{3}$/.test(trimmed)) {
-        searchFilter.referralCode = trimmed.toUpperCase();
+      const orConditions = [
+        { userName: { $regex: query, $options: "i" } },
+        { email: { $regex: query, $options: "i" } },
+        { referralCode: { $regex: query, $options: "i" } },
+      ];
+
+      // Handle Numeric Search (Phone Number)
+      if (/^\d+/.test(query)) {
+        // Search phone field in User model (if any)
+        orConditions.push({ phone: { $regex: query, $options: "i" } });
+
+        // Search ProfileSettings for phoneNumber (Number field needs match)
+        const numericQuery = parseInt(query, 10);
+        if (!isNaN(numericQuery)) {
+          const matchingProfiles = await ProfileSettings.find({
+            phoneNumber: numericQuery
+          }).select("userId").lean();
+
+          if (matchingProfiles.length > 0) {
+            const userIdsFromProfile = matchingProfiles.map(p => p.userId);
+            orConditions.push({ _id: { $in: userIdsFromProfile } });
+          }
+        }
       }
 
-      // B) Mobile number: exactly 10 digits
-      else if (/^\d{10}$/.test(trimmed)) {
-        searchFilter.phone = trimmed;
-      }
-
-      // C) Name: alphabets only → full or partial match
-      else if (/^[A-Za-z]+$/.test(trimmed)) {
-        searchFilter.userName = { $regex: trimmed, $options: "i" };
-      }
+      searchFilter.$or = orConditions;
     }
 
     // -----------------------------------------
@@ -260,28 +299,30 @@ exports.searchAllUserDetails = async (req, res) => {
     // -----------------------------------------
     const allUsers = await Users.find(searchFilter)
       .select(
-        "userName _id email phone lastActiveAt lastLoginAt createdAt subscription isBlocked isOnline profileSettings referralCode"
+        "userName _id email phone phoneNumber lastActiveAt lastLoginAt lastSeenAt createdAt subscription isBlocked isOnline profileSettings referralCode referalCode referealCode trialUsed gender"
       )
       .lean();
 
     if (!allUsers || allUsers.length === 0) {
-      return res.status(404).json({ message: "No users found" });
+      return res.status(200).json({ users: [], message: "No users found" });
     }
 
     // -----------------------------------------
-    // 3️⃣ Fetch profile settings (avatars)
-    // -----------------------------------------
+    // 3️⃣ Fetch profile settings (avatars & phone numbers)
     const userIds = allUsers.map((u) => u._id);
 
     const profileSettingsList = await ProfileSettings.find({
       userId: { $in: userIds },
     })
-      .select("userId profileAvatar")
+      .select("userId profileAvatar phoneNumber")
       .lean();
 
     const profileMap = {};
     profileSettingsList.forEach((p) => {
-      profileMap[p.userId.toString()] = p.profileAvatar || null;
+      profileMap[p.userId.toString()] = {
+        avatar: p.profileAvatar || null,
+        phone: p.phoneNumber || null,
+      };
     });
 
     // -----------------------------------------
@@ -291,15 +332,37 @@ exports.searchAllUserDetails = async (req, res) => {
       userId: user._id,
       userName: user.userName,
       email: user.email,
-      phone: user.phone || null,
-      referralCode: user.referralCode || null,
+      phone: profileMap[user._id.toString()]?.phone || user.phone || user.phoneNumber || null,
+      gender: user.gender || null,
+      referralCode: user.referralCode || user.referalCode || user.referealCode || null,
       createdAt: user.createdAt,
-      isOnline: user.isOnline,
+      isOnline: (() => {
+        if (!user.isOnline) return false;
+        if (!user.lastSeenAt) return false;
+        const now = new Date();
+        const diffInMinutes = (now - new Date(user.lastSeenAt)) / (1000 * 60);
+        return diffInMinutes < 20;
+      })(),
       lastActiveAt: user.lastActiveAt,
       lastLoginAt: user.lastLoginAt,
+      subscription: user.subscription || {},
       subscriptionActive: user.subscription?.isActive || false,
+      // 📌 Trial status calculation
+      trialStatus: (() => {
+        if (!user.trialUsed) return "Not Used";
+
+        const now = new Date();
+        const endDate = user.subscription?.endDate ? new Date(user.subscription.endDate) : null;
+        const isTrial = user.subscription?.planType === 'trial';
+
+        if (user.subscription?.isActive && isTrial && endDate && endDate > now) {
+          return "Active";
+        }
+        return "Expired";
+      })(),
+
       isBlocked: user.isBlocked,
-      profileAvatar: profileMap[user._id.toString()] || null,
+      profileAvatar: profileMap[user._id.toString()]?.avatar || null,
     }));
 
     return res.status(200).json({ users: formattedUsers });
@@ -522,11 +585,14 @@ exports.getUserSocialMeddiaDetailWithIdForAdmin = async (req, res) => {
     // -------------------------------------------
     const user = await Users.findById(userId)
       .select(
-        "userName email referralCode referredByUserId totalEarnings withdrawableEarnings isActive lastActiveAt lastLoginAt currentLevel currentTier roles isOnline"
+        "userName email referralCode referalCode referealCode referredByUserId totalEarnings balanceEarnings withdrawnEarnings withdrawnAmount isActive lastActiveAt lastLoginAt currentLevel currentTier roles isOnline subscription trialUsed gender"
       )
       .lean();
 
     if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Normalize referral code
+    user.referralCode = user.referralCode || user.referalCode || user.referealCode || null;
 
     // -------------------------------------------
     // 2️⃣ PROFILE DETAILS (FULL SCHEMA)
@@ -536,54 +602,110 @@ exports.getUserSocialMeddiaDetailWithIdForAdmin = async (req, res) => {
       .lean();
 
     // -------------------------------------------
-    // 3️⃣ SUBSCRIPTION
+    // 3️⃣ REFERRAL NETWORK
     // -------------------------------------------
-    const subscription = await UserSubscriptions.findOne({ userId })
-      .select("subscriptionActive startDate endDate subscriptionActiveDate")
-      .lean();
+    const referralData = await UserReferral.findOne({ parentId: userId }).lean();
+    let referralPeople = [];
+    if (referralData && referralData.childIds && referralData.childIds.length > 0) {
+      referralPeople = await Users.find({ _id: { $in: referralData.childIds } })
+        .select("userName createdAt")
+        .lean();
+
+      const childProfileSettings = await ProfileSettings.find({ userId: { $in: referralData.childIds } })
+        .select("userId profileAvatar")
+        .lean();
+
+      const profileMap = {};
+      childProfileSettings.forEach(p => { profileMap[p.userId.toString()] = p.profileAvatar; });
+
+      referralPeople = referralPeople.map(u => ({
+        ...u,
+        profileAvatar: profileMap[u._id.toString()] || null
+      }));
+    }
 
     // -------------------------------------------
-    // 4️⃣ LANGUAGE
+    // 4️⃣ WATCH ANALYTICS (HOURS & TOP CATEGORY)
     // -------------------------------------------
-    const language = await UserLanguage.findOne({ userId })
-      .select("feedLanguageCode appLanguageCode")
-      .lean();
+    const videoViews = await VideoView.find({ userId }).select("videoId watchedSeconds").lean();
+    const imageViews = await ImageView.find({ userId }).select("imageId").lean();
+
+    const totalWatchSeconds = videoViews.reduce((acc, v) => acc + (v.watchedSeconds || 0), 0);
+    const totalWatchHours = (totalWatchSeconds / 3600).toFixed(2);
+
+    // Track category frequency
+    const categoryFreq = {};
+    const feedIdsToLookup = [
+      ...videoViews.map(v => v.videoId),
+      ...imageViews.map(i => i.imageId)
+    ];
+
+    if (feedIdsToLookup.length > 0) {
+      const feeds = await Feed.find({ _id: { $in: feedIdsToLookup } })
+        .select("category")
+        .populate("category", "name")
+        .lean();
+
+      feeds.forEach(f => {
+        if (f.category && Array.isArray(f.category)) {
+          f.category.forEach(cat => {
+            const catName = cat.name || "Uncategorized";
+            categoryFreq[catName] = (categoryFreq[catName] || 0) + 1;
+          });
+        }
+      });
+    }
+
+    const sortedCategories = Object.entries(categoryFreq).sort((a, b) => b[1] - a[1]);
+    const topCategory = sortedCategories.length > 0 ? sortedCategories[0][0] : "N/A";
 
     // -------------------------------------------
-    // 5️⃣ DEVICE INFO
+    // 5️⃣ FINANCIALS (EARNINGS, WITHDRAWALS, BALANCE)
     // -------------------------------------------
-    const device = await UserDevices.findOne({ userId })
-      .select("deviceType deviceName ipAddress createdAt")
+    const recentEarnings = await UserEarning.find({ userId })
       .sort({ createdAt: -1 })
+      .limit(5)
+      .populate("fromUserId", "userName")
       .lean();
 
-    // -------------------------------------------
-    // -------------------------------------------
-    // 6️⃣ FOLLOWERS & FOLLOWING (Removed as requested)
-    // -------------------------------------------
-    const formattedFollowers = [];
-    const formattedFollowing = [];
+    const recentWithdrawals = await Withdrawal.find({ userId })
+      .sort({ requestedAt: -1 })
+      .limit(5)
+      .lean();
+
+    // Combine transactions
+    const transactionHistory = [
+      ...recentEarnings.map(e => ({
+        type: "Earning",
+        amount: e.amount,
+        date: e.createdAt,
+        status: "completed",
+        description: `Referral from ${e.fromUserId?.userName || 'User'}`
+      })),
+      ...recentWithdrawals.map(w => ({
+        type: "Withdrawal",
+        amount: w.amount,
+        date: w.requestedAt,
+        status: w.status,
+        description: "Withdrawal request"
+      }))
+    ].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
 
     // -------------------------------------------
-    // 8️⃣ POSTS & ENGAGEMENTS (Removed as requested)
-    // -------------------------------------------
-    const formattedPosts = [];
-
-    // -------------------------------------------
-    // 1️⃣1️⃣ Reports by this user
+    // 6️⃣ FINAL RESPONSE CONSTRUCTION
     // -------------------------------------------
     const reports = await Report.find({ reportedBy: userId })
       .select("typeId targetId targetType answers status createdAt")
       .lean();
 
-    // -------------------------------------------
-    // 1️⃣2️⃣ Trending Creator Info
-    // -------------------------------------------
     const trending = await TrendingCreators.findOne({ userId }).lean();
-
-    // -------------------------------------------
-    // FINAL RESPONSE
-    // -------------------------------------------
+    const device = await UserDevices.findOne({ userId })
+      .select("deviceType deviceName ipAddress createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
+    const language = await UserLanguage.findOne({ userId })
+      .select("feedLanguageCode appLanguageCode")
+      .lean();
 
     return res.status(200).json({
       success: true,
@@ -591,12 +713,20 @@ exports.getUserSocialMeddiaDetailWithIdForAdmin = async (req, res) => {
       user: {
         ...user,
         profile,
-        subscription,
+        referralPeople,
+        watchAnalytics: {
+          totalWatchHours,
+          topCategory,
+          categoryStats: sortedCategories.slice(0, 5) // Top 5 categories
+        },
+        financials: {
+          totalEarnings: user.totalEarnings || 0,
+          withdrawnAmount: user.withdrawnEarnings || user.withdrawnAmount || 0,
+          balanceAmount: user.balanceEarnings || 0,
+          transactionHistory
+        },
         language,
         device,
-        followers: formattedFollowers,
-        following: formattedFollowing,
-        posts: formattedPosts,
         reports,
         trending,
       },
@@ -1158,11 +1288,18 @@ exports.getUserProfileDashboardMetricCount = async (req, res) => {
     // 4️⃣ Blocked users
     const blockedUserCount = await Users.countDocuments({ isBlocked: true });
 
-    // 5️⃣ Online users (⚡ from User schema)
-    const onlineUsersCount = await Users.countDocuments({ isOnline: true });
+    // 5️⃣ Online users (⚡ from User schema + 20min threshold)
+    const twentyMinsAgo = new Date(Date.now() - 20 * 60 * 1000);
+    const onlineUsersCount = await Users.countDocuments({
+      isOnline: true,
+      lastSeenAt: { $gte: twentyMinsAgo }
+    });
 
     // 6️⃣ Offline users = total - online
     const offlineUsersCount = totalUsers - onlineUsersCount;
+
+    // 7️⃣ Trial used users
+    const trialUsedCount = await Users.countDocuments({ trialUsed: true });
 
     return res.status(200).json({
       totalUsers,
@@ -1171,6 +1308,7 @@ exports.getUserProfileDashboardMetricCount = async (req, res) => {
       blockedUserCount,
       subscriptionCount,
       accountCount,
+      trialUsedCount,
     });
   } catch (error) {
     console.error("Dashboard metric error:", error);

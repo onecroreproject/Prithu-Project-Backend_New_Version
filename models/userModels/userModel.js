@@ -16,6 +16,8 @@ const FcmTokenSchema = new mongoose.Schema(
 const SubscriptionSchema = new mongoose.Schema(
   {
     isActive: { type: Boolean, default: false },
+    planType: { type: String, enum: ["trial", "basic", "premium"], default: "basic" },
+    planId: { type: mongoose.Schema.Types.ObjectId, ref: "SubscriptionPlan" },
     startDate: { type: Date },
     endDate: { type: Date },
     createdAt: { type: Date, default: Date.now },
