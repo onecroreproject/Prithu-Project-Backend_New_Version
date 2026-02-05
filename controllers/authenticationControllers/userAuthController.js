@@ -77,13 +77,13 @@ exports.createNewUser = async (req, res) => {
           { $addToSet: { childIds: user._id } },
           { upsert: true }
         ),
-        // 💰 REWARD REFERRER: Add 25 rupees
+        // 💰 REWARD REFERRER: Add 100 rupees
         User.updateOne(
           { _id: parent._id },
           {
             $inc: {
-              totalEarnings: 25,
-              balanceEarnings: 25,
+              totalEarnings: 100,
+              balanceEarnings: 100,
               referralCodeUsageCount: 1
             }
           }
@@ -92,7 +92,7 @@ exports.createNewUser = async (req, res) => {
         UserEarning.create({
           userId: parent._id,
           fromUserId: user._id,
-          amount: 25,
+          amount: 100,
           level: 1,
           tier: 1,
           isPartial: false

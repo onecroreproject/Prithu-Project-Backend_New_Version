@@ -113,13 +113,22 @@ exports.getAllFeedsByUserId = async (req, res) => {
       socialLinks: safeSocialLinks // Use filtered social links
     };
 
+
     /* -----------------------------------------------------
-       ✅ 2️⃣ FETCH HIDDEN POSTS & BLOCKED CATEGORIES
+       ✅ 2️⃣ FETCH HIDDEN POSTS & BLOCKED CATEGORIES & WATCHED FEEDS
     ------------------------------------------------------*/
     const hiddenPosts = await HiddenPost.find({ userId }).select("postId -_id").lean();
-    hiddenPostIds = hiddenPosts.map(h => h.postId);
+    let hiddenPostIds = hiddenPosts.map(h => h.postId);
+
     const userCategories = await UserCategory.findOne({ userId }).select("nonInterestedCategories").lean();
     notInterestedCategoryIds = userCategories?.nonInterestedCategories || [];
+
+    // 🆕 FETCH WATCHED FEEDS
+    const userActions = await UserFeedActions.findOne({ userId }).select("watchedFeeds.feedId").lean();
+    const watchedFeedIds = (userActions?.watchedFeeds || []).map(w => w.feedId);
+
+    // Combine hidden and watched
+    const excludeIds = [...hiddenPostIds, ...watchedFeedIds];
 
     /* -----------------------------------------------------
        ✅ 3️⃣ AGGREGATION PIPELINE
@@ -127,7 +136,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const feeds = await Feed.aggregate([
       {
         $match: {
-          _id: { $nin: hiddenPostIds },
+          _id: { $nin: excludeIds },
           category: categoryId
             ? new mongoose.Types.ObjectId(categoryId)
             : { $nin: notInterestedCategoryIds },
@@ -222,13 +231,29 @@ exports.getAllFeedsByUserId = async (req, res) => {
       },
       {
         $lookup: {
-          from: "UserViews",
-          let: { fid: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$feedId", "$$fid"] } } },
-            { $count: "count" }
-          ],
-          as: "viewsCountArr"
+          from: "ImageStats",
+          localField: "_id",
+          foreignField: "imageId",
+          as: "imageStats"
+        }
+      },
+      {
+        $lookup: {
+          from: "VideoStats",
+          localField: "_id",
+          foreignField: "videoId",
+          as: "videoStats"
+        }
+      },
+      {
+        $addFields: {
+          viewsCountArr: {
+            $cond: {
+              if: { $eq: ["$postType", "image"] },
+              then: [{ count: { $ifNull: [{ $arrayElemAt: ["$imageStats.totalViews", 0] }, 0] } }],
+              else: [{ count: { $ifNull: [{ $arrayElemAt: ["$videoStats.totalViews", 0] }, 0] } }]
+            }
+          }
         }
       },
       // 📊 USER INTERACTIONS: Check if current user liked/saved/followed
@@ -378,7 +403,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
           page,
           limit,
           total: await Feed.countDocuments({
-            _id: { $nin: hiddenPostIds },
+            _id: { $nin: excludeIds },
             ...(categoryId
               ? { category: new mongoose.Types.ObjectId(categoryId) }
               : { category: { $nin: notInterestedCategoryIds } }

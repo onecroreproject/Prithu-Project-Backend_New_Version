@@ -60,6 +60,14 @@ const UserFeedActionsSchema = new mongoose.Schema(
         sharedAt: { type: Date, default: Date.now },
       },
     ],
+
+    // Track Watched (Fully Completed)
+    watchedFeeds: [
+      {
+        feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed" },
+        watchedAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true }
 );
@@ -79,6 +87,7 @@ UserFeedActionsSchema.index({ "savedFeeds.feedId": 1 });
 UserFeedActionsSchema.index({ "downloadedFeeds.feedId": 1 });
 UserFeedActionsSchema.index({ "disLikeFeeds.feedId": 1 });
 UserFeedActionsSchema.index({ "sharedFeeds.feedId": 1 });
+UserFeedActionsSchema.index({ "watchedFeeds.feedId": 1 });
 
 module.exports = prithuDB.model(
   "UserFeedActions",

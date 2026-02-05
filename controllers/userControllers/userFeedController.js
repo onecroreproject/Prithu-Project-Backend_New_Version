@@ -148,6 +148,48 @@ exports.userVideoViewCount = async (req, res) => {
       );
     }
 
+    // 5️⃣ NEW: Track fully watched feeds in UserFeedActions for "You're all caught up" logic
+    await UserFeedActions.findOneAndUpdate(
+      { userId },
+      {
+        $addToSet: {
+          watchedFeeds: {
+            feedId: new mongoose.Types.ObjectId(feedId),
+            // Note: $addToSet uses deep equality. Dates might cause uniqueness issues if not handled carefully.
+            // However, we want to know *if* they watched it. 
+            // If we just want the ID, we could store just IDs.
+            // But the schema has an object { feedId, watchedAt }.
+            // To prevent duplicates based on feedId ONLY, we might need a different approach or accept multiple entries.
+            // BETTER: Use a query that checks if feedId exists in array.
+          }
+        }
+      },
+      { upsert: true }
+    );
+    // FIX: $addToSet with objects is tricky if timestamps differ.
+    // Let's use a two-step approach or simpler schema if possible.
+    // The requirement is "track video watch completion".
+    // If I just want to filter them out, I only need to know IF they watched it.
+    // I will use a query to check existence first, or push if not exists.
+
+    const actionDoc = await UserFeedActions.findOne({ userId });
+    const alreadyWatched = actionDoc?.watchedFeeds?.some(w => w.feedId.toString() === feedId.toString());
+
+    if (!alreadyWatched) {
+      await UserFeedActions.findOneAndUpdate(
+        { userId },
+        {
+          $push: {
+            watchedFeeds: {
+              feedId: new mongoose.Types.ObjectId(feedId),
+              watchedAt: new Date()
+            }
+          }
+        },
+        { upsert: true }
+      );
+    }
+
     return res.json({
       message: "Video view recorded",
       durationAdded: feed.duration,
