@@ -13,7 +13,6 @@ const UserCategory = require('../../models/userModels/userCategotyModel.js');
 const ImageView = require('../../models/userModels/MediaSchema/userImageViewsModel.js');
 const VideoView = require('../../models/userModels/MediaSchema/userVideoViewModel.js');
 const Feed = require('../../models/feedModel.js');
-const UserLevel = require('../../models/userModels/userRefferalModels/userReferralLevelModel');
 const Withdrawal = require('../../models/userModels/userRefferalModels/withdrawal.js');
 const UserEarning = require('../../models/userModels/userRefferalModels/referralEarnings.js');
 const Session = require('../../models/userModels/userSession-Device/sessionModel.js');
@@ -27,7 +26,6 @@ const UserComments = require("../../models/userCommentModel.js");
 const UserEarnings = require('../../models/userModels/userRefferalModels/referralEarnings.js');
 const UserFeedCategories = require('../../models/userModels/userCategotyModel.js');
 const UserFollowings = require("../../models/userFollowingModel.js");
-const UserLevels = require("../../models/userModels/userRefferalModels/userReferralLevelModel");
 const UserReferral = require('../../models/userModels/userRefferalModels/userReferralModel.js');
 const UserNotification = require("../../models/notificationModel.js");
 const UserViews = require("../../models/userModels/MediaSchema/userImageViewsModel.js");
@@ -1182,90 +1180,7 @@ exports.getUserAnalyticalData = async (req, res) => {
 
 
 
-exports.getUserLevelWithEarnings = async (req, res) => {
-  try {
-    const { userId } = req.params;
 
-    if (!userId) {
-      return res.status(400).json({ message: "Invalid userId" });
-    }
-
-    // 1️⃣ Get current user's profile with fallback
-    const currentUserProfile = await ProfileSettings.findOne({ userId })
-      .select("userName profileAvatar")
-      .lean();
-
-    const currentUser = {
-      userId: userId || null,
-      userName: currentUserProfile?.userName || "Unknown User",
-      profileAvatar: currentUserProfile?.profileAvatar,
-    };
-
-    // 2️⃣ Find the topmost level for this user
-    const topLevel = await UserLevel.findOne({ userId })
-      .sort({ level: -1 }) // highest level
-      .select("level leftUsers rightUsers")
-      .lean();
-
-    const level = topLevel?.level || 0; // fallback to level 1
-    const leftUserIds = topLevel?.leftUsers || [];
-    const rightUserIds = topLevel?.rightUsers || [];
-
-    // 3️⃣ Fetch left and right users with profile info, with fallbacks
-    const fetchUsersWithProfile = async (userIds) => {
-      if (!userIds || userIds.length === 0) return [];
-
-      const profiles = await ProfileSettings.find({ userId: { $in: userIds } })
-        .select("userId userName profileAvatar")
-        .lean();
-
-      return userIds.map(uId => {
-        const profile = profiles.find(p => p.userId.toString() === uId.toString()) || {};
-        return {
-          _id: uId,
-          userName: profile.userName || "Unknown User",
-          profileAvatar: profile.profileAvatar || defaultAvater,
-        };
-      });
-    };
-
-    const leftUsers = await fetchUsersWithProfile(leftUserIds);
-    const rightUsers = await fetchUsersWithProfile(rightUserIds);
-
-    // 4️⃣ Calculate total earnings for current user
-    const earnings = await UserEarning.aggregate([
-      { $match: { userId: new mongoose.Types.ObjectId(userId) } },
-      { $group: { _id: "$userId", totalEarned: { $sum: "$amount" } } }
-    ]);
-    const totalEarned = earnings[0]?.totalEarned || 0;
-
-    // 5️⃣ Calculate total withdrawn and pending withdrawable amounts
-    const withdrawals = await Withdrawal.find({ userId }).lean() || [];
-
-    const totalWithdrawn = withdrawals
-      .filter(w => w.status === "completed")
-      .reduce((sum, w) => sum + (w.amount || 0), 0);
-
-    const pendingWithdrawable = withdrawals
-      .filter(w => w.status === "pending")
-      .reduce((sum, w) => sum + (w.amount || 0), 0);
-
-    // 6️⃣ Send response with all fallbacks
-    return res.status(200).json({
-      user: currentUser,
-      level,
-      totalEarned,
-      totalWithdrawn,
-      pendingWithdrawable,
-      leftUsers,
-      rightUsers,
-    });
-
-  } catch (err) {
-    console.error("getUserLevelWithEarnings error:", err);
-    return res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
 
 
 
@@ -1540,9 +1455,7 @@ exports.deleteUserAndAllRelated = async (req, res) => {
     await timedDelete("UserLanguage.deleteMany", () =>
       UserLanguage.deleteMany({ userId }, { session })
     );
-    await timedDelete("UserLevels.deleteMany", () =>
-      UserLevels.deleteMany({ userId }, { session })
-    );
+ 
     await timedDelete("UserNotification.deleteMany", () =>
       UserNotification.deleteMany({ userId }, { session })
     );

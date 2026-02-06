@@ -3,8 +3,9 @@ const mongoose = require("mongoose");
 const UserEarning = require("../../models/userModels/userRefferalModels/referralEarnings.js");
 const ProfileSettings = require("../../models/profileSettingModel");
 const Withdrawal = require("../../models/userModels/userRefferalModels/withdrawal.js");
-const UserSubscription = require("../../models/subscriptionModels/userSubscriptionModel");
 const SubscriptionPlan = require("../../models/subscriptionModels/subscriptionPlanModel.js");
+const ReferralCycle = require("../../models/userModels/userRefferalModels/referralCycle");
+const User = require("../../models/userModels/userModel");
 
 
 
@@ -81,13 +82,19 @@ exports.getUserEarnings = async (req, res) => {
     ]);
 
     const totalWithdrawn = withdrawalResult[0]?.totalWithdrawn || 0;
-    const balance = totalEarnings - totalWithdrawn;
+
+    // Cycle-aware balance
+    const activeCycles = await ReferralCycle.find({
+      userId,
+      status: { $in: ["active", "completed"] }
+    });
+    const currentBalance = activeCycles.reduce((sum, c) => sum + c.earnedAmount, 0);
 
     return res.status(200).json({
       success: true,
       totalEarnings,
       totalWithdrawn,
-      balance,
+      balance: currentBalance,
       breakdown,
       earnings: earningsDetails
     });
@@ -116,11 +123,18 @@ exports.getUserBalance = async (req, res) => {
     const totalEarnings = earningsResult[0]?.total || 0;
     const totalWithdrawn = withdrawalResult[0]?.totalWithdrawn || 0;
 
+    // Cycle-aware balance
+    const activeCycles = await ReferralCycle.find({
+      userId,
+      status: { $in: ["active", "completed"] }
+    });
+    const currentBalance = activeCycles.reduce((sum, c) => sum + c.earnedAmount, 0);
+
     return res.status(200).json({
       success: true,
       totalEarnings,
       totalWithdrawn,
-      balance: totalEarnings - totalWithdrawn
+      balance: currentBalance
     });
   } catch (error) {
     console.error("Error getting user balance:", error);

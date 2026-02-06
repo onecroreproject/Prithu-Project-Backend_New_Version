@@ -4,6 +4,7 @@ const { prithuDB } = require("../../database");
 const User = require("../../models/userModels/userModel");
 const UserLevel = require("../../models/userModels/userRefferalModels/userReferralLevelModel");
 const UserEarning = require("../../models/userModels/userRefferalModels/referralEarnings");
+const { updateCycleOnReferral } = require("../../services/referralCycleService");
 
 const LEVEL_AMOUNT = 250;
 const MAX_LEVEL = 10;
@@ -97,6 +98,9 @@ async function processReferral(childId) {
             { $set: { totalEarnings: total, balanceEarnings: balance } },
             { session }
           );
+
+          // Update Referral Cycle
+          await updateCycleOnReferral(ancestorId, childId, earningAmount, session);
         }
 
         // Promotion only when left/right full

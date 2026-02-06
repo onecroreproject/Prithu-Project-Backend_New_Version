@@ -83,6 +83,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const footerVisibilityConfig = {
       showElements: {
         name: canShow(viewerVisibility?.name || "public"),
+        userName: canShow(viewerVisibility?.userName || "public"),
         email: canShow(viewerVisibility?.email || "private"),
         phone: canShow(viewerVisibility?.phoneNumber || "private"),
         socialIcons: safeSocialLinks.length > 0
@@ -99,8 +100,12 @@ exports.getAllFeedsByUserId = async (req, res) => {
 
     const viewer = {
       id: userId,
-      name: viewerProfile?.name || "User",
-      userName: viewerProfile?.userName || "user",
+      name: canShow(viewerVisibility?.name || "public")
+        ? viewerProfile?.name || "User"
+        : "Private User",
+      userName: canShow(viewerVisibility?.userName || "public")
+        ? viewerProfile?.userName || "user"
+        : "private_user",
       email: canShow(viewerVisibility?.email || "private")
         ? viewerUser?.email || null
         : null,
@@ -344,7 +349,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
         }
       }
     ]);
-   
+
     /* -----------------------------------------------------
        ✅ 4️⃣ POST-PROCESSING (Normal vs Template Logic)
     ------------------------------------------------------*/

@@ -198,7 +198,16 @@ const {
 } = require("../controllers/userControllers/userReferralActivityController");
 
 const {
-    getWithdrawalHistory
+    getReferralCycles,
+    getCycleDetails
+} = require("../controllers/userControllers/userReferralCycleController");
+
+const {
+    getWithdrawalHistory,
+    getBankDetails,
+    saveBankDetails,
+    requestWithdrawal,
+    updateWithdrawalRequest
 } = require("../controllers/userControllers/userWithdrawalController");
 
 const { saveUserLocation,
@@ -280,6 +289,12 @@ router.post('/user/referral/activity/log', auth, logReferralActivity);
 router.get('/user/balance/amount', auth, getUserBalance);
 router.get('/user/withdrawal/details', auth, getWithdrawalHistory);
 router.get('/user/referral/recent-activities', auth, getRecentActivities);
+router.get('/user/bank/details', auth, getBankDetails);
+router.post('/user/bank/save', auth, saveBankDetails);
+router.post('/user/withdrawal/request', auth, requestWithdrawal);
+router.patch('/user/withdrawal/update/:requestId', auth, updateWithdrawalRequest);
+router.get('/user/referral/cycles', auth, getReferralCycles);
+router.get('/user/referral/cycle/:cycleId/details', auth, getCycleDetails);
 
 /* --------------------- User Profile --------------------- */
 router.get('/user/profile/detail', auth, getUserProfileDetail);

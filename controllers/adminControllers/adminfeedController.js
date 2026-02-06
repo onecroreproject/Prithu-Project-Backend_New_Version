@@ -271,10 +271,10 @@ exports.bulkFeedUpload = async (req, res) => {
         });
 
         const feedData = {
-          type: feedType,
+          postType: feedType,
           language: "en",
           category: categoryIds,
-          contentUrl: fileSave.url,
+          mediaUrl: fileSave.url,
           files: [{
             url: fileSave.url,
             path: fileSave.path,
@@ -284,12 +284,16 @@ exports.bulkFeedUpload = async (req, res) => {
             order: 0,
             storageType: "local"
           }],
-          dec: req.body.caption || "",
+          caption: req.body.caption || "",
           fileHash: file.fileHash,
-          createdByAccount: adminId,
+          postedBy: { userId: adminId, role: req.role },
           roleRef: req.role,
-          storageType: "local",
-          status: "Published"
+          storage: {
+            type: "local",
+            urls: { media: fileSave.url },
+            paths: { media: fileSave.path }
+          },
+          status: "published"
         };
 
         const feed = new Feed(feedData);
@@ -455,7 +459,7 @@ exports.getFeedsWithDesign = async (req, res) => {
         { allowedUsers: userId }
       ],
       isDeleted: false,
-      status: { $in: ["Published", "Scheduled"] }
+      status: { $in: ["published", "scheduled"] }
     };
 
     if (categoryId) query.category = categoryId;
@@ -525,7 +529,7 @@ exports.duplicateFeedWithDesign = async (req, res) => {
     delete duplicateData.statsId;
 
     duplicateData.createdByAccount = userId;
-    duplicateData.status = "Published";
+    duplicateData.status = "published";
     duplicateData.isScheduled = false;
     duplicateData.scheduleDate = null;
     duplicateData.version = 1;
@@ -564,22 +568,29 @@ exports.getAllFeedAdmin = async (req, res) => {
     const results = await Promise.all(
       feeds.map(async (feed) => {
         let profile = null;
+        const creatorId = feed.createdByAccount || feed.postedBy?.userId;
         if (feed.roleRef === "Admin") {
-          profile = await ProfileSettings.findOne({ adminId: feed.createdByAccount }).select("userName profileAvatar").lean();
+          profile = await ProfileSettings.findOne({ adminId: creatorId }).select("userName profileAvatar").lean();
         } else if (feed.roleRef === "Child_Admin") {
-          profile = await ProfileSettings.findOne({ childAdminId: feed.createdByAccount }).select("userName profileAvatar").lean();
+          profile = await ProfileSettings.findOne({ childAdminId: creatorId }).select("userName profileAvatar").lean();
         } else if (feed.roleRef === "User") {
-          profile = await ProfileSettings.findOne({ userId: feed.createdByAccount }).select("userName profileAvatar").lean();
+          profile = await ProfileSettings.findOne({ userId: creatorId }).select("userName profileAvatar").lean();
         }
 
         if (profile) {
           profile.profileAvatar = getMediaUrl(profile.profileAvatar);
         }
 
+        // Fetch category names
+        const categoryDetails = await Category.find({ _id: { $in: feed.category || [] } }).select("name").lean();
+        const categories = categoryDetails.map(c => ({ id: c._id, name: c.name }));
+
         return {
           ...feed,
-          contentUrl: getMediaUrl(feed.contentUrl),
+          contentUrl: getMediaUrl(feed.mediaUrl || (feed.files && feed.files[0]?.url)),
+          type: feed.postType || "image",
           creator: profile ? { userName: profile.userName || "Unknown", profileAvatar: profile.profileAvatar || null } : { userName: "Unknown", profileAvatar: null },
+          categories: categories,
         };
       })
     );
@@ -631,5 +642,37 @@ exports.updateUserPostPermission = async (req, res) => {
     res.status(200).json({ success: true, message: "User post permission updated" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to update user post permission" });
+  }
+};
+
+exports.removeFeedCategory = async (req, res) => {
+  try {
+    const { feedId, categoryId } = req.params;
+
+    if (!feedId || !categoryId) {
+      return res.status(400).json({ success: false, message: "feedId and categoryId are required" });
+    }
+
+    // Remove category from feed
+    const updatedFeed = await Feed.findByIdAndUpdate(
+      feedId,
+      { $pull: { category: categoryId } },
+      { new: true }
+    );
+
+    if (!updatedFeed) {
+      return res.status(404).json({ success: false, message: "Feed not found" });
+    }
+
+    // Remove feed from category's feedIds array
+    await Category.findByIdAndUpdate(
+      categoryId,
+      { $pull: { feedIds: feedId } }
+    );
+
+    res.status(200).json({ success: true, message: "Category removed from feed successfully" });
+  } catch (error) {
+    console.error("❌ REMOVE FEED CATEGORY ERROR:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 };

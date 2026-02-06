@@ -29,7 +29,6 @@ const {
     getUserLikedFeedsforAdmin,
     getUserSocialMeddiaDetailWithIdForAdmin,
     getUserAnalyticalData,
-    getUserLevelWithEarnings,
     getUserProfileDashboardMetricCount,
     deleteUserAndAllRelated,
     getUserProfileDetailforAdmin,
@@ -50,6 +49,7 @@ const {
     updateUserPostPermission,
     bulkFeedUpload,
     getUploadProgress,
+    removeFeedCategory,
 } = require('../controllers/adminControllers/adminfeedController');
 
 const {
@@ -185,6 +185,7 @@ router.post(
 router.get("/admin/get/all/feed", getAllFeedAdmin);
 router.get("/admin/get/trending/creator", adminGetTrendingFeeds); // Match key ADMIN_GET_TRENDING_CREATOR
 router.delete("/admin/delete/feed", deleteFeed);
+router.delete("/admin/feed/:feedId/category/:categoryId", removeFeedCategory);
 router.get("/get/trending/feed", adminGetTrendingFeeds);
 /* --------------------- Admin Category API --------------------- */
 router.post('/admin/add/feed/category', adminAddCategory);
@@ -210,7 +211,7 @@ router.get("/admin/users/status", getUsersStatus);
 router.get("/admin/user/detail/by-date", getUsersByDate);
 router.get('/admin/user/analytical-count/:userId', getAnaliticalCountforUser);
 router.get('/admin/get/user/analytical/data/:userId', getUserAnalyticalData);
-router.get("/admin/user/tree/level/:userId", getUserLevelWithEarnings);
+
 router.patch("/admin/block/user/:userId", auth, (req, res, next) => {
     next();
 }, require('../controllers/userControllers/userDetailController').blockUserById);
