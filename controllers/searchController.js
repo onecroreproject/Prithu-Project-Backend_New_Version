@@ -24,24 +24,31 @@ exports.globalSearch = async (req, res) => {
 
     // 1️⃣ Aggregate categories with matching name and count videos
     const categories = await Feed.aggregate([
-      // Optimization: filter by language if user preference exists (optional, keeping it global for now)
+      { $match: { category: { $exists: true, $ne: [] } } },
+      { $unwind: "$category" },
       {
         $addFields: {
           categoryObjId: {
             $cond: [
+              { $eq: [{ $type: "$category" }, "objectId"] },
+              "$category",
               {
-                $and: [
-                  { $ne: ["$category", null] },
+                $cond: [
                   {
-                    $regexMatch: {
-                      input: { $toString: "$category" },
-                      regex: /^[0-9a-fA-F]{24}$/
-                    }
-                  }
+                    $and: [
+                      { $ne: ["$category", null] },
+                      {
+                        $regexMatch: {
+                          input: { $toString: "$category" },
+                          regex: /^[0-9a-fA-F]{24}$/
+                        }
+                      }
+                    ]
+                  },
+                  { $toObjectId: "$category" },
+                  null
                 ]
-              },
-              { $toObjectId: "$category" },
-              null
+              }
             ]
           }
         }
@@ -54,6 +61,7 @@ exports.globalSearch = async (req, res) => {
           }
         }
       },
+      { $match: { _id: { $ne: null } } },
       {
         $lookup: {
           from: "Categories",

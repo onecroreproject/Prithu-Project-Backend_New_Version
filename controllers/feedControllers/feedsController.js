@@ -40,7 +40,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const userId = new mongoose.Types.ObjectId(rawUserId);
     const page = Math.max(1, Number(req.query.page || 1));
     const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
-    const { categoryId } = req.query;
+    const { categoryId, postType } = req.query;
 
     /* -----------------------------------------------------
        ✅ 1️⃣ FETCH VIEWER PROFILE (LOGGED-IN USER)
@@ -152,7 +152,9 @@ exports.getAllFeedsByUserId = async (req, res) => {
           ],
           isApproved: true,
           isDeleted: false,
-          status: { $in: ["Published", "Scheduled", "published", "scheduled"] }
+          status: { $in: ["Published", "Scheduled", "published", "scheduled"] },
+          ...(postType === 'image' ? { postType: { $in: ['image', 'image+audio'] } } :
+            postType ? { postType } : {})
         },
       },
       { $sort: { createdAt: -1 } },
@@ -421,7 +423,9 @@ exports.getAllFeedsByUserId = async (req, res) => {
             ],
             isApproved: true,
             isDeleted: false,
-            status: { $in: ["Published", "Scheduled", "published", "scheduled"] }
+            status: { $in: ["Published", "Scheduled", "published", "scheduled"] },
+            ...(postType === 'image' ? { postType: { $in: ['image', 'image+audio'] } } :
+              postType ? { postType } : {})
           })
         }
       }
@@ -1723,6 +1727,7 @@ exports.getTrendingFeeds = async (req, res) => {
     ----------------------------------------- */
     const page = Math.max(1, Number(req.query.page || 1));
     const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
+    const { postType } = req.query;
 
     // Trending over last 30 days for more content
     const trendingStart = new Date();
@@ -1751,7 +1756,9 @@ exports.getTrendingFeeds = async (req, res) => {
       createdAt: { $gte: trendingStart, $lte: trendingEnd },
       isApproved: true,
       status: { $in: ["Published", "published"] },
-      isDeleted: false
+      isDeleted: false,
+      ...(postType === 'image' ? { postType: { $in: ['image', 'image+audio'] } } :
+        postType ? { postType } : {})
     })
       .populate("createdByAccount", "_id roleRef")
       .sort({ createdAt: -1 }) // Get recent ones first, score will handle ranking

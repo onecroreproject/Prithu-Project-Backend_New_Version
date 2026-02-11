@@ -4,6 +4,10 @@ const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
 const { getVideoDurationInSeconds } = require("get-video-duration");
 const { Readable } = require("stream");
+const sharp = require("sharp");
+const ffmpeg = require("fluent-ffmpeg");
+const ffprobeInstaller = require("@ffprobe-installer/ffprobe");
+ffmpeg.setFfprobePath(ffprobeInstaller.path);
 
 // Use memory storage so we can process the buffer and then decide where to save it
 const storage = multer.memoryStorage();
@@ -45,17 +49,55 @@ const processUploadedFiles = async (req, res, next) => {
             const hash = crypto.createHash('md5').update(file.buffer).digest('hex');
             file.fileHash = hash;
 
-            // Extract duration for video and audio
-            if (file.mimetype.startsWith('video/') || file.mimetype.startsWith('audio/')) {
+            // Extract dimensions and duration
+            if (file.mimetype.startsWith('image/')) {
+                try {
+                    const metadata = await sharp(file.buffer).metadata();
+                    file.dimensions = {
+                        width: metadata.width,
+                        height: metadata.height,
+                        ratio: (metadata.width / metadata.height).toFixed(4)
+                    };
+                } catch (err) {
+                    console.error("Sharp metadata failed:", err);
+                    file.dimensions = null;
+                }
+            } else if (file.mimetype.startsWith('video/')) {
+                try {
+                    // Extract duration
+                    const duration = await getVideoDurationInSeconds(Readable.from(file.buffer));
+                    file.duration = duration;
+
+                    // Extract dimensions using ffprobe
+                    const metadata = await new Promise((resolve, reject) => {
+                        const stream = Readable.from(file.buffer);
+                        ffmpeg.ffprobe(stream, (err, metadata) => {
+                            if (err) reject(err);
+                            else resolve(metadata);
+                        });
+                    });
+
+                    const videoStream = metadata.streams.find(s => s.codec_type === 'video');
+                    if (videoStream) {
+                        file.dimensions = {
+                            width: videoStream.width,
+                            height: videoStream.height,
+                            ratio: (videoStream.width / videoStream.height).toFixed(4)
+                        };
+                    }
+                } catch (err) {
+                    console.error("Video processing failed:", err);
+                    file.duration = null;
+                    file.dimensions = null;
+                }
+            } else if (file.mimetype.startsWith('audio/')) {
                 try {
                     const duration = await getVideoDurationInSeconds(Readable.from(file.buffer));
                     file.duration = duration;
-                } catch (durationErr) {
-                    console.error("Failed to extract duration:", durationErr);
+                } catch (err) {
+                    console.error("Audio duration extraction failed:", err);
                     file.duration = null;
                 }
-            } else {
-                file.duration = null;
             }
 
             return file;

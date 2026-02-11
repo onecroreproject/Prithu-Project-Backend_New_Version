@@ -281,9 +281,12 @@ exports.bulkFeedUpload = async (req, res) => {
             type: feedType,
             mimeType: file.mimetype,
             size: file.size || 0,
+            dimensions: file.dimensions,
+            duration: file.duration,
             order: 0,
             storageType: "local"
           }],
+          duration: file.duration,
           caption: req.body.caption || "",
           fileHash: file.fileHash,
           postedBy: { userId: adminId, role: req.role },
