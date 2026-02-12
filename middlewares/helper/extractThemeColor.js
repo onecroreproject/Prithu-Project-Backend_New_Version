@@ -7,7 +7,7 @@ function rgbToHex([r, g, b]) {
 }
 
 function getTextColor([r, g, b]) {
-  const brightness = Math.sqrt(0.299*r*r + 0.587*g*g + 0.114*b*b);
+  const brightness = Math.sqrt(0.299 * r * r + 0.587 * g * g + 0.114 * b * b);
   return brightness > 150 ? "#000000" : "#FFFFFF";
 }
 
@@ -31,10 +31,10 @@ async function extractThemeColor(fileUrl, type = "image") {
     // --- Prepare URLs ---
     let urls = [fileUrl];
 
-    if(type === "video") {
+    if (type === "video") {
       const base = fileUrl.replace(/\.[^/.]+$/, "");
       // Sample first 3 frames
-      urls = ["0","1","2"].map(sec => `${base}.jpg?start_offset=${sec}`);
+      urls = ["0", "1", "2"].map(sec => `${base}.jpg?start_offset=${sec}`);
     }
 
     let allColors = [];
@@ -54,7 +54,7 @@ async function extractThemeColor(fileUrl, type = "image") {
       }
     }
 
-    if(allColors.length === 0) throw new Error("Unable to extract colors from this feed.");
+    if (allColors.length === 0) throw new Error("Unable to extract colors from this feed.");
 
     // --- Remove duplicate colors ---
     allColors = allColors.filter(
