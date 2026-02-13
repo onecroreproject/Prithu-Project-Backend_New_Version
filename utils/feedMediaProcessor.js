@@ -238,8 +238,8 @@ exports.processFeedMedia = async ({
         }
     };
 
-    // Use configurable font path
-    const FONT_PATH = footerStyle.fontFile.replace(/\\/g, "/").replace(/:/g, "\\:");
+    // Use configurable font path - Robust escaping for Windows
+    const FONT_PATH = footerStyle.fontFile.replace(/\\/g, "/").replace(/:/g, "\\\\:");
 
     ensureDir(tempDir);
 
@@ -288,12 +288,13 @@ exports.processFeedMedia = async ({
     const actualMediaH = Math.round(sourceMeta.height * scaleFactor);
     const paddingX = (OUT_W - actualMediaW) / 2;
 
-    // Center the combined block (media + footer) vertically
+    // Removal of unwanted space: Make canvas height exactly fit the combined block
     const combinedBlockH = actualMediaH + footerH;
-    const yOffset = Math.max(0, Math.round((OUT_H - combinedBlockH) / 2));
-    const footerY = yOffset + actualMediaH;
+    const finalOUT_H = combinedBlockH % 2 === 0 ? combinedBlockH : combinedBlockH + 1;
+    const yOffset = 0; // Start at the very top (remove top space)
+    const footerY = actualMediaH; // Footer sits exactly below media
 
-    console.log(`[Processor] Dimensions: actualMediaH=${actualMediaH}, footerH=${footerH}, totalH=${combinedBlockH}, yOffset=${yOffset}, footerY=${footerY}`);
+    console.log(`[Processor] Dimensions: actualMediaH=${actualMediaH}, footerH=${footerH}, totalH=${combinedBlockH}, finalOUT_H=${finalOUT_H}, footerY=${footerY}`);
 
     let dominantColor = footerConfig?.backgroundColor || "#1a1a1a";
     if (footerConfig?.useDominantColor) {
@@ -309,7 +310,7 @@ exports.processFeedMedia = async ({
             "-fflags +genpts"
         ]);
     const duration = sourceMeta.duration && sourceMeta.duration !== 'N/A' ? sourceMeta.duration : 8;
-    if (isImagePost) ffmpegCommand.inputOptions(["-loop 1", `-t ${duration}`]);
+    if (isImagePost) ffmpegCommand.inputOptions(["-loop", "1", "-t", duration.toString()]);
 
     let currentBase = "base";
     const combinedFilters = [];
@@ -331,15 +332,13 @@ exports.processFeedMedia = async ({
         }
     }
 
-    // Base Canvas
+    // Base Canvas: Normalize to RGBA to prevent re-init errors with overlays
     console.log(`[Processor] Configuring base canvas filters...`);
-    // Balanced Layout: Black sidebars, centered Media+Footer block
     combinedFilters.push(
         { filter: "scale", options: `w=${OUT_W}:h=${actualMediaH}:force_original_aspect_ratio=decrease`, inputs: "0:v", outputs: "scaled_base" },
-        // Sidebars are now BLACK to stay focused on the content
         { filter: "pad", options: `w=${OUT_W}:h=${actualMediaH}:x=(ow-iw)/2:y=oh-ih:color=black`, inputs: "scaled_base", outputs: "padded_base" },
-        // Final canvas remains BLACK, block centered vertically
-        { filter: "pad", options: `w=${OUT_W}:h=${OUT_H}:x=0:y=${yOffset}:color=black`, inputs: "padded_base", outputs: currentBase }
+        { filter: "pad", options: `w=${OUT_W}:h=${finalOUT_H}:x=0:y=0:color=black`, inputs: "padded_base", outputs: "rgba_base" },
+        { filter: "format", options: "rgba", inputs: "rgba_base", outputs: currentBase }
     );
 
     // 4. OVERLAYS
@@ -379,8 +378,12 @@ exports.processFeedMedia = async ({
                     if (startY !== yRaw) yExpr = `if(lt(t,${delay}),(${startY}),if(lt(t,${delay + dur}),(${startY})+(${yRaw}-(${startY}))*(t-${delay})/${dur},${yRaw}))`;
                 }
 
-                const rawLabel = `raw${filterIndex}`, maskedLabel = `masked${filterIndex}`, overlayLabel = `over${filterIndex}`;
+                const fmtLabel = `fmt${filterIndex}`, rawLabel = `raw${filterIndex}`, maskedLabel = `masked${filterIndex}`, overlayLabel = `over${filterIndex}`;
                 let currentOverlayInput = `${overlayInputIndex}:v`;
+
+                // CRITICAL: Normalize every image input to RGBA immediately
+                combinedFilters.push({ filter: 'format', options: 'rgba', inputs: currentOverlayInput, outputs: fmtLabel });
+                currentOverlayInput = fmtLabel;
 
                 const shape = el.avatarConfig?.shape || el.shape || 'circle';
                 const isRound = el.type === 'avatar' && (shape === 'circle' || shape === 'round');
@@ -415,10 +418,10 @@ exports.processFeedMedia = async ({
                         .composite([{ input: maskSvg, blend: 'dest-in' }])
                         .png()
                         .toFile(maskedAvatarPath);
-                    ffmpegCommand.input(maskedAvatarPath).inputOptions("-loop", "1", "-t", duration.toString());
+                    ffmpegCommand.input(maskedAvatarPath).inputOptions(["-loop", "1", "-t", duration.toString()]);
                 } else {
                     // Non-avatar (logos) use standard download path
-                    ffmpegCommand.input(overlayDest).inputOptions("-loop", "1", "-t", duration.toString());
+                    ffmpegCommand.input(overlayDest).inputOptions(["-loop", "1", "-t", duration.toString()]);
                 }
 
                 overlayInputIndex++;
@@ -523,7 +526,8 @@ exports.processFeedMedia = async ({
                     const success = await downloadSocialIcon(visibleSocialIcons[i].platform, iconPath, adaptiveIconColor, footerStyle.iconSize || 48);
                     if (!success) continue;
 
-                    ffmpegCommand.input(iconPath);
+                    // Social icons must be looped to match video duration
+                    ffmpegCommand.input(iconPath).inputOptions(["-loop", "1", "-t", duration.toString()]);
                     const iconIdx = overlayInputIndex++;
                     const iconLabel = `social_over_${i}`;
                     const iconSize = footerStyle.iconSize || 48;
@@ -575,6 +579,9 @@ exports.processFeedMedia = async ({
     } else if (isVideoPost) {
         // When streaming, re-encoding audio to aac is safer for piped MP4
         outputOptions.push("-map", "0:a?", "-c:a", "aac", "-b:a", "128k");
+    } else if (isImagePost) {
+        // Ensure image-only output also terminates at shortest input
+        outputOptions.push("-shortest");
     }
 
     ffmpegCommand.outputOptions(outputOptions);

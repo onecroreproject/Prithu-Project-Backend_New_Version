@@ -272,7 +272,8 @@ exports.checkDownloadLimit = async (req, res) => {
     return res.json({
       downloadCount,
       limit,
-      isLimitReached: downloadCount >= limit
+      isLimitReached: false // TEMPORARILY DISABLED: Always false for testing
+      // isLimitReached: downloadCount >= limit
     });
   } catch (err) {
     console.error("[CheckLimit] Error:", err);
@@ -310,12 +311,14 @@ exports.directDownloadFeed = async (req, res) => {
     const feed = await Feed.findById(feedId);
     if (!feed) return res.status(404).json({ message: "Feed not found" });
 
-    // Enforce Download Limit (5 Feeds)
+    // TEMPORARILY DISABLED: Enforce Download Limit (5 Feeds)
+    /*
     const actions = await UserFeedActions.findOne({ userId }).lean();
     if (actions && actions.downloadedFeeds && actions.downloadedFeeds.length >= 5) {
       console.warn(`[DirectDL] Download limit reached for user: ${userId}`);
       return res.status(403).json({ message: "Download limit reached (Max 5 feeds)" });
     }
+    */
 
     const [user, profile] = await Promise.all([
       User.findById(userId).lean(),
