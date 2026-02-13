@@ -184,9 +184,21 @@ exports.processFeedMedia = async ({
     onProgress,
     isStreaming = false
 }) => {
-    const OUT_W = 1080;
-    const OUT_H = 1920;
+    const OUT_W = 720;
+    const OUT_H = 1280;
     const BACKEND_URL = process.env.BACKEND_URL || '';
+
+    // Optimization: Resolve local path if URL points to our own backend
+    const resolveLocalPath = (url) => {
+        if (!url || typeof url !== 'string') return null;
+        if (url.startsWith('/media/')) return path.join(process.cwd(), url);
+        if (BACKEND_URL && url.startsWith(BACKEND_URL)) {
+            const relPath = url.replace(BACKEND_URL, '');
+            return path.join(process.cwd(), relPath);
+        }
+        return null;
+    };
+
     // Use content-aware dominant color extraction
     const getDominantColor = async (filePath, isVideo, tempDir) => {
         try {
@@ -232,7 +244,12 @@ exports.processFeedMedia = async ({
     ensureDir(tempDir);
 
     const mediaUrl = feed.mediaUrl;
-    const localPath = feed.storage?.paths?.media || feed.files?.[0]?.path;
+    let localPath = feed.storage?.paths?.media || feed.files?.[0]?.path;
+
+    // Enhanced local path resolution
+    if (!localPath || !fs.existsSync(localPath)) {
+        localPath = resolveLocalPath(mediaUrl);
+    }
 
     console.log(`[Processor] Resolved media source: ${localPath || mediaUrl}`);
 
@@ -259,17 +276,24 @@ exports.processFeedMedia = async ({
     const footerConfig = designMetadata?.footerConfig;
     const footerEnabled = !!footerConfig?.enabled;
     const footerH = footerStyle.footerHeight || (footerEnabled ? Math.round((footerConfig.heightPercent / 100) * OUT_H) : 0);
-    const mediaH = OUT_H - footerH;
-    console.log(`[Processor] Dimensions: mediaH=${mediaH}, footerH=${footerH}`);
+    const maxMediaH = OUT_H - footerH;
 
     if (isImagePost) {
         sourceMeta.width = sourceMeta.width || OUT_W;
-        sourceMeta.height = sourceMeta.height || mediaH;
+        sourceMeta.height = sourceMeta.height || maxMediaH;
     }
 
-    const scaleFactor = Math.min(OUT_W / sourceMeta.width, mediaH / sourceMeta.height);
+    const scaleFactor = Math.min(OUT_W / sourceMeta.width, maxMediaH / sourceMeta.height);
     const actualMediaW = Math.round(sourceMeta.width * scaleFactor);
+    const actualMediaH = Math.round(sourceMeta.height * scaleFactor);
     const paddingX = (OUT_W - actualMediaW) / 2;
+
+    // Center the combined block (media + footer) vertically
+    const combinedBlockH = actualMediaH + footerH;
+    const yOffset = Math.max(0, Math.round((OUT_H - combinedBlockH) / 2));
+    const footerY = yOffset + actualMediaH;
+
+    console.log(`[Processor] Dimensions: actualMediaH=${actualMediaH}, footerH=${footerH}, totalH=${combinedBlockH}, yOffset=${yOffset}, footerY=${footerY}`);
 
     let dominantColor = footerConfig?.backgroundColor || "#1a1a1a";
     if (footerConfig?.useDominantColor) {
@@ -289,6 +313,8 @@ exports.processFeedMedia = async ({
 
     let currentBase = "base";
     const combinedFilters = [];
+
+
     let overlayInputIndex = 1;
 
     // Audio
@@ -307,10 +333,13 @@ exports.processFeedMedia = async ({
 
     // Base Canvas
     console.log(`[Processor] Configuring base canvas filters...`);
+    // Balanced Layout: Black sidebars, centered Media+Footer block
     combinedFilters.push(
-        { filter: "scale", options: `w=${OUT_W}:h=${mediaH}:force_original_aspect_ratio=decrease`, inputs: "0:v", outputs: "scaled_base" },
-        { filter: "pad", options: `w=${OUT_W}:h=${mediaH}:x=(ow-iw)/2:y=(oh-ih)/2:color=black`, inputs: "scaled_base", outputs: "padded_base" },
-        { filter: "pad", options: `w=${OUT_W}:h=${OUT_H}:x=0:y=0:color=black`, inputs: "padded_base", outputs: currentBase }
+        { filter: "scale", options: `w=${OUT_W}:h=${actualMediaH}:force_original_aspect_ratio=decrease`, inputs: "0:v", outputs: "scaled_base" },
+        // Sidebars are now BLACK to stay focused on the content
+        { filter: "pad", options: `w=${OUT_W}:h=${actualMediaH}:x=(ow-iw)/2:y=oh-ih:color=black`, inputs: "scaled_base", outputs: "padded_base" },
+        // Final canvas remains BLACK, block centered vertically
+        { filter: "pad", options: `w=${OUT_W}:h=${OUT_H}:x=0:y=${yOffset}:color=black`, inputs: "padded_base", outputs: currentBase }
     );
 
     // 4. OVERLAYS
@@ -331,7 +360,7 @@ exports.processFeedMedia = async ({
             try {
                 await downloadFile(overlayMediaUrl, overlayDest);
                 const xRaw = (el.xPercent / 100) * OUT_W;
-                const yRaw = (el.yPercent / 100) * mediaH;
+                const yRaw = yOffset + ((el.yPercent / 100) * actualMediaH);
                 const scaleW = Math.max(10, Math.round((el.wPercent || 20) / 100 * OUT_W));
 
                 let xExpr = `${xRaw}`, yExpr = `${yRaw}`;
@@ -343,8 +372,8 @@ exports.processFeedMedia = async ({
                     let startX = xRaw, startY = yRaw;
                     if (dir.includes('left')) startX = -scaleW;
                     if (dir.includes('right')) startX = OUT_W;
-                    if (dir.includes('top')) startY = -scaleW;
-                    if (dir.includes('bottom')) startY = mediaH;
+                    if (dir.includes('top')) startY = yOffset - scaleW;
+                    if (dir.includes('bottom')) startY = yOffset + actualMediaH;
 
                     if (startX !== xRaw) xExpr = `if(lt(t,${delay}),(${startX}),if(lt(t,${delay + dur}),(${startX})+(${xRaw}-(${startX}))*(t-${delay})/${dur},${xRaw}))`;
                     if (startY !== yRaw) yExpr = `if(lt(t,${delay}),(${startY}),if(lt(t,${delay + dur}),(${startY})+(${yRaw}-(${startY}))*(t-${delay})/${dur},${yRaw}))`;
@@ -413,7 +442,7 @@ exports.processFeedMedia = async ({
         if (el.type === 'username' || el.type === 'text') {
             const content = el.type === 'username' ? (viewer?.userName) : (el.textConfig?.content);
             if (content) {
-                const xRaw = (el.xPercent / 100) * OUT_W, yRaw = (el.yPercent / 100) * mediaH;
+                const xRaw = (el.xPercent / 100) * OUT_W, yRaw = yOffset + ((el.yPercent / 100) * actualMediaH);
                 const fontSize = Math.round((el.textConfig?.fontSize || 24) * 2.5);
                 const textLabel = `text${filterIndex}`;
 
@@ -427,8 +456,8 @@ exports.processFeedMedia = async ({
                     let startX = xRaw, startY = yRaw;
                     if (dir.includes('left')) startX = -scaleW;
                     if (dir.includes('right')) startX = OUT_W;
-                    if (dir.includes('top')) startY = -fontSize;
-                    if (dir.includes('bottom')) startY = mediaH;
+                    if (dir.includes('top')) startY = yOffset - fontSize;
+                    if (dir.includes('bottom')) startY = yOffset + actualMediaH;
 
                     if (startX !== xRaw) xExpr = `if(lt(t,${delay}),(${startX}),if(lt(t,${delay + dur}),(${startX})+(${xRaw}-(${startX}))*(t-${delay})/${dur},${xRaw}))`;
                     if (startY !== yRaw) yExpr = `if(lt(t,${delay}),(${startY}),if(lt(t,${delay + dur}),(${startY})+(${yRaw}-(${startY}))*(t-${delay})/${dur},${yRaw}))`;
@@ -459,7 +488,7 @@ exports.processFeedMedia = async ({
     if (footerEnabled) {
         console.log(`[Processor] Adding footer... footerConfig:`, JSON.stringify(footerConfig, null, 2));
         console.log(`[Processor] Viewer data:`, JSON.stringify(viewer, null, 2));
-        combinedFilters.push({ filter: "drawbox", options: { x: Math.round(paddingX), y: mediaH, w: Math.round(actualMediaW), h: footerH, c: footerBgColor, t: "fill" }, inputs: currentBase, outputs: "footer_bg" });
+        combinedFilters.push({ filter: "drawbox", options: { x: Math.round(paddingX), y: footerY, w: Math.round(actualMediaW), h: footerH, c: footerBgColor, t: "fill" }, inputs: currentBase, outputs: "footer_bg" });
         currentBase = "footer_bg";
 
         const showElements = footerConfig?.showElements || {};
@@ -472,9 +501,9 @@ exports.processFeedMedia = async ({
         const adaptiveIconColor = isLightBg ? "000000" : "ffffff";
         const adaptiveShadowColor = isLightBg ? "white@0.4" : "black@0.6";
 
-        // ROW calculation using paddings, sizes and row spacing from config
-        const ROW_1_Y = Math.round(mediaH + footerStyle.paddingTop + (footerStyle.nameSize / 2));
-        const ROW_2_Y = Math.round(ROW_1_Y + (footerStyle.nameSize / 2) + footerStyle.verticalRowSpacing + (footerStyle.emailSize / 2));
+        // Balanced Vertical Alignment: Row 1 at 1/3, Row 2 at 2/3 of footer height
+        const ROW_1_Y = Math.round(footerY + (footerH / 3));
+        const ROW_2_Y = Math.round(footerY + (2 * footerH / 3));
 
         const textColor = normalizeFfmpegColor(adaptiveTextColor); // Force automatic contrast
         const shadowColor = normalizeFfmpegColor(footerStyle.shadowColor || adaptiveShadowColor);
@@ -525,24 +554,25 @@ exports.processFeedMedia = async ({
     console.log(`[Processor] Finalizing FFmpeg build...`);
     ffmpegCommand.complexFilter(combinedFilters);
 
-    const movFlags = isStreaming
-        ? "frag_keyframe+empty_moov"
-        : "faststart";
 
     const outputOptions = [
         "-map", `[${currentBase}]`,
         "-c:v", "libx264",
+        "-profile:v", "baseline",
+        "-level", "3.0",
         "-pix_fmt", "yuv420p",
+        "-b:v", "2500k",
+        "-maxrate", "2500k",
+        "-bufsize", "5000k",
         "-preset", isStreaming ? "ultrafast" : "veryfast",
-        "-movflags", movFlags,
+        "-movflags", "+faststart" + (isStreaming ? "+frag_keyframe+empty_moov" : ""),
         "-f", "mp4"
     ];
     if (postType === "image+audio" && audioInputIndex !== null) {
         outputOptions.push("-shortest", "-map", `${audioInputIndex}:a`, "-c:a", "aac", "-b:a", "128k");
     } else if (isVideoPost) {
         // When streaming, re-encoding audio to aac is safer for piped MP4
-        outputOptions.push("-map", "0:a?", "-c:a", isStreaming ? "aac" : "copy");
-        if (isStreaming) outputOptions.push("-b:a", "128k");
+        outputOptions.push("-map", "0:a?", "-c:a", "aac", "-b:a", "128k");
     }
 
     ffmpegCommand.outputOptions(outputOptions);

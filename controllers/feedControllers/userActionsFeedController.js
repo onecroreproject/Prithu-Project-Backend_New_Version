@@ -304,6 +304,10 @@ exports.directDownloadFeed = async (req, res) => {
       privacy: profile?.privacy
     }, null, 2));
 
+    console.log(`[DirectDL] RAW Profile ProfileAvatar:`, profile?.profileAvatar);
+    console.log(`[DirectDL] RAW Profile ModifyAvatar:`, profile?.modifyAvatar);
+    console.log(`[DirectDL] Resolved Avatar URL:`, getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null));
+
     const viewer = {
       id: user._id,
       userName: (visibility.userName === 'public' || visibility.displayName === 'public')
@@ -355,14 +359,12 @@ exports.directDownloadFeed = async (req, res) => {
       viewer,
       designMetadata,
       tempDir,
-      isStreaming: true
+      isStreaming: false
     });
-    console.log(`[DirectDL] Media processing initialized. Source: ${tempSourcePath}`);
+    console.log(`[DirectDL] Media processing configured. Source: ${tempSourcePath}`);
 
-    // Set headers for direct download
+    const finalOutputPath = path.join(tempDir, `final_output_${feedId}.mp4`);
     const filename = feed.caption ? `${feed.caption.slice(0, 30).replace(/[^a-z0-9]/gi, '_')}.mp4` : `video_${feedId.slice(-4)}.mp4`;
-    res.setHeader('Content-Type', 'video/mp4');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
     // Monitor for client disconnects
     req.on('close', () => {
@@ -373,18 +375,13 @@ exports.directDownloadFeed = async (req, res) => {
       console.error(`[DirectDL] Request error: ${err.message}`);
     });
 
-    // Pipe FFmpeg output directly to response
+    // Run FFmpeg to a temporary file instead of piping directly
+    // This allows the 'faststart' flag to properly relocate the moov atom for social media compatibility
     ffmpegCommand
       .on('start', (cmdLine) => console.log(`[DirectDL] Started: ${cmdLine}`))
       .on('stderr', (line) => {
-        // Only log significant stderr output to avoid flooding
         if (line.includes('Error') || line.includes('error') || line.includes('Invalid') || line.includes('failed')) {
           console.error(`[DirectDL] FFmpeg STDERR: ${line}`);
-        }
-      })
-      .on('progress', (p) => {
-        if (p.percent) {
-          console.log(`[DirectDL] Progress: ${p.percent.toFixed(1)}%`);
         }
       })
       .on('error', (err) => {
@@ -395,37 +392,48 @@ exports.directDownloadFeed = async (req, res) => {
         cleanup();
       })
       .on('end', async () => {
-        console.log("[DirectDL] Finished successfully");
+        console.log("[DirectDL] Encoding finished successfully. Sending file...");
 
-        // RECORD DOWNLOAD ACTION
-        try {
-          await UserFeedActions.findOneAndUpdate(
-            { userId },
-            {
-              $push: {
-                downloadedFeeds: {
-                  feedId,
-                  downloadedAt: new Date()
-                }
+        if (fs.existsSync(finalOutputPath)) {
+          res.download(finalOutputPath, filename, async (err) => {
+            if (err) {
+              console.error("[DirectDL] Download error:", err.message);
+            } else {
+              // RECORD DOWNLOAD ACTION ONLY AFTER SUCCESSFUL TRANSFER
+              try {
+                await UserFeedActions.findOneAndUpdate(
+                  { userId },
+                  {
+                    $push: {
+                      downloadedFeeds: {
+                        feedId,
+                        downloadedAt: new Date()
+                      }
+                    }
+                  },
+                  { upsert: true }
+                );
+
+                await logUserActivity({
+                  userId,
+                  actionType: "DOWNLOAD_POST",
+                  targetId: feedId,
+                  targetModel: "Feed",
+                  metadata: { platform: "web" },
+                });
+              } catch (dlErr) {
+                console.error("[DirectDL] Action recording error:", dlErr);
               }
-            },
-            { upsert: true }
-          );
-
-          await logUserActivity({
-            userId,
-            actionType: "DOWNLOAD_POST",
-            targetId: feedId,
-            targetModel: "Feed",
-            metadata: { platform: "web" },
+            }
+            cleanup();
           });
-        } catch (dlErr) {
-          console.error("[DirectDL] Action recording error:", dlErr);
+        } else {
+          console.error("[DirectDL] Output file missing after FFmpeg end");
+          if (!res.headersSent) res.status(500).send("Output generation failed");
+          cleanup();
         }
-
-        cleanup();
       })
-      .pipe(res, { end: true });
+      .save(finalOutputPath);
 
     function cleanup() {
       try {
