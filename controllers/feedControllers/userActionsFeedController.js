@@ -253,6 +253,33 @@ exports.toggleSaveFeed = async (req, res) => {
 
 
 // Request a Video Download Job
+// Check Download Limit
+/**
+ * Verifies if a user has exceeded their download limit (5 feeds)
+ */
+exports.checkDownloadLimit = async (req, res) => {
+  const userId = req.user?.id || req.query.userId || req.query.uuserId;
+
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(401).json({ message: "Invalid user session" });
+  }
+
+  try {
+    const actions = await UserFeedActions.findOne({ userId }).lean();
+    const downloadCount = actions?.downloadedFeeds?.length || 0;
+    const limit = 5;
+
+    return res.json({
+      downloadCount,
+      limit,
+      isLimitReached: downloadCount >= limit
+    });
+  } catch (err) {
+    console.error("[CheckLimit] Error:", err);
+    return res.status(500).json({ message: "Error checking limit" });
+  }
+};
+
 /**
  * Direct Download: Processes and streams video directly to browser
  */
@@ -282,6 +309,13 @@ exports.directDownloadFeed = async (req, res) => {
     console.log(`[DirectDL] Processing feedId: ${feedId} for userId: ${userId}`);
     const feed = await Feed.findById(feedId);
     if (!feed) return res.status(404).json({ message: "Feed not found" });
+
+    // Enforce Download Limit (5 Feeds)
+    const actions = await UserFeedActions.findOne({ userId }).lean();
+    if (actions && actions.downloadedFeeds && actions.downloadedFeeds.length >= 5) {
+      console.warn(`[DirectDL] Download limit reached for user: ${userId}`);
+      return res.status(403).json({ message: "Download limit reached (Max 5 feeds)" });
+    }
 
     const [user, profile] = await Promise.all([
       User.findById(userId).lean(),

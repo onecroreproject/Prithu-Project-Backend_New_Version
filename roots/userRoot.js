@@ -103,6 +103,7 @@ const {
     generateShareLink,
     getVideoThumbnail,
     getDownloadJobStatus,
+    checkDownloadLimit,
     directDownloadFeed,
     getUserLikedFeedsForSaved,
 } = require('../controllers/feedControllers/userActionsFeedController');
@@ -329,6 +330,7 @@ router.get('/user/get/saved/feeds', auth, getUserLikedFeedsForSaved); // Alias f
 router.get('/user/feed/share-link/:feedId', generateShareLink);
 router.get('/user/feed/thumbnail/:feedId', getVideoThumbnail);
 router.get('/user/feed/download-status/:jobId', auth, getDownloadJobStatus);
+router.get('/user/feed/check-limit', auth, checkDownloadLimit);
 router.get('/user/feed/:feedId/direct-download', directDownloadFeed);
 
 /* --------------------- Categories --------------------- */
