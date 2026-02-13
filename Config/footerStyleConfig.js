@@ -14,8 +14,8 @@ module.exports = {
     footerHeight: null, // Set to px value if you want to override heightPercent
 
     // Padding and Spacing (in px)
-    paddingLeft: 60,
-    paddingRight: 60,
+    paddingLeft: 20,
+    paddingRight: 20,
     paddingTop: 25,   // Spacing from media-footer boundary
     paddingBottom: 0,
     socialIconSpacing: 72,
@@ -26,9 +26,14 @@ module.exports = {
     verticalRowSpacing: 50,  // Vertical gap between Row 1 and Row 2
 
     // Font sizes for different elements (in px)
-    nameSize: 50,
-    emailSize: 50,
-    phoneSize: 50,
+    nameSize: 40,
+    emailSize: 40,
+    phoneSize: 40,
+    iconSize: 30,
+
+    // Vertical row positions (as fraction of footer height, 0.0 to 1.0)
+    row1Offset: 0.33,
+    row2Offset: 0.66,
 
     // Shadow settings
     shadowColor: 'black@0.6',

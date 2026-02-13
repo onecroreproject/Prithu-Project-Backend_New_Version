@@ -149,7 +149,7 @@ const SOCIAL_SLUGS = {
     'website': 'internetexplorer'
 };
 
-const downloadSocialIcon = async (platform, dest, color = 'white') => {
+const downloadSocialIcon = async (platform, dest, color = 'white', size = 48) => {
     try {
         const slug = SOCIAL_SLUGS[platform.toLowerCase()] || platform.toLowerCase();
         // Use color suffix: 'white' or hex (e.g. '000000' for black)
@@ -161,9 +161,9 @@ const downloadSocialIcon = async (platform, dest, color = 'white') => {
             timeout: 10000
         });
 
-        // Convert SVG buffer to PNG and resize to 48x48
+        // Convert SVG buffer to PNG and resize to specified size
         await sharp(response.data)
-            .resize(48, 48)
+            .resize(size, size)
             .png()
             .toFile(dest);
         return true;
@@ -501,9 +501,9 @@ exports.processFeedMedia = async ({
         const adaptiveIconColor = isLightBg ? "000000" : "ffffff";
         const adaptiveShadowColor = isLightBg ? "white@0.4" : "black@0.6";
 
-        // Balanced Vertical Alignment: Row 1 at 1/3, Row 2 at 2/3 of footer height
-        const ROW_1_Y = Math.round(footerY + (footerH / 3));
-        const ROW_2_Y = Math.round(footerY + (2 * footerH / 3));
+        // Configurable Vertical Alignment using row1Offset/row2Offset from config
+        const ROW_1_Y = Math.round(footerY + (footerH * (footerStyle.row1Offset || 0.33)));
+        const ROW_2_Y = Math.round(footerY + (footerH * (footerStyle.row2Offset || 0.66)));
 
         const textColor = normalizeFfmpegColor(adaptiveTextColor); // Force automatic contrast
         const shadowColor = normalizeFfmpegColor(footerStyle.shadowColor || adaptiveShadowColor);
@@ -515,19 +515,21 @@ exports.processFeedMedia = async ({
         }
 
         if (showElements.socialIcons && visibleSocialIcons.length > 0) {
-            let currentIconX = paddingX + actualMediaW - footerStyle.paddingRight - 48;
+            const iconSize = footerStyle.iconSize || 48;
+            let currentIconX = paddingX + actualMediaW - footerStyle.paddingRight - iconSize;
             for (let i = 0; i < visibleSocialIcons.length; i++) {
                 const iconPath = path.join(tempDir, `social_${i}.png`);
                 try {
-                    const success = await downloadSocialIcon(visibleSocialIcons[i].platform, iconPath, adaptiveIconColor);
+                    const success = await downloadSocialIcon(visibleSocialIcons[i].platform, iconPath, adaptiveIconColor, footerStyle.iconSize || 48);
                     if (!success) continue;
 
                     ffmpegCommand.input(iconPath);
                     const iconIdx = overlayInputIndex++;
                     const iconLabel = `social_over_${i}`;
+                    const iconSize = footerStyle.iconSize || 48;
                     combinedFilters.push(
                         { filter: 'format', options: 'rgba', inputs: `${iconIdx}:v`, outputs: `sf${i}` },
-                        { filter: 'overlay', options: `x=${Math.round(currentIconX)}:y=${Math.round(ROW_1_Y - 24)}`, inputs: [currentBase, `sf${i}`], outputs: iconLabel }
+                        { filter: 'overlay', options: `x=${Math.round(currentIconX)}:y=${Math.round(ROW_1_Y - (iconSize / 2))}`, inputs: [currentBase, `sf${i}`], outputs: iconLabel }
                     );
                     currentBase = iconLabel;
                     currentIconX -= footerStyle.socialIconSpacing;
