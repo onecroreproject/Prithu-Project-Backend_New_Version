@@ -29,6 +29,54 @@ exports.pushFCMToUser = async (user, title, message, image) => {
 };
 
 // 🔹 Create and send notification
+// 🔹 Notify all users about a new feed (Admin/ChildAdmin)
+exports.notifyAllUsersNewFeed = async (senderId, feedId, title, message, image) => {
+  try {
+    const users = await User.find({}, "_id fcmTokens platform");
+    if (!users.length) return;
+
+    // Bulk create notifications
+    const notifications = users.map((u) => ({
+      senderId,
+      senderRoleRef: "Admin", // Assuming Admin for now, could be passed if needed
+      receiverId: u._id,
+      receiverRoleRef: "User",
+      type: "NEW_FEED",
+      title,
+      message,
+      image,
+      entityId: feedId,
+      entityType: "Feed",
+      platform: u.platform || "WEB",
+      isRead: false,
+    }));
+
+    await Notification.insertMany(notifications);
+
+    // Delivery
+    for (const u of users) {
+      // Real-time socket
+      exports.broadcastNotification(u._id.toString(), {
+        type: "NEW_FEED",
+        title,
+        message,
+        image,
+        entityId: feedId,
+        createdAt: new Date(),
+      });
+
+      // Push notification
+      if (u.fcmTokens?.length) {
+        await exports.pushFCMToUser(u, title, message, image);
+      }
+    }
+
+    console.log(`✅ Bulk notifications sent for new feed: ${feedId}`);
+  } catch (err) {
+    console.error("❌ Error in notifyAllUsersNewFeed:", err);
+  }
+};
+
 exports.createAndSendNotification = async ({
   senderId,
   receiverId,

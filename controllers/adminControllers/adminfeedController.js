@@ -148,6 +148,7 @@ exports.adminFeedUpload = async (req, res) => {
           audioFile: uploadedAudio,
           caption,
           fileHash: file.fileHash,
+          createdByAccount: adminId,
           postedBy: { userId: adminId, role: roleRef },
           roleRef,
           designMetadata: {
@@ -289,6 +290,7 @@ exports.bulkFeedUpload = async (req, res) => {
           duration: file.duration,
           caption: req.body.caption || "",
           fileHash: file.fileHash,
+          createdByAccount: adminId,
           postedBy: { userId: adminId, role: req.role },
           roleRef: req.role,
           storage: {

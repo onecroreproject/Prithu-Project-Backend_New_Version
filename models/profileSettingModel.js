@@ -45,10 +45,7 @@ const ProfileSettingsSchema = new mongoose.Schema(
       facebook: { type: String, default: "" },
       instagram: { type: String, default: "" },
       twitter: { type: String, default: "" },
-      linkedin: { type: String, default: "" },
-      github: { type: String, default: "" },
       youtube: { type: String, default: "" },
-      website: { type: String, default: "" },
     },
 
     // Theme, Notifications, Privacy

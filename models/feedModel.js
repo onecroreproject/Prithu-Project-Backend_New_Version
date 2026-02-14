@@ -92,6 +92,11 @@ const feedSchema = new mongoose.Schema(
       enum: ["Admin", "Child_Admin", "User"],
       default: "User",
     },
+    createdByAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      refPath: "roleRef",
+      index: true
+    },
     // ========== MODERATION & WORKFLOW ==========
     isApproved: {
       type: Boolean,

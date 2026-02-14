@@ -118,10 +118,7 @@ exports.userProfileDetailUpdate = async (req, res) => {
             facebook: links.facebook || "",
             instagram: links.instagram || "",
             twitter: links.twitter || "",
-            linkedin: links.linkedin || "",
-            github: links.github || "",
             youtube: links.youtube || "",
-            website: links.website || "",
           };
         }
       } catch (err) {
@@ -810,10 +807,7 @@ exports.getUserProfileDetail = async (req, res) => {
         facebook: socialLinks.facebook || "",
         instagram: socialLinks.instagram || "",
         twitter: socialLinks.twitter || "",
-        linkedin: socialLinks.linkedin || "",
-        github: socialLinks.github || "",
         youtube: socialLinks.youtube || "",
-        website: socialLinks.website || "",
       },
     };
 
@@ -913,7 +907,6 @@ exports.getAdminProfileDetail = async (req, res) => {
     const socialLinks = {
       facebook: profile.socialLinks?.facebook || null,
       instagram: profile.socialLinks?.instagram || null,
-      linkedin: profile.socialLinks?.linkedin || null,
       twitter: profile.socialLinks?.twitter || null,
       youtube: profile.socialLinks?.youtube || null,
     };
@@ -1123,59 +1116,13 @@ exports.getProfileOverview = async (req, res) => {
       return res.status(404).json({ message: "Profile not found" });
     }
 
-    // 2️⃣ Fetch user's published feeds to aggregate stats
-    const userFeeds = await Feed.find({
-      createdByAccount: userObjectId,
-      roleRef: "User",
-      status: "Published",
-    }).select("_id").lean();
+    // 2️⃣ Fetch user's personal activity counts (downloads & shares)
+    const userActions = await UserFeedActions.findOne({
+      $or: [{ userId: userObjectId }, { accountId: userObjectId }]
+    }).lean();
 
-    const feedIds = userFeeds.map(f => f._id);
-
-    let downloadCount = 0;
-    let shareCount = 0;
-
-    if (feedIds.length > 0) {
-      // 3️⃣ Aggregate Total Downloads of user's content
-      const downloadsAgg = await UserFeedActions.aggregate([
-        { $match: { "downloadedFeeds.feedId": { $in: feedIds } } },
-        {
-          $project: {
-            count: {
-              $size: {
-                $filter: {
-                  input: "$downloadedFeeds",
-                  as: "item",
-                  cond: { $in: ["$$item.feedId", feedIds] }
-                }
-              }
-            }
-          }
-        },
-        { $group: { _id: null, total: { $sum: "$count" } } }
-      ]);
-      downloadCount = downloadsAgg[0]?.total || 0;
-
-      // 4️⃣ Aggregate Total Shares of user's content
-      const sharesAgg = await UserFeedActions.aggregate([
-        { $match: { "sharedFeeds.feedId": { $in: feedIds } } },
-        {
-          $project: {
-            count: {
-              $size: {
-                $filter: {
-                  input: "$sharedFeeds",
-                  as: "item",
-                  cond: { $in: ["$$item.feedId", feedIds] }
-                }
-              }
-            }
-          }
-        },
-        { $group: { _id: null, total: { $sum: "$count" } } }
-      ]);
-      shareCount = sharesAgg[0]?.total || 0;
-    }
+    const downloadCount = userActions?.downloadedFeeds?.length || 0;
+    const shareCount = userActions?.sharedFeeds?.length || 0;
 
     // 5️⃣ Response
     return res.status(200).json({
@@ -1251,9 +1198,12 @@ exports.getProfileByUsername = async (req, res) => {
 
     // 🔹 Get user feeds (visible to all if public)
     const userFeeds = await Feed.find({
-      createdByAccount: profile.userId,
+      $or: [
+        { createdByAccount: profile.userId },
+        { "postedBy.userId": profile.userId }
+      ],
       roleRef: "User",
-      status: "Published",
+      status: { $in: ["Published", "published"] },
     })
       .populate("category", "name")
       .sort({ createdAt: -1 })
@@ -1261,33 +1211,13 @@ exports.getProfileByUsername = async (req, res) => {
 
     const feedIds = userFeeds.map(f => f._id);
 
-    let downloadCount = 0;
-    let shareCount = 0;
+    // 🔹 Fetch user's personal activity counts (downloads & shares)
+    const ownerActions = await UserFeedActions.findOne({
+      $or: [{ userId: profile.userId }, { accountId: profile.userId }]
+    }).lean();
 
-    if (feedIds.length > 0) {
-      const [downloadsAgg, sharesAgg] = await Promise.all([
-        UserFeedActions.aggregate([
-          { $match: { "downloadedFeeds.feedId": { $in: feedIds } } },
-          {
-            $project: {
-              count: { $size: { $filter: { input: "$downloadedFeeds", as: "item", cond: { $in: ["$$item.feedId", feedIds] } } } }
-            }
-          },
-          { $group: { _id: null, total: { $sum: "$count" } } }
-        ]),
-        UserFeedActions.aggregate([
-          { $match: { "sharedFeeds.feedId": { $in: feedIds } } },
-          {
-            $project: {
-              count: { $size: { $filter: { input: "$sharedFeeds", as: "item", cond: { $in: ["$$item.feedId", feedIds] } } } }
-            }
-          },
-          { $group: { _id: null, total: { $sum: "$count" } } }
-        ])
-      ]);
-      downloadCount = downloadsAgg[0]?.total || 0;
-      shareCount = sharesAgg[0]?.total || 0;
-    }
+    const downloadCount = ownerActions?.downloadedFeeds?.length || 0;
+    const shareCount = ownerActions?.sharedFeeds?.length || 0;
 
     // ✅ Apply visibility filter to data
     const filteredData = {

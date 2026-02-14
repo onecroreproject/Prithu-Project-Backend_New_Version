@@ -1,6 +1,6 @@
-const UserCategory=require('../../models/userModels/userCategotyModel')
-const Feed=require('../../models/feedModel')
-const mongoose=require('mongoose')
+const UserCategory = require('../../models/userModels/userCategotyModel')
+const Feed = require('../../models/feedModel')
+const mongoose = require('mongoose')
 
 
 exports.userSelectCategory = async (req, res) => {
@@ -96,16 +96,23 @@ exports.userInterestedCategory = async (req, res) => {
     if (!feed?.category)
       return res.status(404).json({ message: "Feed or category not found" });
 
-    const categoryId = new mongoose.Types.ObjectId(feed.category);
+    const categories = Array.isArray(feed.category) ? feed.category : [feed.category];
+    const categoryIds = categories.map(c => new mongoose.Types.ObjectId(c));
+
+    // Construct dynamic update for timestamps
+    const timestampUpdates = {};
+    categoryIds.forEach(id => {
+      timestampUpdates[`updatedAtMap.${id}`] = new Date();
+    });
 
     // ⚡ SINGLE ATOMIC OPERATION — fastest
     await UserCategory.updateOne(
       { userId },
 
       {
-        $pull: { nonInterestedCategories: categoryId },     // remove from nonInterested
-        $addToSet: { interestedCategories: categoryId },     // add to interested
-        $set: { [`updatedAtMap.${categoryId}`]: new Date() } // timestamp
+        $pull: { nonInterestedCategories: { $in: categoryIds } },     // remove from nonInterested
+        $addToSet: { interestedCategories: { $each: categoryIds } },     // add to interested
+        $set: timestampUpdates // timestamp
       },
 
       { upsert: true }
@@ -113,7 +120,8 @@ exports.userInterestedCategory = async (req, res) => {
 
     res.status(200).json({
       message: "Category marked as interested successfully",
-      categoryId,
+      categoryIds,
+      categoryId: categoryIds[0] // Legacy support
     });
 
   } catch (err) {
@@ -141,16 +149,23 @@ exports.userNotInterestedCategory = async (req, res) => {
     if (!feed?.category)
       return res.status(404).json({ message: "Feed or category not found" });
 
-    const categoryId = new mongoose.Types.ObjectId(feed.category);
+    const categories = Array.isArray(feed.category) ? feed.category : [feed.category];
+    const categoryIds = categories.map(c => new mongoose.Types.ObjectId(c));
+
+    // Construct dynamic update for timestamps
+    const timestampUpdates = {};
+    categoryIds.forEach(id => {
+      timestampUpdates[`updatedAtMap.${id}`] = new Date();
+    });
 
     // ⚡ SINGLE ATOMIC OPERATION — fastest
     await UserCategory.updateOne(
       { userId },
 
       {
-        $pull: { interestedCategories: categoryId },         // remove from interested
-        $addToSet: { nonInterestedCategories: categoryId },  // add to nonInterested
-        $set: { [`updatedAtMap.${categoryId}`]: new Date() } // timestamp
+        $pull: { interestedCategories: { $in: categoryIds } },         // remove from interested
+        $addToSet: { nonInterestedCategories: { $each: categoryIds } },  // add to nonInterested
+        $set: timestampUpdates // timestamp
       },
 
       { upsert: true }
@@ -158,7 +173,8 @@ exports.userNotInterestedCategory = async (req, res) => {
 
     res.status(200).json({
       message: "Category marked as NOT interested successfully",
-      categoryId,
+      categoryIds,
+      categoryId: categoryIds[0] // Legacy support
     });
 
   } catch (err) {

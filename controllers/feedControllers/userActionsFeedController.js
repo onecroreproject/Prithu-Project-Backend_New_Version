@@ -1684,6 +1684,12 @@ exports.getUserLikedFeeds = async (req, res) => {
       return {
         ...feed,
         feedId: feed._id,
+        mediaUrl: getMediaUrl(feed.mediaUrl),
+        files: (feed.files || []).map(f => ({
+          ...f,
+          url: getMediaUrl(f.url),
+          thumbnail: getMediaUrl(f.thumbnail)
+        })),
         likedAt: item.likedAt,
         creatorData: {
           id: feed.postedBy?.userId,
@@ -1869,9 +1875,24 @@ exports.getUserLikedFeedsForSaved = async (req, res) => {
   if (!userId) return res.status(400).json({ message: "userId is required" });
 
   try {
-    const savedFeeds = await UserFeedActions.aggregate([
-      { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+    const userIdObj = new mongoose.Types.ObjectId(userId);
+
+    // 1️⃣ FETCH VIEWER PROFILE (LOGGED-IN USER)
+    const viewerProfile = await ProfileSettings.findOne({ userId: userIdObj })
+      .select("name userName profileAvatar phoneNumber socialLinks privacy modifyAvatar visibility")
+      .lean();
+
+    const viewer = {
+      id: userIdObj,
+      name: viewerProfile?.name || "User",
+      userName: viewerProfile?.userName || "user",
+      profileAvatar: getMediaUrl(viewerProfile?.modifyAvatar) || "https://via.placeholder.com/150",
+    };
+
+    const savedFeedsData = await UserFeedActions.aggregate([
+      { $match: { userId: userIdObj } },
       { $unwind: "$likedFeeds" },
+      { $sort: { "likedFeeds.likedAt": -1 } },
 
       // Join feed data
       {
@@ -1898,48 +1919,107 @@ exports.getUserLikedFeedsForSaved = async (req, res) => {
         },
       },
 
+      // Join ProfileSettings for latest avatar/name
+      {
+        $lookup: {
+          from: "ProfileSettings",
+          let: {
+            adminId: { $cond: [{ $eq: ["$feed.roleRef", "Admin"] }, "$feed.postedBy.userId", null] },
+            userId: { $cond: [{ $eq: ["$feed.roleRef", "User"] }, "$feed.postedBy.userId", null] },
+            childAdminId: { $cond: [{ $eq: ["$feed.roleRef", "Child_Admin"] }, "$feed.postedBy.userId", null] }
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $eq: ["$adminId", { $cond: [{ $eq: [{ $type: "$$adminId" }, "string"] }, { $toObjectId: "$$adminId" }, "$$adminId"] }] },
+                    { $eq: ["$childAdminId", { $cond: [{ $eq: [{ $type: "$$childAdminId" }, "string"] }, { $toObjectId: "$$childAdminId" }, "$$childAdminId"] }] },
+                    { $eq: ["$userId", { $cond: [{ $eq: [{ $type: "$$userId" }, "string"] }, { $toObjectId: "$$userId" }, "$$userId"] }] }
+                  ]
+                }
+              }
+            },
+            { $limit: 1 },
+            { $project: { name: 1, userName: 1, profileAvatar: 1, modifyAvatar: 1 } }
+          ],
+          as: "creatorProfile"
+        }
+      },
+      { $unwind: { path: "$creatorProfile", preserveNullAndEmptyArrays: true } },
+
       // Format output to match Saved Feeds schema
       {
         $project: {
           _id: "$feed._id",
-          type: "$feed.type",
-          savedAt: "$likedFeeds.likedAt", // Map likedAt to savedAt
-          likeCount: { $ifNull: [{ $arrayElemAt: ["$likeStats.totalLikes", 0] }, 0] },
-          contentUrl: { // Map url logic to contentUrl
-            $cond: [
-              { $ifNull: ["$feed.downloadUrl", false] },
-              "$feed.downloadUrl",
-              {
-                $cond: [
-                  { $ifNull: ["$feed.fileUrl", false] },
-                  "$feed.fileUrl",
-                  {
-                    $cond: [
-                      { $ifNull: ["$feed.contentUrl", false] },
-                      "$feed.contentUrl",
-                      null,
-                    ],
-                  },
-                ],
-              },
-            ],
+          type: "$feed.postType",
+          savedAt: "$likedFeeds.likedAt",
+          caption: "$feed.caption",
+          uploadMode: "$feed.uploadMode",
+          mediaUrl: "$feed.mediaUrl", // Postcard uses this
+          contentUrl: "$feed.mediaUrl", // Legacy support
+          designMetadata: "$feed.designMetadata",
+          postedBy: {
+            id: "$feed.postedBy.userId",
+            name: { $ifNull: ["$creatorProfile.name", { $ifNull: ["$creatorProfile.userName", "$feed.postedBy.name"] }] },
+            userName: { $ifNull: ["$creatorProfile.userName", "$feed.postedBy.name"] }, // Fallback to name if userName missing
+            avatar: {
+              $ifNull: [
+                "$creatorProfile.modifyAvatar",
+                { $ifNull: ["$creatorProfile.profileAvatar", "$feed.postedBy.profilePicture"] }
+              ]
+            },
+            role: "$feed.postedBy.role"
           },
+          stats: {
+            likes: { $ifNull: [{ $arrayElemAt: ["$likeStats.totalLikes", 0] }, 0] },
+            shares: { $ifNull: ["$feed.shareCount", 0] }, // If these exist on feed
+            downloads: { $ifNull: ["$feed.downloadCount", 0] },
+            comments: { $ifNull: ["$feed.commentCount", 0] }
+          },
+          // Map flat counts for fallback
+          likesCount: { $ifNull: [{ $arrayElemAt: ["$likeStats.totalLikes", 0] }, 0] },
+          isSaved: { $literal: true }, // It IS saved/liked if it's in this list
+          isLiked: { $literal: true } // Assuming saved logic implies usage in this context, but strictly this endpoint is for 'likedFeeds' which are 'saved'. Wait, the endpoint is "getUserLikedFeedsForSaved". 
+          // Actually the code says: "Saved feeds (from likes)".
+          // If I am fetching "Saved", then isSaved=true.
+
+
         },
       },
     ]);
 
     // Return empty array if no results (frontend expects 200 OK with empty array, not 404)
-    if (!savedFeeds) {
-      return res.status(200).json({ savedFeeds: [] });
+    if (!savedFeedsData || savedFeedsData.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          viewer,
+          savedFeeds: []
+        }
+      });
     }
 
     res.status(200).json({
+      success: true,
       message: "Saved feeds (from likes) retrieved successfully",
-      count: savedFeeds.length,
-      savedFeeds, // Root key must be savedFeeds
+      count: savedFeedsData.length,
+      data: {
+        viewer,
+        savedFeeds: savedFeedsData.map(f => ({
+          ...f,
+          thumbnailUrl: getMediaUrl(f.contentUrl),
+          contentUrl: getMediaUrl(f.contentUrl),
+          timeAgo: feedTimeCalculator(f.savedAt || f.createdAt),
+          postedBy: {
+            ...f.postedBy,
+            avatar: getMediaUrl(f.postedBy?.avatar) || "https://cdn-icons-png.flaticon.com/512/149/149071.png"
+          }
+        })),
+      }
     });
   } catch (err) {
     console.error("Error fetching liked feeds for saved:", err);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 };

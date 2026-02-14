@@ -147,6 +147,10 @@ exports.getAllFeedsByUserId = async (req, res) => {
             ? new mongoose.Types.ObjectId(categoryId)
             : { $nin: notInterestedCategoryIds },
           $or: [
+            { createdByAccount: userId },
+            { "postedBy.userId": userId }
+          ],
+          $or: [
             { isScheduled: { $ne: true } },
             { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] }
           ],
@@ -162,15 +166,16 @@ exports.getAllFeedsByUserId = async (req, res) => {
       { $limit: limit },
 
       // 🛑 OPTIMIZED LOOKUPS: Only project needed fields to keep pipeline memory low
-      { $lookup: { from: "Admin", localField: "postedBy.userId", foreignField: "_id", pipeline: [{ $project: { userName: 1, name: 1 } }], as: "admin" } },
-      { $lookup: { from: "Child_Admin", localField: "postedBy.userId", foreignField: "_id", pipeline: [{ $project: { userName: 1, name: 1 } }], as: "childAdmin" } },
-      { $lookup: { from: "User", localField: "postedBy.userId", foreignField: "_id", pipeline: [{ $project: { userName: 1, name: 1 } }], as: "userAccount" } },
+      { $addFields: { effectiveCreatorId: { $ifNull: ["$postedBy.userId", "$createdByAccount"] } } },
+      { $lookup: { from: "Admin", localField: "effectiveCreatorId", foreignField: "_id", pipeline: [{ $project: { userName: 1, name: 1 } }], as: "admin" } },
+      { $lookup: { from: "Child_Admin", localField: "effectiveCreatorId", foreignField: "_id", pipeline: [{ $project: { userName: 1, name: 1 } }], as: "childAdmin" } },
+      { $lookup: { from: "User", localField: "effectiveCreatorId", foreignField: "_id", pipeline: [{ $project: { userName: 1, name: 1 } }], as: "userAccount" } },
 
       // 🔄 DYNAMIC PROFILE JOIN: Match based on roleRef
       {
         $lookup: {
           from: "ProfileSettings",
-          let: { creatorId: "$postedBy.userId", role: "$roleRef" },
+          let: { creatorId: "$effectiveCreatorId", role: "$roleRef" },
           pipeline: [
             {
               $match: {
@@ -286,7 +291,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
       {
         $lookup: {
           from: "Follows",
-          let: { creatorId: "$postedBy.userId" },
+          let: { creatorId: "$effectiveCreatorId" },
           pipeline: [
             { $match: { $expr: { $and: [{ $eq: ["$creatorId", "$$creatorId"] }, { $eq: ["$followerId", userId] }] } } },
             { $limit: 1 }
@@ -320,7 +325,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
                 }
               },
               in: {
-                id: "$postedBy.userId",
+                id: "$effectiveCreatorId",
                 // Prefer data from ProfileSettings, fallback to Account info
                 userName: { $ifNull: ["$creatorProfile.userName", "$$rawAccount.userName", "unknown"] },
                 name: { $ifNull: ["$creatorProfile.name", "$$rawAccount.name", "User"] },
@@ -346,6 +351,8 @@ exports.getAllFeedsByUserId = async (req, res) => {
           userAccount: 0,
           creatorProfile: 0,
           postedBy: 0,
+          createdByAccount: 0,
+          effectiveCreatorId: 0,
           fileHash: 0,
           __v: 0
         }
@@ -510,9 +517,10 @@ exports.getFeedsByHashtag = async (req, res) => {
       /* -------------------------------------------------
          ACCOUNT LOOKUP (Admin / Child_Admin / User)
       -------------------------------------------------- */
-      { $lookup: { from: "Admin", localField: "createdByAccount", foreignField: "_id", as: "admin" } },
-      { $lookup: { from: "Child_Admin", localField: "createdByAccount", foreignField: "_id", as: "childAdmin" } },
-      { $lookup: { from: "User", localField: "createdByAccount", foreignField: "_id", as: "user" } },
+      { $addFields: { effectiveCreatorId: { $ifNull: ["$postedBy.userId", "$createdByAccount"] } } },
+      { $lookup: { from: "Admin", localField: "effectiveCreatorId", foreignField: "_id", as: "admin" } },
+      { $lookup: { from: "Child_Admin", localField: "effectiveCreatorId", foreignField: "_id", as: "childAdmin" } },
+      { $lookup: { from: "User", localField: "effectiveCreatorId", foreignField: "_id", as: "user" } },
 
       {
         $addFields: {
@@ -536,9 +544,9 @@ exports.getFeedsByHashtag = async (req, res) => {
         $lookup: {
           from: "ProfileSettings",
           let: {
-            adminId: { $cond: [{ $eq: ["$roleRef", "Admin"] }, "$createdByAccount", null] },
-            childAdminId: { $cond: [{ $eq: ["$roleRef", "Child_Admin"] }, "$createdByAccount", null] },
-            userId: { $cond: [{ $eq: ["$roleRef", "User"] }, "$createdByAccount", null] },
+            adminId: { $cond: [{ $eq: ["$roleRef", "Admin"] }, "$effectiveCreatorId", null] },
+            childAdminId: { $cond: [{ $eq: ["$roleRef", "Child_Admin"] }, "$effectiveCreatorId", null] },
+            userId: { $cond: [{ $eq: ["$roleRef", "User"] }, "$effectiveCreatorId", null] },
           },
           pipeline: [
             {
@@ -789,9 +797,10 @@ exports.getSingleFeedById = async (req, res) => {
       { $match: { _id: feedObjectId } },
 
       // ----- SAME LOOKUPS -----
-      { $lookup: { from: "Admin", localField: "createdByAccount", foreignField: "_id", as: "admin" } },
-      { $lookup: { from: "Child_Admin", localField: "createdByAccount", foreignField: "_id", as: "childAdmin" } },
-      { $lookup: { from: "User", localField: "createdByAccount", foreignField: "_id", as: "user" } },
+      { $addFields: { effectiveCreatorId: { $ifNull: ["$postedBy.userId", "$createdByAccount"] } } },
+      { $lookup: { from: "Admin", localField: "effectiveCreatorId", foreignField: "_id", as: "admin" } },
+      { $lookup: { from: "Child_Admin", localField: "effectiveCreatorId", foreignField: "_id", as: "childAdmin" } },
+      { $lookup: { from: "User", localField: "effectiveCreatorId", foreignField: "_id", as: "user" } },
 
       {
         $addFields: {
@@ -956,14 +965,17 @@ exports.getSingleFeedById = async (req, res) => {
       profileAvatar: getMediaUrl(result[0].profileAvatar)
     };
 
+    console.log("✅ [getSingleFeedById] Feed retrieved successfully:", enrichedFeed._id);
+
     res.status(200).json({
-      message: "Feed retrieved successfully",
-      feed: enrichedFeed
+      success: true,
+      data: enrichedFeed
     });
 
   } catch (err) {
-    console.error("Error in getSingleFeedById:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    console.error("❌ [getSingleFeedById] Error:", err);
+    console.error("❌ [getSingleFeedById] Error message:", err.message);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -1738,14 +1750,25 @@ exports.getTrendingFeeds = async (req, res) => {
     trendingEnd.setHours(23, 59, 59, 999);
 
     /* -----------------------------------------
-       2️⃣ User Preferences (Hidden & Non-Interested)
+       2️⃣ Context & Preferences (Viewer, Hidden, Non-Interested)
     ----------------------------------------- */
-    const [hiddenPostDocs, userCat] = await Promise.all([
+    const [viewerProfile, hiddenPostDocs, userCat] = await Promise.all([
+      ProfileSettings.findOne({ userId }).select("name userName profileAvatar phoneNumber socialLinks privacy modifyAvatar visibility").lean(),
       HiddenPost.find({ userId }).select("postId -_id").lean(),
       UserCategory.findOne({ userId }).select("nonInterestedCategories").lean()
     ]);
+
     const hiddenPostIds = hiddenPostDocs.map(x => x.postId);
     const notInterestedCategoryIds = userCat?.nonInterestedCategories || [];
+
+    // Construct viewer object
+    const viewer = {
+      id: userId,
+      name: viewerProfile?.name || "User",
+      userName: viewerProfile?.userName || "user",
+      profileAvatar: getMediaUrl(viewerProfile?.modifyAvatar || viewerProfile?.profileAvatar) || "https://via.placeholder.com/150",
+    };
+
 
     /* -----------------------------------------
        3️⃣ Fetch Trending Feeds (Filtered)
@@ -1936,6 +1959,7 @@ exports.getTrendingFeeds = async (req, res) => {
       success: true,
       message: "Trending Feeds",
       data: {
+        viewer,
         feeds: finalFeeds,
         totalCount: enriched.length,
         pagination: {

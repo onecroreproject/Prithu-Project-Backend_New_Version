@@ -5,6 +5,7 @@ const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js
 const User = require("../../models/userModels/userModel");
 const { saveFile } = require("../../utils/storageEngine");
 const fs = require("fs");
+const { notifyAllUsersNewFeed } = require("../../middlewares/helper/socketNotification");
 
 const extractHashtags = (text) => {
   const regex = /#([\p{L}\p{N}_]+)/gu;
@@ -97,6 +98,7 @@ exports.creatorFeedUpload = async (req, res) => {
       language,
       category: categoryIds,
       createdByAccount: userId,
+      postedBy: { userId, role: userRole },
       roleRef: userRole,
       contentUrl: url,
       storageType: "local",
@@ -130,7 +132,7 @@ exports.creatorFeedUpload = async (req, res) => {
       location: location ? (typeof location === "string" ? { name: location } : location) : undefined,
       isScheduled: !!scheduleDate,
       scheduleDate: scheduleDate ? new Date(scheduleDate) : null,
-      status: scheduleDate ? "Scheduled" : "Published",
+      status: scheduleDate ? "scheduled" : "published",
       dec,
       hashtags
     };
@@ -155,6 +157,14 @@ exports.creatorFeedUpload = async (req, res) => {
       { _id: { $in: categoryIds } },
       { $addToSet: { feedIds: newFeed._id } }
     );
+
+    // 🔔 Notify all users if posted by Admin/ChildAdmin
+    if (!scheduleDate && (userRole === "Admin" || userRole === "ChildAdmin")) {
+      const notificationTitle = "New Official Post! ✨";
+      const notificationMessage = "Administrator just posted a new feed. Check it out now!";
+      // Using an async call but not awaiting to avoid blocking response
+      notifyAllUsersNewFeed(userId, newFeed._id, notificationTitle, notificationMessage, url);
+    }
 
     return res.status(201).json({
       message: scheduleDate ? "Feed scheduled successfully" : "Feed uploaded successfully",

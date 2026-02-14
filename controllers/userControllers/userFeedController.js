@@ -202,7 +202,13 @@ exports.fetchUserFeeds = async (req, res) => {
     }
     if (type) filter.type = type;
 
-    const feeds = await Feed.find({ createdByAccount: userId, ...filter })
+    const feeds = await Feed.find({
+      $or: [
+        { createdByAccount: userId },
+        { "postedBy.userId": userId }
+      ],
+      ...filter
+    })
       .populate("createdByAccount", "userName email");
 
 
