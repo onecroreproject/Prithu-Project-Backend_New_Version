@@ -7,7 +7,16 @@ const userFeedbackSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: false, // allow guest feedback if needed
+      required: false, // allow guest feedback
+    },
+    guestName: {
+      type: String,
+      trim: true
+    },
+    guestEmail: {
+      type: String,
+      trim: true,
+      lowercase: true
     },
 
     // Section where feedback/report is submitted

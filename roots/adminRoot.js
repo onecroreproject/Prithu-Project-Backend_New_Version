@@ -126,7 +126,9 @@ const {
     bulkCreateHelpFAQ,
 } = require("../controllers/adminControllers/adminHelpController");
 
-const { getAllUserFeedback, updateFeedbackStatus } = require('../controllers/feedBackController');
+const { getAllUserFeedback, updateFeedbackStatus, getAllSupportQueries, updateSupportQueryStatus } = require('../controllers/feedBackController');
+const { updateFooterConfig } = require('../controllers/footerController');
+const { updatePageBySlug } = require('../controllers/staticPageController');
 
 const {
     adminProfileDetailUpdate,
@@ -319,8 +321,15 @@ router.get("/admin/help", getHelpFAQ);
 /* --------------------- Admin Feedback --------------------- */
 router.get("/admin/feedback", getAllUserFeedback);
 router.put("/admin/feedback/:id", updateFeedbackStatus);
+router.get("/admin/support-queries", auth, getAllSupportQueries);
+router.put("/admin/support-queries/:id", auth, updateSupportQueryStatus);
+
+/* --------------------- Admin Footer --------------------- */
+router.put("/admin/footer", auth, updateFooterConfig);
 
 
 router.get('/admin/get/user/detail', getUserProfileDetailforAdmin);
+
+router.post('/admin/static-page/:slug', auth, updatePageBySlug);
 
 module.exports = router;

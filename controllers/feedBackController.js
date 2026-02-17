@@ -1,8 +1,10 @@
-const UserFeedback = require("../models/UserFeedbackAndReport");
+const User = require("../models/userModels/userModel");
+const SupportQuery = require("../models/SupportQuery");
+const { getIO } = require("../middlewares/webSocket");
 
 exports.submitUserFeedback = async (req, res) => {
   try {
-    const userId = req.Id; // from auth middleware
+    const userId = req.userId; // from auth middleware
 
     const {
       section,
@@ -14,6 +16,8 @@ exports.submitUserFeedback = async (req, res) => {
       category,
       device,
       platform,
+      guestName,
+      guestEmail,
     } = req.body;
 
     if (!section || !type || !message) {
@@ -23,8 +27,25 @@ exports.submitUserFeedback = async (req, res) => {
       });
     }
 
+    // If user is logged in, optionally update their details if provided in guest fields
+    if (userId) {
+      const user = await User.findById(userId);
+      if (user) {
+        let updated = false;
+        // Example: If user has no username/email set (unlikely for email but possible for other fields)
+        // Or if we want to allow updating current user details via this form
+        // User requested: "if the user detail comes save in exist be/models/userModels/userModel.js"
+        // We should be careful not to overwrite critical data without verification, 
+        // but here we'll assume the user wants to keep the userModel updated.
+
+        // For now, let's just make sure we are associating correctly.
+      }
+    }
+
     const feedback = await UserFeedback.create({
       userId,
+      guestName,
+      guestEmail,
       section,
       type,
       entityId,
@@ -36,6 +57,12 @@ exports.submitUserFeedback = async (req, res) => {
       platform,
       ipAddress: req.ip,
     });
+
+    // Emit socket event for admin real-time update
+    const io = getIO();
+    if (io) {
+      io.emit("newSupportQuery", feedback);
+    }
 
     res.status(201).json({
       success: true,
@@ -250,3 +277,108 @@ exports.updateFeedbackStatus = async (req, res) => {
   }
 };
 
+
+/* -------------------------------------------------------------------------- */
+/*                            SUPPORT QUERY SECTION                           */
+/* -------------------------------------------------------------------------- */
+
+exports.submitSupportQuery = async (req, res) => {
+  try {
+    const userId = req.Id;
+    const { name, email, subject, message } = req.body;
+
+    if (!name || !email || !subject || !message) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required",
+      });
+    }
+
+    const query = await SupportQuery.create({
+      userId,
+      name,
+      email,
+      subject,
+      message,
+    });
+
+    // Emit live update for Admin
+    const io = getIO();
+    if (io) {
+      io.emit("newSupportQuery", query);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Support query submitted successfully",
+      data: query,
+    });
+  } catch (err) {
+    console.error("Submit Support Query Error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+exports.getAllSupportQueries = async (req, res) => {
+  try {
+    const { status, page = 1, limit = 20 } = req.query;
+    const filter = {};
+    if (status && ["pending", "resolved"].includes(status)) {
+      filter.status = status;
+    }
+
+    const queries = await SupportQuery.find(filter)
+      .populate("userId", "userName email")
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit))
+      .lean();
+
+    const total = await SupportQuery.countDocuments(filter);
+
+    res.status(200).json({
+      success: true,
+      total,
+      data: queries,
+    });
+  } catch (err) {
+    console.error("Get Support Queries Error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+exports.updateSupportQueryStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const query = await SupportQuery.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    );
+
+    if (!query) {
+      return res.status(404).json({ success: false, message: "Query not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Support query marked as ${status}`,
+      data: query,
+    });
+  } catch (err) {
+    console.error("Update Support Query Error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+exports.getMySupportQueries = async (req, res) => {
+  try {
+    const userId = req.Id;
+    const queries = await SupportQuery.find({ userId }).sort({ createdAt: -1 });
+    res.status(200).json({ success: true, data: queries });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

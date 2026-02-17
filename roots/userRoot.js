@@ -139,6 +139,7 @@ const {
     creatorSelectCategory,
     creatorUnSelectCategory,
 } = require('../controllers/creatorControllers/creatorCategoryController');
+const { getPageBySlug } = require('../controllers/staticPageController');
 
 const {
     getCommentsByFeed,
@@ -254,7 +255,8 @@ const { getPostInterestStatus,
     requestPostInterest
 } = require('../controllers/postIntrestedController');
 const { getHelpFAQ } = require('../controllers/adminControllers/adminHelpController');
-const { submitUserFeedback, getMyFeedbackAndReports } = require('../controllers/feedBackController');
+const { submitUserFeedback, getMyFeedbackAndReports, submitSupportQuery, getMySupportQueries } = require('../controllers/feedBackController');
+const { getFooterConfig } = require('../controllers/footerController');
 const { getUpcomingBirthdays } = require('../controllers/adminControllers/adminUserControllers');
 
 /* --------------------- User Authentication --------------------- */
@@ -420,6 +422,8 @@ router.get("/get/trending/feed", auth, getTrendingFeeds);
 router.get("/user/invite/friends", auth, (req, res) => res.status(200).json({ message: "Invite feature" })); // Placeholder
 router.post("/feedback/submit", auth, submitUserFeedback);
 router.get("/feedback/my", auth, getMyFeedbackAndReports);
+router.post("/support", auth, submitSupportQuery);
+router.get("/support/my", auth, getMySupportQueries);
 router.get("/help/faq", getHelpFAQ);
 router.post('/search/all/category', searchCategories)
 router.post("/save/user/location", auth, saveUserLocation);
@@ -432,6 +436,11 @@ router.post("/post/intrested", auth, requestPostInterest);
 const { getMainBoardStats } = require('../controllers/mainHomeController');
 router.get("/main/board/status", getMainBoardStats);
 
+/* --------------------- Footer --------------------- */
+router.get("/footer", getFooterConfig);
 
+
+
+router.get('/static-page/:slug', getPageBySlug);
 
 module.exports = router;
