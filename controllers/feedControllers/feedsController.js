@@ -188,12 +188,23 @@ exports.getAllFeedsByUserId = async (req, res) => {
                 }
               }
             },
-            { $project: { name: 1, userName: 1, profileAvatar: 1, modifyAvatar: 1 } }
+            { $project: { name: 1, userName: 1, profileAvatar: 1, modifyAvatar: 1, visibility: 1 } }
           ],
           as: "creatorProfile"
         }
       },
       { $unwind: { path: "$creatorProfile", preserveNullAndEmptyArrays: true } },
+
+      // 🔒 Field-level Visibility lookup
+      {
+        $lookup: {
+          from: "ProfileVisibility",
+          localField: "creatorProfile.visibility",
+          foreignField: "_id",
+          as: "fieldVisibility"
+        }
+      },
+      { $unwind: { path: "$fieldVisibility", preserveNullAndEmptyArrays: true } },
 
       // 📊 COUNTS AGGREGATION: Dynamically calculate interaction counts
       {
@@ -329,13 +340,27 @@ exports.getAllFeedsByUserId = async (req, res) => {
                 // Prefer data from ProfileSettings, fallback to Account info
                 userName: { $ifNull: ["$creatorProfile.userName", "$$rawAccount.userName", "unknown"] },
                 name: { $ifNull: ["$creatorProfile.name", "$$rawAccount.name", "User"] },
-                // Avatar Priority: Background-removed -> Original -> Placeholder
+                // 🔒 Privacy-Aware Avatar Priority:
                 avatar: {
-                  $ifNull: [
-                    "$creatorProfile.modifyAvatar",
-                    "$creatorProfile.profileAvatar",
-                    "https://via.placeholder.com/150"
-                  ]
+                  $cond: {
+                    if: {
+                      $or: [
+                        { $eq: ["$effectiveCreatorId", userId] }, // Always show to owner
+                        { $eq: ["$fieldVisibility.profileAvatar", "public"] }, // Show if public
+                        { $and: [{ $eq: ["$fieldVisibility.profileAvatar", "followers"] }, { $eq: ["$isFollowing", true] }] }, // Show if following
+                        { $eq: ["$roleRef", "Admin"] }, // Admins are always public
+                        { $eq: ["$roleRef", "Child_Admin"] }
+                      ]
+                    },
+                    then: {
+                      $ifNull: [
+                        "$creatorProfile.modifyAvatar",
+                        "$creatorProfile.profileAvatar",
+                        "https://via.placeholder.com/150"
+                      ]
+                    },
+                    else: "https://via.placeholder.com/150" // Mask if private/not-following
+                  }
                 },
                 role: "$roleRef"
               }
@@ -560,7 +585,7 @@ exports.getFeedsByHashtag = async (req, res) => {
                 }
               }
             },
-            { $project: { userName: 1, profileAvatar: 1, modifyAvatar: 1 } },
+            { $project: { userName: 1, profileAvatar: 1, modifyAvatar: 1, visibility: 1 } },
             { $limit: 1 }
           ],
           as: "profile"
@@ -568,6 +593,17 @@ exports.getFeedsByHashtag = async (req, res) => {
       },
 
       { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
+
+      // 🔒 Join with ProfileVisibility
+      {
+        $lookup: {
+          from: "ProfileVisibility",
+          localField: "profile.visibility",
+          foreignField: "_id",
+          as: "fieldVisibility"
+        }
+      },
+      { $unwind: { path: "$fieldVisibility", preserveNullAndEmptyArrays: true } },
 
       /* -------------------------------------------------
          LIKE / DISLIKE / SAVE / VIEW / COMMENT COUNTS
@@ -668,36 +704,43 @@ exports.getFeedsByHashtag = async (req, res) => {
       -------------------------------------------------- */
       {
         $project: {
-          feedId: "$_id",
-          type: 1,
-          contentUrl: 1,
-          dec: 1,
-          category: 1,
-          hashtags: 1,
-          createdAt: 1,
-          duration: 1,
-          roleRef: 1,
-          createdByAccount: 1,
-
-          userName: "$profile.userName",
-          profileAvatar: "$profile.profileAvatar",
-          modifyAvatarFromProfile: "$profile.modifyAvatar",
-
-          likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCount.count", 0] }, 0] },
-          commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCount.count", 0] }, 0] },
-          viewsCount: { $ifNull: [{ $arrayElemAt: ["$viewsCount.count", 0] }, 0] },
-          shareCount: { $ifNull: [{ $arrayElemAt: ["$sharesCount.count", 0] }, 0] },
-          downloadCount: { $ifNull: [{ $arrayElemAt: ["$downloadsCount.count", 0] }, 0] },
-
-          isLiked: { $arrayElemAt: ["$userActions.isLiked", 0] },
-          isSaved: { $arrayElemAt: ["$userActions.isSaved", 0] },
-          isDisliked: { $arrayElemAt: ["$userActions.isDisliked", 0] },
-
           isFollowing: { $gt: [{ $size: "$followInfo" }, 0] },
+
+          // 🔒 Masked Avatar logic
+          profileAvatar: {
+            $cond: {
+              if: {
+                $or: [
+                  { $eq: ["$effectiveCreatorId", userId] },
+                  { $eq: ["$fieldVisibility.profileAvatar", "public"] },
+                  { $and: [{ $eq: ["$fieldVisibility.profileAvatar", "followers"] }, { $eq: [{ $gt: [{ $size: "$followInfo" }, 0] }, true] }] },
+                  { $eq: ["$roleRef", "Admin"] },
+                  { $eq: ["$roleRef", "Child_Admin"] }
+                ]
+              },
+              then: "$profile.profileAvatar",
+              else: null
+            }
+          },
+          modifyAvatarFromProfile: {
+            $cond: {
+              if: {
+                $or: [
+                  { $eq: ["$effectiveCreatorId", userId] },
+                  { $eq: ["$fieldVisibility.profileAvatar", "public"] },
+                  { $and: [{ $eq: ["$fieldVisibility.profileAvatar", "followers"] }, { $eq: [{ $gt: [{ $size: "$followInfo" }, 0] }, true] }] },
+                  { $eq: ["$roleRef", "Admin"] },
+                  { $eq: ["$roleRef", "Child_Admin"] }
+                ]
+              },
+              then: "$profile.modifyAvatar",
+              else: null
+            }
+          },
 
           themeColor: 1
         }
-      }
+      },
     ];
 
     /* -------------------------------------------------
@@ -838,13 +881,26 @@ exports.getSingleFeedById = async (req, res) => {
               }
             },
             { $limit: 1 },
-            { $project: { userName: 1, profileAvatar: 1, modifyAvatar: 1 } }
+            { $project: { userName: 1, profileAvatar: 1, modifyAvatar: 1, visibility: 1 } }
           ],
           as: "profile"
         }
       },
 
       { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
+      // ---------- FOLLOW CHECK ----------
+      {
+        $lookup: {
+          from: "Follows",
+          let: { creatorId: "$effectiveCreatorId" },
+          pipeline: [
+            { $match: { $expr: { $and: [{ $eq: ["$creatorId", "$$creatorId"] }, { $eq: ["$followerId", userId] }] } } },
+            { $limit: 1 }
+          ],
+          as: "followInfo"
+        }
+      },
+
 
       // ---------- COUNTS ----------
       {
@@ -937,7 +993,22 @@ exports.getSingleFeedById = async (req, res) => {
           language: 1,
 
           userName: "$profile.userName",
-          profileAvatar: "$profile.profileAvatar",
+          // 🔒 Masked Avatar logic
+          profileAvatar: {
+            $cond: {
+              if: {
+                $or: [
+                  { $eq: ["$effectiveCreatorId", userId] },
+                  { $eq: ["$fieldVisibility.profileAvatar", "public"] },
+                  { $and: [{ $eq: ["$fieldVisibility.profileAvatar", "followers"] }, { $eq: [{ $gt: [{ $size: "$followInfo" }, 0] }, true] }] },
+                  { $eq: ["$roleRef", "Admin"] },
+                  { $eq: ["$roleRef", "Child_Admin"] }
+                ]
+              },
+              then: { $ifNull: ["$profile.modifyAvatar", "$profile.profileAvatar"] },
+              else: null
+            }
+          },
 
           likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCount.count", 0] }, 0] },
           commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCount.count", 0] }, 0] },
@@ -962,7 +1033,7 @@ exports.getSingleFeedById = async (req, res) => {
     const enrichedFeed = {
       ...result[0],
       contentUrl: getMediaUrl(result[0].contentUrl),
-      profileAvatar: getMediaUrl(result[0].profileAvatar)
+      profileAvatar: result[0].profileAvatar ? getMediaUrl(result[0].profileAvatar) : "https://via.placeholder.com/150"
     };
 
     console.log("✅ [getSingleFeedById] Feed retrieved successfully:", enrichedFeed._id);
@@ -1116,7 +1187,7 @@ exports.getFeedsByAccountId = async (req, res) => {
     const userIds = accountsList.map(a => a.userId);
     const profiles = await ProfileSettings.find(
       { userId: { $in: userIds } },
-      { userName: 1, profileAvatar: 1, userId: 1 }
+      { userName: 1, profileAvatar: 1, userId: 1, visibility: 1 }
     ).lean();
 
     const accountToUserId = {};
@@ -1158,7 +1229,7 @@ exports.getFeedsByAccountId = async (req, res) => {
           comments: commentsCount[fid] || 0
         },
         userName: profile?.userName || "Unknown",
-        profileAvatar: getMediaUrl(profile?.profileAvatar),
+        profileAvatar: canShowAvatar ? getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar) : "https://via.placeholder.com/150",
       };
     });
 
@@ -1276,7 +1347,7 @@ exports.getFeedsByCreator = async (req, res) => {
               }
             },
             { $limit: 1 },
-            { $project: { userName: 1, profileAvatar: 1, modifyAvatar: 1 } }
+            { $project: { userName: 1, profileAvatar: 1, modifyAvatar: 1, visibility: 1 } }
           ],
           as: "profile"
         }
@@ -1426,8 +1497,37 @@ exports.getFeedsByCreator = async (req, res) => {
           dec: 1,
 
           userName: "$profile.userName",
-          profileAvatar: "$profile.profileAvatar",
-          modifyAvatarFromProfile: "$profile.modifyAvatar",
+          // 🔒 Masked Avatar logic
+          profileAvatar: {
+            $cond: {
+              if: {
+                $or: [
+                  { $eq: ["$createdByAccount", userId] },
+                  { $eq: ["$fieldVisibility.profileAvatar", "public"] },
+                  { $and: [{ $eq: ["$fieldVisibility.profileAvatar", "followers"] }, { $eq: ["$isFollowing", true] }] },
+                  { $eq: ["$roleRef", "Admin"] },
+                  { $eq: ["$roleRef", "Child_Admin"] }
+                ]
+              },
+              then: "$profile.profileAvatar",
+              else: null
+            }
+          },
+          modifyAvatarFromProfile: {
+            $cond: {
+              if: {
+                $or: [
+                   { $eq: ["$createdByAccount", userId] },
+                   { $eq: ["$fieldVisibility.profileAvatar", "public"] },
+                   { $and: [{ $eq: ["$fieldVisibility.profileAvatar", "followers"] }, { $eq: ["$isFollowing", true] }] },
+                   { $eq: ["$roleRef", "Admin"] },
+                   { $eq: ["$roleRef", "Child_Admin"] }
+                ]
+              },
+              then: "$profile.modifyAvatar",
+              else: null
+            }
+          },
 
           likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCount.count", 0] }, 0] },
           dislikesCount: { $ifNull: [{ $arrayElemAt: ["$dislikesCount.count", 0] }, 0] },
@@ -1607,6 +1707,7 @@ exports.getUserInfoAssociatedFeed = async (req, res) => {
                   displayName: 1,
                   profileAvatar: 1,
                   userName: 1,
+                  visibility: 1,
                 },
               },
             ],
@@ -1810,8 +1911,20 @@ exports.getTrendingFeeds = async (req, res) => {
 
         const profile = await ProfileSettings.findOne(profileQuery, {
           userName: 1,
-          profileAvatar: 1
+          profileAvatar: 1,
+          modifyAvatar: 1,
+          visibility: 1
+        })
+          .populate("visibility")
+          .lean();
+
+        // 🛡️ Check Follower status for privacy rules
+        const followInfo = await mongoose.model("Follows").findOne({
+          creatorId: creatorId,
+          followerId: userId
         }).lean();
+        const isFollowingCreator = !!followInfo;
+        const isSelf = creatorId.toString() === userId.toString();
 
         /* ---------------------------------------------------------
            B. User Feed Actions (likes, shares, downloads)
@@ -1929,8 +2042,18 @@ exports.getTrendingFeeds = async (req, res) => {
           creatorData: {
             _id: profile?._id || creatorId,
             userName: profile?.userName || "Unknown",
-            profileAvatar: profile?.profileAvatar || null,
-            modifyAvatar: profile?.modifyAvatar || null
+            profileAvatar: (
+              isSelf ||
+              profile?.visibility?.profileAvatar === "public" ||
+              (profile?.visibility?.profileAvatar === "followers" && isFollowingCreator) ||
+              ["Admin", "Child_Admin"].includes(roleRef)
+            ) ? (profile?.profileAvatar || null) : null,
+            modifyAvatar: (
+              isSelf ||
+              profile?.visibility?.profileAvatar === "public" ||
+              (profile?.visibility?.profileAvatar === "followers" && isFollowingCreator) ||
+              ["Admin", "Child_Admin"].includes(roleRef)
+            ) ? (profile?.modifyAvatar || null) : null
           },
 
           score

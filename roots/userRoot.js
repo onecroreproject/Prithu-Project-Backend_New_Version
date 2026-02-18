@@ -39,6 +39,10 @@ const {
 } = require('../controllers/feedControllers/feedsController');
 
 const {
+    getAllPublicFeeds
+} = require('../controllers/feedControllers/publicFeedController');
+
+const {
     getUserDetailWithId,
     setAppLanguage,
     getAppLanguage,
@@ -369,6 +373,7 @@ router.post('/replies/nested', auth, getNestedReplies);
 router.get("/get/trending-v2/feeds", auth, (req, res, next) => { console.log("REQ: Trending v2 hit"); next(); }, getTrendingFeeds);
 router.get("/get/trending/feeds", auth, (req, res, next) => { console.log("REQ: Trending hit"); next(); }, getTrendingFeeds);
 router.get('/get/all/feeds/user', auth, getAllFeedsByUserId);
+router.get('/get/all/public/feeds', getAllPublicFeeds);
 router.get('/get/feed/with/category/:id', auth, getfeedWithCategoryWithId);
 router.get('/get/user/info/associated/feed/:feedId', auth, getUserInfoAssociatedFeed);
 router.get("/get/feed/category", getCategoriesWithFeeds);

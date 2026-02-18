@@ -54,7 +54,15 @@ const ProfileSettingsSchema = new mongoose.Schema(
       email: { type: Boolean, default: true },
       sms: { type: Boolean, default: false },
     },
+    // 📌 Global privacy control
     privacy: {
+      type: String,
+      enum: ["public", "private", "followers"],
+      default: "public"
+    },
+
+    // 📌 Detailed field-level privacy (Old structure, kept for compatibility if needed)
+    fieldPrivacy: {
       showEmail: { type: Boolean, default: false },
       showProfilePicture: { type: Boolean, default: true },
       showCoverPhoto: { type: Boolean, default: true },
