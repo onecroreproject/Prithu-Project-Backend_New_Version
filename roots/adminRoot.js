@@ -117,6 +117,8 @@ const { getPostVolumeWeekly,
 } = require('../controllers/feedControllers/feedVolumController');
 
 const { getDriveDashboard, driveCommand } = require('../controllers/adminControllers/driverStatusController');
+const { getServerStats } = require('../controllers/adminControllers/serverMonitorController');
+const { exploreFolder } = require('../controllers/adminControllers/folderExplorerController');
 
 const {
     getHelpFAQ,
@@ -310,6 +312,10 @@ router.patch("/block/child/admin/:id", blockChildAdmin);
 /* --------------------- Admin Driver API ---------------------- */
 router.get("/admin/drive/dashboard", auth, getDriveDashboard);
 router.post("/admin/drive/command", auth, driveCommand);
+
+/* --------------------- Admin Server Monitor --------------------- */
+router.get("/admin/server/status", auth, getServerStats);
+router.get("/admin/server/explore", auth, exploreFolder);
 
 /* --------------------- Admin Help FAQ --------------------- */
 router.post("/admin/help", createHelpSection);
