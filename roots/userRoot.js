@@ -122,7 +122,11 @@ const {
     checkTrialEligibility,
     createSubscriptionOrder,
     verifySubscriptionPayment,
+    recordPaymentFailure,
+    getUserInvoices,
 } = require('../controllers/userControllers/userSubscriptionController');
+
+
 
 const {
     getCreatorDetailWithId,
@@ -403,6 +407,9 @@ router.get('/subscription/trial-eligible', auth, checkTrialEligibility);
 router.post('/subscription/create-order', auth, createSubscriptionOrder);
 router.post('/user/subscription/create-order', auth, createSubscriptionOrder); // Alias for frontend consistency
 router.post('/subscription/verify-payment', auth, verifySubscriptionPayment);
+router.post('/subscription/payment-failure', auth, recordPaymentFailure);
+router.get('/subscription/invoices', auth, getUserInvoices);
+
 
 /* --------------------- Notifications --------------------- */
 router.get("/notifications/all", auth, getNotifications);

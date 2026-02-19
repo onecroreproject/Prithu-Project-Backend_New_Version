@@ -13,6 +13,8 @@ const fs = require("fs");
 const path = require("path");
 const { sendTemplateEmail } = require("../../utils/templateMailer");
 const { checkAndClearDeactivatedUser } = require("../../controllers/userControllers/userDeleteController");
+const checkActiveSubscription = require("../../middlewares/subscriptionMiddlewares/checkActiveSubscription");
+
 
 
 exports.createNewUser = async (req, res) => {
@@ -64,43 +66,49 @@ exports.createNewUser = async (req, res) => {
         referralCodeIsValid: true,
       });
 
-      if (!parent) {
-        return res.status(400).json({ message: "Referral code invalid or inactive" });
+      if (parent) {
+        user.referredByUserId = parent._id;
+
+        // ✅ Check if parent has an active subscription
+        const parentSub = await checkActiveSubscription(parent._id);
+        if (parentSub.hasActive) {
+          await Promise.all([
+            UserReferral.updateOne(
+              { parentId: parent._id },
+              { $addToSet: { childIds: user._id } },
+              { upsert: true }
+            ),
+            // 💰 REWARD REFERRER: Add 100 rupees
+            User.updateOne(
+              { _id: parent._id },
+              {
+                $inc: {
+                  totalEarnings: 100,
+                  balanceEarnings: 100,
+                  referralCodeUsageCount: 1
+                }
+              }
+            ),
+            // 📜 LEDGER ENTRY: Create earning record for API calculation and history
+            UserEarning.create({
+              userId: parent._id,
+              fromUserId: user._id,
+              amount: 100,
+              level: 1,
+              tier: 1,
+              isPartial: false
+            })
+          ]);
+        } else {
+          // Parent inactive: register without linking referral benefits
+          user.referredByUserId = undefined;
+          console.log(`Referral from inactive parent ${parent._id} ignored for new user ${user.email}`);
+        }
       }
-
-      user.referredByUserId = parent._id;
-
-      await Promise.all([
-        user.save(),
-        UserReferral.updateOne(
-          { parentId: parent._id },
-          { $addToSet: { childIds: user._id } },
-          { upsert: true }
-        ),
-        // 💰 REWARD REFERRER: Add 100 rupees
-        User.updateOne(
-          { _id: parent._id },
-          {
-            $inc: {
-              totalEarnings: 100,
-              balanceEarnings: 100,
-              referralCodeUsageCount: 1
-            }
-          }
-        ),
-        // 📜 LEDGER ENTRY: Create earning record for API calculation and history
-        UserEarning.create({
-          userId: parent._id,
-          fromUserId: user._id,
-          amount: 100,
-          level: 1,
-          tier: 1,
-          isPartial: false
-        })
-      ]);
-    } else {
-      await user.save();
     }
+
+    await user.save();
+
 
     // ✅ Create profile settings
     ProfileSettings.create({
@@ -562,16 +570,23 @@ exports.validateReferralCode = async (req, res) => {
     const user = await User.findOne({
       referralCode: code.toUpperCase(),
       referralCodeIsValid: true,
-    }).select("userName").lean();
+    }).select("userName _id").lean();
 
     if (!user) {
-      return res.status(404).json({ success: false, message: "Invalid or inactive referral code" });
+      return res.status(200).json({ success: false, message: "Invalid or inactive referral code" });
     }
 
+    // Check if referrer's subscription is active using central helper
+    const result = await checkActiveSubscription(user._id);
+
     return res.status(200).json({
-      success: true,
+      success: result.hasActive,
       referrerName: user.userName,
+      referrerActive: result.hasActive,
+      message: result.hasActive ? "Active" : "Referrer subscription ended"
     });
+
+
   } catch (err) {
     console.error("❌ Error validating referral code:", err);
     return res.status(500).json({ success: false, message: "Server error" });

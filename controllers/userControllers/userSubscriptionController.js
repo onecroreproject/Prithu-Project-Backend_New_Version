@@ -91,7 +91,7 @@ exports.subscribePlan = async (req, res) => {
     });
 
   } catch (err) {
-    try { await session.abortTransaction(); } catch {}
+    try { await session.abortTransaction(); } catch { }
     session.endSession();
     console.error("subscribePlan error:", err);
     res.status(500).json({ message: "Server error", error: err.message });
@@ -200,7 +200,15 @@ exports.checkUserActiveSubscription = async (req, res) => {
     if (!userId) return res.status(400).json({ message: "Unauthorized" });
 
     const result = await checkActiveSubscription(userId);
-    res.status(200).json(result);
+    res.status(200).json({
+      success: true,
+      isActive: result.hasActive,
+      planType: result.planType,
+      subscription: result.subscription,
+      message: result.message,
+      warning: result.warning
+    });
+
   } catch (err) {
     console.error("checkUserActiveSubscription error:", err);
     res.status(400).json({ success: false, error: err.message });
@@ -341,15 +349,15 @@ exports.createSubscriptionOrder = async (req, res) => {
       description: `Subscription for ${plan.name}`
     })
 
-  return res.json({
-success: true,
-orderId: order.id, // ✅ IMPORTANT
-key: process.env.RAZORPAY_KEY_ID,
-amount: order.amount,
-currency: order.currency,
-planName: plan.name,
-description: `Subscription for ${plan.name}`
-});
+    return res.json({
+      success: true,
+      orderId: order.id, // ✅ IMPORTANT
+      key: process.env.RAZORPAY_KEY_ID,
+      amount: order.amount,
+      currency: order.currency,
+      planName: plan.name,
+      description: `Subscription for ${plan.name}`
+    });
 
   } catch (err) {
     try { await session.abortTransaction(); } catch (e) { }
@@ -475,3 +483,81 @@ exports.verifySubscriptionPayment = async (req, res) => {
     res.status(500).json({ success: false, message: "Verification failed", error: err.message });
   }
 };
+
+/**
+ * 🔟 Record Payment Failure
+ */
+exports.recordPaymentFailure = async (req, res) => {
+  try {
+    const userId = req.Id;
+    const { razorpay_order_id, error_code, error_description } = req.body;
+
+    if (!razorpay_order_id) {
+      return res.status(400).json({ success: false, message: "Order ID is required" });
+    }
+
+    const subscription = await UserSubscription.findOne({
+      razorpayOrderId: razorpay_order_id,
+      userId
+    }).populate('planId');
+
+    if (!subscription) {
+      return res.status(404).json({ success: false, message: "Subscription record not found" });
+    }
+
+    // Update subscription status if not already success
+    if (subscription.paymentStatus !== "success") {
+      subscription.paymentStatus = "failed";
+      await subscription.save();
+    }
+
+    // Check if a failed invoice already exists for this order to avoid duplicates
+    let invoice = await Invoice.findOne({ subscriptionId: subscription._id, status: "failed" });
+
+    if (!invoice) {
+      const invoiceNumber = `INV-FAIL-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+      invoice = new Invoice({
+        invoiceNumber,
+        userId,
+        planId: subscription.planId._id,
+        subscriptionId: subscription._id,
+        amount: subscription.planId.price,
+        currency: "INR",
+        status: "failed",
+        paymentMethod: "Razorpay"
+      });
+      await invoice.save();
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment failure recorded",
+      invoice
+    });
+
+  } catch (err) {
+    console.error("recordPaymentFailure error:", err);
+    res.status(500).json({ success: false, message: "Failed to record payment failure", error: err.message });
+  }
+};
+
+/**
+ * 1️⃣1️⃣ Get User Invoices
+ */
+exports.getUserInvoices = async (req, res) => {
+  try {
+    const userId = req.Id;
+    const invoices = await Invoice.find({ userId })
+      .populate('planId', 'name')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      invoices
+    });
+  } catch (err) {
+    console.error("getUserInvoices error:", err);
+    res.status(500).json({ success: false, message: "Failed to fetch invoices" });
+  }
+};
+

@@ -1,8 +1,10 @@
 
 const Users = require("../../models/userModels/userModel")
-const ProfileSettings=require("../../models/profileSettingModel")
-const UserLanguage=require('../../models/userModels/userLanguageModel');
+const ProfileSettings = require("../../models/profileSettingModel")
+const UserLanguage = require('../../models/userModels/userLanguageModel');
 const { getLanguageCode, getLanguageName } = require("../../middlewares/helper/languageHelper");
+const checkActiveSubscription = require("../../middlewares/subscriptionMiddlewares/checkActiveSubscription");
+
 
 
 
@@ -42,10 +44,10 @@ exports.getUserDetailWithId = async (req, res) => {
     return res.status(200).json({ success: true, user: userDetails });
   } catch (err) {
     console.error("Error fetching user details:", err);
-    return res.status(500).json({ 
-      success: false, 
-      message: "Cannot fetch user details", 
-      error: err.message 
+    return res.status(500).json({
+      success: false,
+      message: "Cannot fetch user details",
+      error: err.message
     });
   }
 };
@@ -261,22 +263,39 @@ exports.getUserReferalCode = async (req, res) => {
     }
 
     // Fetch user from database
-    const user = await Users.findById(userId).select("referralCode").lean();
+    let user = await Users.findById(userId).select("referralCode userName");
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // If referral code is missing, generate and save it
+    if (!user.referralCode) {
+      const letters = user.userName.replace(/\s+/g, "").slice(0, 3).toUpperCase() || "USR";
+      const digits = Math.floor(100 + Math.random() * 900);
+      user.referralCode = `${letters}${digits}`;
+      user.referralCodeIsValid = true;
+      await user.save();
+      console.log(`Generated new referral code for user ${userId}: ${user.referralCode}`);
+    }
+
+    // Check if user's subscription is active using central helper
+    const result = await checkActiveSubscription(userId);
+
     // Send referral code in response
     return res.status(200).json({
-      success: true,
-      referralCode: user.referralCode || null, // if not set, return null
+      success: result.hasActive,
+      referralCode: user.referralCode,
+      message: result.hasActive ? "Active" : "Subscription required to activate referral code"
     });
+
+
   } catch (error) {
     console.error("Error fetching referral code:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 
 
@@ -293,7 +312,7 @@ exports.blockUserById = async (req, res) => {
     // Toggle block state
     user.isBlocked = !user.isBlocked;
     await user.save();
-   console.log(user.isBlocked)
+    console.log(user.isBlocked)
     return res.status(200).json({
       message: user.isBlocked ? "User Blocked Successfully" : "User Unblocked Successfully",
       isBlocked: user.isBlocked,

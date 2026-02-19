@@ -1,6 +1,8 @@
 const Feed = require('../../models/feedModel');
 const mongoose = require("mongoose");
 const { getMediaUrl } = require("../../utils/storageEngine");
+const redisClient = require('../../Config/redisConfig');
+
 
 /**
  * Get feeds for public landing page (unauthenticated)
@@ -9,7 +11,21 @@ exports.getAllPublicFeeds = async (req, res) => {
     try {
         const page = Math.max(1, Number(req.query.page || 1));
         const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
-        const { categoryId, postType } = req.query;
+        const { categoryId, postType, random } = req.query;
+
+        // 🟢 Caching Logic (Only for non-random, standardized requests)
+        const cacheKey = `public_feeds:${categoryId || 'all'}:${postType || 'all'}:${page}:${limit}`;
+        if (random !== 'true' && redisClient && redisClient.status === 'ready') {
+            try {
+                const cachedData = await redisClient.get(cacheKey);
+                if (cachedData) {
+                    return res.status(200).json(JSON.parse(cachedData));
+                }
+            } catch (err) {
+                console.warn("⚠️ Redis Get Error:", err.message);
+            }
+        }
+
 
         const matchStage = {
             isApproved: true,
@@ -31,9 +47,17 @@ exports.getAllPublicFeeds = async (req, res) => {
             }
         }
 
-        const feeds = await Feed.aggregate([
+        let pipeline = [
             { $match: matchStage },
+        ];
 
+        // 🟢 Randomization Logic
+        if (random === 'true') {
+            pipeline.push({ $sample: { size: limit } });
+        }
+
+        // Add remaining stages to pipeline
+        pipeline.push(
             // Basic lookup for creator info
             { $addFields: { effectiveCreatorId: { $ifNull: ["$postedBy.userId", "$createdByAccount"] } } },
             {
@@ -79,12 +103,19 @@ exports.getAllPublicFeeds = async (req, res) => {
                         { roleRef: { $in: ["Admin", "Child_Admin"] } } // Admins/ChildAdmins are always public for landing
                     ]
                 }
-            },
+            }
+        );
 
-            { $sort: { createdAt: -1 } },
-            { $skip: (page - 1) * limit },
-            { $limit: limit },
+        // Only use skip/limit if NOT in random mode (aggregate $sample already handles size)
+        if (random !== 'true') {
+            pipeline.push(
+                { $sort: { createdAt: -1 } },
+                { $skip: (page - 1) * limit },
+                { $limit: limit }
+            );
+        }
 
+        pipeline.push(
             {
                 $addFields: {
                     creatorData: {
@@ -117,7 +148,10 @@ exports.getAllPublicFeeds = async (req, res) => {
                     createdAt: 1
                 }
             }
-        ]);
+        );
+
+        const feeds = await Feed.aggregate(pipeline);
+
 
         const enrichedFeeds = feeds.map(feed => ({
             ...feed,
@@ -129,7 +163,7 @@ exports.getAllPublicFeeds = async (req, res) => {
             }
         }));
 
-        res.status(200).json({
+        const responseData = {
             success: true,
             data: {
                 feeds: enrichedFeeds,
@@ -139,7 +173,19 @@ exports.getAllPublicFeeds = async (req, res) => {
                     total: await Feed.countDocuments(matchStage)
                 }
             }
-        });
+        };
+
+        // 🟢 Store in Redis for 5 minutes
+        if (random !== 'true' && redisClient && redisClient.status === 'ready') {
+            try {
+                await redisClient.setex(cacheKey, 300, JSON.stringify(responseData));
+            } catch (err) {
+                console.warn("⚠️ Redis Set Error:", err.message);
+            }
+        }
+
+        res.status(200).json(responseData);
+
     } catch (err) {
         console.error("❌ Public Feed Error:", err.message);
         res.status(500).json({ success: false, message: "Server error" });
