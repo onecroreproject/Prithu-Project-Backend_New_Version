@@ -117,8 +117,11 @@ const { getPostVolumeWeekly,
 } = require('../controllers/feedControllers/feedVolumController');
 
 const { getDriveDashboard, driveCommand } = require('../controllers/adminControllers/driverStatusController');
-const { getServerStats } = require('../controllers/adminControllers/serverMonitorController');
+const { getServerStats, manageProcess, getLogs, flushLogs } = require('../controllers/adminControllers/serverMonitorController');
 const { exploreFolder } = require('../controllers/adminControllers/folderExplorerController');
+const { getDatabaseStats, triggerBackup } = require('../controllers/adminControllers/dbManagementController');
+const { getRedisStats, flushRedis, deleteByPrefix, getKeyInfo } = require('../controllers/adminControllers/redisManagementController');
+const { getCronStatus, triggerCron } = require('../controllers/adminControllers/cronManagementController');
 
 const {
     getHelpFAQ,
@@ -316,6 +319,23 @@ router.post("/admin/drive/command", auth, driveCommand);
 /* --------------------- Admin Server Monitor --------------------- */
 router.get("/admin/server/status", auth, getServerStats);
 router.get("/admin/server/explore", auth, exploreFolder);
+router.post("/admin/server/process/manage", auth, manageProcess);
+router.get("/admin/server/logs", auth, getLogs);
+router.post("/admin/server/logs/flush", auth, flushLogs);
+
+/* --------------------- Admin Database Management ----------------- */
+router.get("/admin/db/stats", auth, getDatabaseStats);
+router.post("/admin/db/backup", auth, triggerBackup);
+
+/* --------------------- Admin Redis Management ------------------- */
+router.get("/admin/redis/stats", auth, getRedisStats);
+router.post("/admin/redis/flush", auth, flushRedis);
+router.post("/admin/redis/delete-by-prefix", auth, deleteByPrefix);
+router.get("/admin/redis/key-info", auth, getKeyInfo);
+
+/* --------------------- Admin Cron Management -------------------- */
+router.get("/admin/cron/status", auth, getCronStatus);
+router.post("/admin/cron/trigger", auth, triggerCron);
 
 /* --------------------- Admin Help FAQ --------------------- */
 router.post("/admin/help", createHelpSection);
