@@ -32,3 +32,23 @@ exports.getMyActivities = async (req, res) => {
   }
 };
 
+exports.getUserActivitiesForAdmin = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "User ID missing" });
+    }
+
+    const activities = await UserActivity.find({ userId })
+      .sort({ createdAt: -1 })
+      .populate("targetId", "title userName displayName profileAvatar")
+      .lean();
+
+    res.json({ success: true, activities });
+
+  } catch (err) {
+    console.error("Error fetching user activities for admin:", err);
+    res.status(500).json({ error: err.message });
+  }
+};

@@ -445,9 +445,14 @@ const feedSchema = new mongoose.Schema(
       title: { type: String },
       description: { type: String },
       keywords: [{ type: String }],
+      focusKeyword: { type: String },
+      slug: { type: String, unique: true, sparse: true },
+      isIndexed: { type: Boolean, default: true },
       ogImage: { type: String },
       ogTitle: { type: String },
-      ogDescription: { type: String }
+      ogDescription: { type: String },
+      jsonLd: { type: String },
+      seoScore: { type: Number, default: 0 }
     }
   },
   {

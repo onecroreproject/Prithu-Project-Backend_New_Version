@@ -420,10 +420,10 @@ exports.updateFeedDesign = async (req, res) => {
   try {
     const { feedId } = req.params;
     const userId = req.Id;
-    const { designMetadata } = req.body;
+    const { designMetadata, editMetadata } = req.body;
 
-    if (!designMetadata) {
-      return res.status(400).json({ success: false, message: "Design metadata is required" });
+    if (!designMetadata && !editMetadata) {
+      return res.status(400).json({ success: false, message: "Design or Edit metadata is required" });
     }
 
     const feed = await Feed.findOne({ _id: feedId, createdByAccount: userId });
@@ -432,8 +432,14 @@ exports.updateFeedDesign = async (req, res) => {
       return res.status(404).json({ success: false, message: "Feed not found or access denied" });
     }
 
-    feed.designMetadata = { ...feed.designMetadata, ...designMetadata };
-    await feed.saveEditHistory(userId, 'Design metadata updated');
+    if (designMetadata) {
+      feed.designMetadata = { ...feed.designMetadata, ...designMetadata };
+    }
+    if (editMetadata) {
+      feed.editMetadata = { ...feed.editMetadata, ...editMetadata };
+    }
+
+    await feed.saveEditHistory(userId, 'Feed design/edit metadata updated');
     await feed.save();
 
     return res.status(200).json({

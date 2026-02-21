@@ -21,6 +21,18 @@ const staticPageSchema = new mongoose.Schema(
         lastUpdatedBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Admin"
+        },
+        seo: {
+            metaTitle: { type: String, default: "" },
+            metaDescription: { type: String, default: "" },
+            focusKeyword: { type: String, default: "" },
+            canonicalUrl: { type: String, default: "" },
+            isIndexed: { type: Boolean, default: true },
+            ogTitle: { type: String, default: "" },
+            ogDescription: { type: String, default: "" },
+            ogImage: { type: String, default: "" },
+            twitterCard: { type: String, default: "summary_large_image" },
+            jsonLd: { type: String, default: "" }
         }
     },
     { timestamps: true }

@@ -1,65 +1,65 @@
 // controllers/analyticsController.js
 const UserSubscription = require("../../models/subscriptionModels/userSubscriptionModel.js");
-const SubscriptionInvoice = require("../../models/InvoiceModel/subscriptionInvoice.js");
+const Invoice = require("../../models/subscriptionModels/invoiceModel.js");
 const WithdrawalInvoice = require("../../models/InvoiceModel/withdrawelInvoice.js");
 const AnalyticsMetric = require("../../models/adminModels/salesDashboardMetricks.js");
 const User = require("../../models/userModels/userModel.js");
-const Subscriptions = require("../../models/subscriptionModels/subscriptionPlanModel.js");
-
-
 
 exports.updateDailyAnalytics = async () => {
   try {
     const today = new Date();
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
-
-    // ✅ Active subscriptions
-    const activeSubscriptions = await UserSubscription.find()
-      .populate("planId", "planType price");
+    const startOfDay = new Date(today);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(today);
+    endOfDay.setHours(23, 59, 59, 999);
 
     // ✅ Total users
     const totalUsers = await User.countDocuments();
 
-    // ✅ Trial & paid subscribers count
-    const totalTrialUsers = activeSubscriptions.filter(
-      (sub) => sub.planId?.planType === "trial"
-    ).length;
-
-    const totalSubscribers = activeSubscriptions.filter(
-      (sub) => sub.planId?.planType !== "trial"
-    ).length;
-
-    // ✅ Total revenue from active & successful subscriptions
-    const totalRevenue = activeSubscriptions.reduce((sum, sub) => {
-      if (sub.isActive && sub.paymentStatus === "success") {
-        return sum + (sub.planId?.price || 0);
-      }
-      return sum;
-    }, 0);
-
-    // ✅ Paid invoices today
-    const paidInvoices = await SubscriptionInvoice.find({
-      status: "paid",
-      paidAt: { $gte: startOfDay, $lte: endOfDay },
+    // ✅ Referral users count
+    const byReferralUsers = await User.countDocuments({
+      referredByUserId: { $ne: null },
     });
-    const totalInvoices = paidInvoices.length;
 
-    // ✅ Total withdrawals today
+    // ✅ Trial & paid subscribers count (currently active)
+    const [totalTrialUsers, totalSubscribers] = await Promise.all([
+      UserSubscription.countDocuments({ isActive: true, paymentStatus: "success", planId: { $exists: true } }).then(async (count) => {
+        // Count trial plan subscriptions
+        const SubscriptionPlan = require("../../models/subscriptionModels/subscriptionPlanModel.js");
+        const trialPlans = await SubscriptionPlan.find({ planType: "trial" }).select("_id").lean();
+        const trialPlanIds = trialPlans.map(p => p._id);
+        return UserSubscription.countDocuments({ isActive: true, planId: { $in: trialPlanIds } });
+      }),
+      // Paid (non-trial) active subscribers
+      UserSubscription.countDocuments({ isActive: true, paymentStatus: "success" }).then(async (total) => {
+        const SubscriptionPlan = require("../../models/subscriptionModels/subscriptionPlanModel.js");
+        const trialPlans = await SubscriptionPlan.find({ planType: "trial" }).select("_id").lean();
+        const trialPlanIds = trialPlans.map(p => p._id);
+        return UserSubscription.countDocuments({ isActive: true, paymentStatus: "success", planId: { $nin: trialPlanIds } });
+      }),
+    ]);
+
+    // ✅ Total revenue from paid invoices (CORRECT: uses actual paid amounts)
+    const revenueResult = await Invoice.aggregate([
+      { $match: { status: "paid" } },
+      { $group: { _id: null, total: { $sum: "$amount" } } }
+    ]);
+    const totalRevenue = revenueResult[0]?.total || 0;
+
+    // ✅ Total invoices
+    const totalInvoices = await Invoice.countDocuments({ status: "paid" });
+
+    // ✅ Total withdrawals today (completed only)
     const completedWithdrawals = await WithdrawalInvoice.find({
       status: "completed",
       processedAt: { $gte: startOfDay, $lte: endOfDay },
-    });
-    const totalWithdrawals = completedWithdrawals.reduce(
-      (sum, w) => sum + w.withdrawalAmount,
+    }).lean();
+
+    const totalWithdrawalAmount = completedWithdrawals.reduce(
+      (sum, w) => sum + (w.withdrawalAmount || 0),
       0
     );
-    const totalWithdrawalInvoices = completedWithdrawals.length;
-
-    // ✅ Total referral users
-    const totalReferralUsers = await User.countDocuments({
-      referredByUserId: { $ne: null },
-    });
+    const totalWithdrawalCount = completedWithdrawals.length;
 
     // ✅ Upsert analytics metric for today
     const analytics = await AnalyticsMetric.findOneAndUpdate(
@@ -68,12 +68,13 @@ exports.updateDailyAnalytics = async () => {
         $set: {
           totalRevenue,
           totalUsers,
-          totalSubscriptionInvoices: totalInvoices,
-          totalWithdrawals,
-          totalWithdrawalInvoices,
+          totalInvoices,
+          totalWithdrawals: totalWithdrawalCount,
+          totalWithdrawalAmount,
+          totalWithdrawalInvoices: totalWithdrawalCount,
           totalSubscribers,
           totalTrialUsers,
-          byReferralUsers: totalReferralUsers, // added referral user count
+          byReferralUsers,
         },
       },
       { upsert: true, new: true }
@@ -85,4 +86,3 @@ exports.updateDailyAnalytics = async () => {
     throw err;
   }
 };
-

@@ -50,6 +50,8 @@ const {
     bulkFeedUpload,
     getUploadProgress,
     removeFeedCategory,
+    getFeedWithDesign,
+    updateFeedDesign,
 } = require('../controllers/adminControllers/adminfeedController');
 
 const {
@@ -105,6 +107,7 @@ const {
 const {
     getAnalytics,
     getRecentSubscriptionUsers,
+    getRecentWithdrawalUsers,
     getTopReferralUsers,
     getUserAndSubscriptionCountsDaily,
 } = require("../controllers/adminControllers/SalesDashboard/salesDashboardMetricksController");
@@ -136,6 +139,21 @@ const { updateFooterConfig } = require('../controllers/footerController');
 const { updatePageBySlug } = require('../controllers/staticPageController');
 
 const {
+    getSeoDashboardStats,
+    getSeoConfig,
+    updateSeoConfig,
+    getAllPagesSeo,
+    getAllFeedsSeo,
+    updateFeedSeo,
+    getMediaSeo,
+    getAllRedirects,
+    createRedirect,
+    deleteRedirect,
+    triggerSitemapGeneration,
+    updateRobotsTxt
+} = require('../controllers/adminControllers/seoController');
+
+const {
     adminProfileDetailUpdate,
     getAdminProfileDetail,
     getUserProfileDetail,
@@ -154,6 +172,8 @@ const {
     getUserAnalyticsSummary,
     fetchUserNonInterested,
 } = require('../controllers/userControllers/userFeedController');
+
+const { getUserActivitiesForAdmin } = require('../controllers/userControllers/userActivitController');
 
 const { getAllCategories } = require('../controllers/categoriesController');
 const { deleteFeed } = require('../controllers/feedControllers/feedsController');
@@ -190,6 +210,8 @@ router.post(
     adminFeedUpload
 );
 router.get("/admin/get/all/feed", getAllFeedAdmin);
+router.get("/admin/feed/:feedId/design", auth, getFeedWithDesign);
+router.put("/admin/feed/:feedId/design", auth, updateFeedDesign);
 router.get("/admin/get/trending/creator", adminGetTrendingFeeds); // Match key ADMIN_GET_TRENDING_CREATOR
 router.delete("/admin/delete/feed", deleteFeed);
 router.delete("/admin/feed/:feedId/category/:categoryId", removeFeedCategory);
@@ -227,6 +249,7 @@ router.get('/admin/user/likes/:userId', getUserLikedFeedsforAdmin);
 router.delete('/admin/delete/user/:userId', deleteUserAndAllRelated);
 router.get("/user/list/willingtopost", getUsersWillingToPost);
 router.put("/update/user/post/status/:userId", updateUserPostPermission);
+router.get("/admin/user/activities/:userId", getUserActivitiesForAdmin);
 
 /* --------------------- User Analytics API --------------------- */
 router.get("/admin/summary/:userId", getUserAnalyticsSummary);
@@ -267,7 +290,9 @@ router.get('/admin/getall/creators', require('../controllers/creatorControllers/
 
 /* --------------------- Admin Sales Dashboard ------------------ */
 router.get("/admin/sales/dashboard/analytics", getAnalytics);
-router.get("/admin/get/recent/subscribers", getRecentSubscriptionUsers);
+router.get("/get/recent/subscribers", getRecentSubscriptionUsers);
+router.get("/get/recent/withdrawals", getRecentWithdrawalUsers);
+router.get("/sales/dashboard/analytics", getAnalytics);
 router.get("/admin/top/referral/users", getTopReferralUsers);
 router.get("/admin/dashboard/user-subscription-counts", getUserAndSubscriptionCountsDaily);
 
@@ -357,5 +382,19 @@ router.put("/admin/footer", auth, updateFooterConfig);
 router.get('/admin/get/user/detail', getUserProfileDetailforAdmin);
 
 router.post('/admin/static-page/:slug', auth, updatePageBySlug);
+
+/* --------------------- Admin SEO API --------------------- */
+router.get('/admin/seo/stats', auth, getSeoDashboardStats);
+router.get('/admin/seo/config', auth, getSeoConfig);
+router.put('/admin/seo/config', auth, updateSeoConfig);
+router.get('/admin/seo/pages', auth, getAllPagesSeo);
+router.get('/admin/seo/feeds', auth, getAllFeedsSeo);
+router.put('/admin/seo/feeds/:id', auth, updateFeedSeo);
+router.get('/admin/seo/media', auth, getMediaSeo);
+router.get('/admin/seo/redirects', auth, getAllRedirects);
+router.post('/admin/seo/redirects', auth, createRedirect);
+router.delete('/admin/seo/redirects/:id', auth, deleteRedirect);
+router.post('/admin/seo/sitemap', auth, triggerSitemapGeneration);
+router.post('/admin/seo/robots', auth, updateRobotsTxt);
 
 module.exports = router;

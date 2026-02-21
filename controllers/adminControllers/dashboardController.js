@@ -22,6 +22,7 @@ exports.getDashboardMetricCount = async (req, res) => {
       // Child Admin Stats
       totalChildAdmins,
       onlineChildAdmins,
+      onlineChildAdminsNamesData,
     ] = await Promise.all([
       // 1️⃣ Total Users
       User.countDocuments(),
@@ -49,7 +50,12 @@ exports.getDashboardMetricCount = async (req, res) => {
 
       // 7️⃣ Online Child Admins
       ChildAdmin.countDocuments({ isOnline: true }),
+
+      // 8️⃣ Online Child Admin Names
+      ChildAdmin.find({ isOnline: true }).select("userName").lean(),
     ]);
+
+    const onlineAdminNames = (onlineChildAdminsNamesData || []).map(admin => admin.userName);
 
     // -----------------------------------
     // Send response
@@ -63,6 +69,7 @@ exports.getDashboardMetricCount = async (req, res) => {
       totalReports,
       totalChildAdmins,
       onlineChildAdmins,
+      onlineAdminNames,
     });
   } catch (error) {
     console.error("Dashboard metric error:", error);

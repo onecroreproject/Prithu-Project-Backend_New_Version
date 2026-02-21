@@ -583,7 +583,7 @@ exports.getUserSocialMeddiaDetailWithIdForAdmin = async (req, res) => {
     // -------------------------------------------
     const user = await Users.findById(userId)
       .select(
-        "userName email referralCode referalCode referealCode referredByUserId totalEarnings balanceEarnings withdrawnEarnings withdrawnAmount isActive lastActiveAt lastLoginAt currentLevel currentTier roles isOnline subscription trialUsed gender"
+        "userName email referralCode referalCode referealCode referredByUserId totalEarnings balanceEarnings withdrawnEarnings withdrawnAmount isActive lastActiveAt lastLoginAt lastSeenAt currentLevel currentTier roles isOnline subscription trialUsed gender"
       )
       .lean();
 
@@ -710,6 +710,13 @@ exports.getUserSocialMeddiaDetailWithIdForAdmin = async (req, res) => {
       message: "User details fetched successfully",
       user: {
         ...user,
+        isOnline: (() => {
+          if (!user.isOnline) return false;
+          if (!user.lastSeenAt) return false;
+          const now = new Date();
+          const diffInMinutes = (now - new Date(user.lastSeenAt)) / (1000 * 60);
+          return diffInMinutes < 20; // Active in last 20 minutes
+        })(),
         profile,
         referralPeople,
         watchAnalytics: {
@@ -1455,7 +1462,7 @@ exports.deleteUserAndAllRelated = async (req, res) => {
     await timedDelete("UserLanguage.deleteMany", () =>
       UserLanguage.deleteMany({ userId }, { session })
     );
- 
+
     await timedDelete("UserNotification.deleteMany", () =>
       UserNotification.deleteMany({ userId }, { session })
     );

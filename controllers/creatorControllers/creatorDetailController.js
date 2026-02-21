@@ -1,11 +1,12 @@
 const Account = require("../../models/accountSchemaModel");
 const Feed = require("../../models/feedModel");
-const ProfileSettings=require('../../models/profileSettingModel');
-const TrendingCreators=require('../../models/treandingCreators');
-const ImageStats=require("../../models/userModels/MediaSchema/imageViewModel");
-const VideoStats=require("../../models/userModels/MediaSchema/videoViewStatusModel");
-const UserFeedActions=require("../../models/userFeedInterSectionModel");
-const mongoose =require("mongoose")
+const ProfileSettings = require('../../models/profileSettingModel');
+const TrendingCreators = require('../../models/treandingCreators');
+const ImageStats = require("../../models/userModels/MediaSchema/imageViewModel");
+const VideoStats = require("../../models/userModels/MediaSchema/videoViewStatusModel");
+const UserFeedActions = require("../../models/userFeedInterSectionModel");
+const { saveFile, getMediaUrl } = require("../../utils/storageEngine");
+const mongoose = require("mongoose")
 
 
 
@@ -389,7 +390,7 @@ exports.adminGetTrendingFeeds = async (req, res) => {
     // 4️⃣ FETCH FEEDS
     // -------------------------------------------------------
     const feeds = await Feed.find(feedQuery)
-      .select("_id type contentUrl createdByAccount roleRef createdAt")
+      .select("_id postType mediaUrl createdByAccount roleRef createdAt")
       .lean();
 
     const ownerIds = feeds.map(f => f.createdByAccount?.toString()).filter(Boolean);
@@ -497,14 +498,14 @@ exports.adminGetTrendingFeeds = async (req, res) => {
 
       return {
         feedId: feed._id,
-        type: feed.type,
-        contentUrl: feed.contentUrl,
+        type: feed.postType || "image",
+        contentUrl: getMediaUrl(feed.mediaUrl),
         createdAt: feed.createdAt,
 
         createdBy: {
           _id: feed.createdByAccount,
           userName: owner.userName || "Unknown",
-          avatar: owner.profileAvatar || null,
+          avatar: getMediaUrl(owner.profileAvatar),
           email: owner.email || null
         },
 
